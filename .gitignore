@@ -1,0 +1,19 @@
+# dependências e build
+node_modules/
+dist/
+.next/
+coverage/
+*.tsbuildinfo
+
+# ambiente e segredos
+.env
+.env.*
+!.env.example
+
+# configuração local do Claude Code (permissões desta máquina)
+.claude/settings.local.json
+
+# sistema
+.DS_Store
+Thumbs.db
+*.log
