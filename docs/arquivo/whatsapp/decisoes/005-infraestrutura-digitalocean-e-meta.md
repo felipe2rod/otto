@@ -1,6 +1,6 @@
 # 005 — Infraestrutura: DigitalOcean para hospedagem e inferência, Meta Cloud API para WhatsApp
 
-Status: aceita (fornecedores) / a validar (modelo de IA, deploy e chave), desde 2026-09-08
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita (fornecedores) / a validar (modelo de IA, deploy e chave), desde 2026-09-08
 Data: 2026-09-08
 Quem decide: Felipe
 

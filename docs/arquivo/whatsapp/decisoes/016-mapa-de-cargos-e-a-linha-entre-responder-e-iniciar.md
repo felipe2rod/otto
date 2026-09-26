@@ -1,6 +1,6 @@
 # 016 — Mapa de cargos e a linha entre responder e iniciar
 
-Status: aceita (mapa e linha de corte) / a validar (ordem dos dois primeiros cargos)
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita (mapa e linha de corte) / a validar (ordem dos dois primeiros cargos)
 Data: 2026-09-08
 Quem decide: Felipe
 

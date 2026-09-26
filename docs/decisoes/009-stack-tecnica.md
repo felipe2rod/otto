@@ -4,6 +4,8 @@ Status: aceita (itens do Felipe) / escolhida por Claude, reversível (o resto)
 Data: 2026-09-08
 Quem decide: Felipe
 
+> **Nota do pivô (2026-09-26, ADR 026).** A stack continua. Mudou o motivo da fila: o pg-boss agora carrega renderização no servidor, exportação PSD e passos do agente (ADR 029 e 030), e não mensagem do WhatsApp. A regra do webhook da Meta caiu. O monorepo ganha `packages/documento`, `packages/render` e `packages/psd` ao lado de `packages/shared`. O provedor de nuvem (DigitalOcean) veio do ADR 005, que foi arquivado: continua como padrão até alguém propor outro, mas a escolha do fornecedor de inferência está reaberta (ADR 029).
+
 ## Decidido pelo Felipe
 
 | Item | Escolha |

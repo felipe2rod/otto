@@ -4,6 +4,8 @@ Status: aceita (a forma, pelo Felipe) / escolhida por Claude, reversível (as me
 Data: 2026-09-09
 Quem decide: Felipe
 
+> **Nota do pivô (2026-09-26, ADR 026).** A forma continua valendo. "Empresa" passa a ser a **conta** (uma pessoa ou um estúdio). Os identificadores `empresa_id` e `EscopoDaEmpresa` podem ser renomeados para `conta_id` e `EscopoDaConta` antes do primeiro código, e não depois. Onde se lê webhook e canal, a entrada do escopo agora é só a sessão do editor. O cache de prompt do agente (ADR 029) herda a regra do bloco 3a: tokens, fontes e biblioteca de uma conta nunca entram no prefixo de outra. Arquivo de imagem é endereçado por hash, e o hash **não** é autorização. Toda leitura confere a conta dona.
+
 ## Contexto
 
 Felipe, verbatim, em 2026-09-09: **"Um banco de dados por cliente é inviável, iremos adotar outras medidas técnicas para mitigar esse problema."**

@@ -4,6 +4,8 @@ Status: proposta
 Data: 2026-09-09
 Quem decide: Felipe
 
+> **Nota do pivô (2026-09-26, ADR 026).** A forma continua valendo: site público estático e app dinâmico no mesmo `apps/web`. O segmento `painel/` vira o **editor** (`/editor`), com o mesmo `force-dynamic` e `noindex`. O motor de renderização (ADR 030) é carregado só dentro do editor, e o teste de manifesto passa a conferir também que o WebAssembly do Skia não entra no bundle público. Os argumentos de landing por nicho e de link de aviso do ADR 012 eram do produto arquivado. O argumento de Open Graph no HTML bruto continua valendo para qualquer link compartilhado.
+
 ## Contexto
 
 Felipe decidiu em 2026-09-09 que as páginas expostas ao público precisam ser renderizadas no servidor por causa de SEO, e que o painel interno não precisa — perguntando se dá para separar as duas coisas.

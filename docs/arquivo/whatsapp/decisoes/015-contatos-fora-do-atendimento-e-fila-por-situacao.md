@@ -1,6 +1,6 @@
 # 015 — Contatos fora do atendimento e fila por situação
 
-Status: aceita (contatos e fila) / a confirmar pelo Felipe (etapa do negócio fora da v1)
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita (contatos e fila) / a confirmar pelo Felipe (etapa do negócio fora da v1)
 Data: 2026-09-08
 Quem decide: Felipe, com desenho do especialista de UI/UX e parecer do estrategista
 

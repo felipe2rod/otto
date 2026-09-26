@@ -1,6 +1,6 @@
 # 017 — Porta de canal agora, canais depois
 
-Status: aceita (a porta) / **item 3 revisto pelo ADR 021 em 2026-09-09**
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita (a porta) / **item 3 revisto pelo ADR 021 em 2026-09-09**
 Data: 2026-09-08
 Quem decide: Felipe
 

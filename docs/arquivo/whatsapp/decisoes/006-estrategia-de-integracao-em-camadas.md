@@ -1,6 +1,6 @@
 # 006 — Estratégia de integração em camadas, com portas de contexto
 
-Status: proposta (Claude, aguardando Felipe)
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: proposta (Claude, aguardando Felipe)
 Data: 2026-09-08
 Quem decide: Felipe
 

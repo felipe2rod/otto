@@ -4,6 +4,8 @@ Status: aceita
 Data: 2026-09-08
 Quem decide: Felipe
 
+> **Nota do pivô (2026-09-26, ADR 026).** O princípio continua valendo. Os módulos por contexto passam a ser: documento, arquivos (imagens e fontes), agente, exportação, conta. As regras de saldo e de caráter citadas acima eram do produto arquivado. O que continua em classe pura é o catálogo de operações (ADR 027), o ciclo do agente (ADR 029) e o mapeamento PSD (ADR 028).
+
 ## Contexto
 
 O backend seria em Node.js com TypeScript, com framework a decidir entre NestJS, Fastify puro e Hono. Felipe decidiu por NestJS em 2026-09-08.

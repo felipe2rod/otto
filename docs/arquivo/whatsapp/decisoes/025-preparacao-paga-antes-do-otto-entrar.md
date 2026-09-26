@@ -1,6 +1,6 @@
 # 025 — Preparação paga antes de o Otto entrar
 
-Status: aceita (existe, preço e regras) / a validar (o preço de R$ 997 contra a hora medida)
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita (existe, preço e regras) / a validar (o preço de R$ 997 contra a hora medida)
 Data: 2026-09-09
 Quem decide: Felipe
 

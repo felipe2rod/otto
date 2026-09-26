@@ -1,6 +1,6 @@
 # 013 — Nome fixo "Otto", cargo exibido e foto configurados pela empresa
 
-Status: aceita (nome e cargo) / proposta (regra da foto)
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita (nome e cargo) / proposta (regra da foto)
 Data: 2026-09-08
 Quem decide: Felipe
 

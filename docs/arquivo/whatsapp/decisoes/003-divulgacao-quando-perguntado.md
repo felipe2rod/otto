@@ -1,6 +1,6 @@
 # 003 — Sem revelação espontânea; divulgação da marca quando perguntado
 
-Status: aceita
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita
 Data: 2026-09-08
 Quem decide: Felipe
 

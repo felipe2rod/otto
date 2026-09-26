@@ -1,73 +1,50 @@
-# Visão de produto
+# Visão do produto
 
-## O que é
+Atualizado em 2026-09-26, depois do pivô (ADR 026). Quase tudo aqui é hipótese e está escrito como hipótese.
 
-Otto é um funcionário de IA que empresas contratam. Não é uma plataforma, não é uma ferramenta, não é um chatbot. É alguém que entra na empresa para ocupar um cargo.
+## O que é o Otto
 
-**Promessa ao empregador:** seu WhatsApp atendido, o tempo todo, por alguém que conhece seu negócio, responde o que sabe e passa para você o que não sabe.
+Um editor de design gráfico em camadas, no navegador, com um agente de IA próprio que trabalha no mesmo documento que o designer. O documento exporta para PSD editável, e o designer pode terminar no Photoshop quando quiser.
 
-## Duas pessoas, dois produtos na mesma conversa
+## Para quem
 
-| | Empregador | Cliente final |
-|---|---|---|
-| Quem é | Dono/gestor de empresa pequena ou média que vende ou agenda pelo WhatsApp | Quem manda mensagem para essa empresa |
-| O que quer | Parar de perder cliente por demora e parar de responder WhatsApp às 22h | Resposta rápida e certa, e uma pessoa quando precisar |
-| Paga? | Sim | Não |
-| Vê a marca Otto? | Sim, o tempo todo | Quase não. Vê a empresa. Vê "Otto" só se a empresa mantiver o nome padrão |
+**Designer profissional**: freelancer, estúdio pequeno ou time interno de marca. Já usa Photoshop e passa boa parte da semana em trabalho de produção: adaptar uma peça para dez formatos, fazer variações de um anúncio, montar posts a partir de um modelo, aplicar identidade visual em material novo.
 
-Quem paga e quem usa são pessoas diferentes. Cada afirmação sobre "o cliente" neste projeto precisa dizer qual dos dois.
+## O que o agente faz na v1 (hipótese de valor)
 
-## v1 — Otto Atendente
+- **Adaptar formatos:** de uma peça 1080×1080 para story, banner, capa e anúncio, reposicionando e não só esticando.
+- **Variações:** N versões de título, cor ou composição para teste.
+- **Montar a partir de briefing:** texto + imagens da biblioteca + identidade da conta → primeira versão em camadas.
+- **Aplicar identidade:** trocar cores, fontes e estilos por tokens da marca do cliente.
+- **Lote:** trocar texto, preço ou foto em série a partir de uma lista.
+- **Revisar:** apontar texto transbordando, contraste baixo, fonte faltando e imagem em baixa resolução.
 
-Um cargo, um canal — **na v1**. O Otto é **multicanal** (ADR 021): atende em vários canais, e cada endereço é um contato — ele não tenta descobrir que dois endereços são a mesma pessoa. Instagram Direct e Messenger entram na v1.1. O que a v1 entrega é WhatsApp.
+Tudo isso termina num conjunto de alterações que o designer revisa. O agente não entrega nada "pronto" sem ter conferido (ADR 029).
 
-**Faz:**
-- Responde mensagens de WhatsApp da empresa com base em uma base de conhecimento que o empregador alimenta (horário, endereço, preços, serviços, políticas, perguntas frequentes).
-- Coleta o que a empresa precisa para atender (nome, o que a pessoa quer) sem interrogatório.
-- Passa para uma pessoa da equipe quando: não sabe, o cliente pede, o assunto é sensível, ou a regra da empresa manda. **Para quem** passa é escolha da empresa (ADR 012): anota recado, avisa uma ou algumas pessoas no WhatsApp com link, ou coloca na fila de uma equipe de atendentes.
-- Deixa de atender contatos que a empresa marcar (fornecedor, família, funcionário, cliente que pediu falar só com gente) e nunca atende grupo. Silêncio para a pessoa, aviso para a empresa (ADR 015).
-- Organiza as conversas numa fila por situação, atribuída por ele: esperando você, com você, com o Otto, resolvida (ADR 015).
-- Dá ao empregador um resumo do dia: quantos atendeu, quantos passou, o que não soube responder (isso alimenta a base).
+## O que o editor tem na v1
 
-**Contexto vem de três camadas** (ADR 006, `docs/produto/integracoes.md`): camada 0 sem integração nenhuma (histórico do WhatsApp, perfil, catálogo, Perfil da Empresa no Google, planilha), camada 1 horizontal (Google Calendar, Sheets, Bling, cobrança), camada 2 vertical depois do segmento decidido. Nenhuma funcionalidade pode exigir integração: só 47% dos pequenos negócios usam software integrativo.
+Pranchetas, grupos, imagem raster, forma vetorial, texto, máscara raster e vetorial, efeitos de camada e camadas de ajuste, sempre no subconjunto que o Photoshop representa (ADR 028). Tokens de identidade visual. Biblioteca de imagens e fontes da conta. Importar e exportar PSD. Exportar PNG, JPG e PDF.
 
-**Não faz na v1:**
-- Vender ativamente, cobrar, agendar em sistema externo, integrar com CRM ou ERP.
-- Etiqueta livre, quadro kanban e etapa comercial configurada pelo dono (ADR 015: fora da v1, com desenho pronto e gatilho).
-- Outros canais **na v1**. Instagram Direct e Messenger entram na v1.1, widget na v1.2, e-mail na v2 (ADR 021). Telefone e voz não são canal: são outro produto.
-- Prompt livre para o empregador (ver ADR 002).
+## O que o Otto não é
 
-Escopo pequeno de propósito. A tese é que "responder bem e encaminhar bem" já vale o salário. O ADR 015 ampliou de forma contida: contatos fora do atendimento e a fila por situação, que é a mesma caixa de entrada que o ADR 012 já exigia.
+- **Não é substituto do Photoshop** na ferramenta manual (pincel, retoque, pintura digital). Ele não compete nessa camada.
+- **Não é gerador de imagem por IA.** Gerar imagem é outra porta, com outro custo e outra questão de direitos, e fica fora da v1 (ADR 026).
+- **Não é Canva para leigo.** O usuário é profissional, e a interface assume que ele sabe o que é camada, máscara e modo de mesclagem.
+- **Não é plataforma de agentes.** Não há API nem MCP pública na v1 (ADR 029).
 
-## Hipóteses centrais (declaradas como hipóteses)
+## Perguntas abertas
 
-Seguindo `behavioral-evidence`. Nenhuma tem evidência coletada ainda. Nenhuma pode sustentar tela nova ou arquitetura cara até subir de grau.
+1. **Preço e unidade de cobrança.** Ainda não decidido: primeiro se calcula o custo. Estimativa em `docs/tecnico/custos.md`, substituída pelo custo medido no spike do agente (ADR 029, item 5). Inferência na DigitalOcean.
+2. **Importação de PSD na v1:** aceita (ADR 028).
+3. **Concorrência.** Ver `docs/mercado/pesquisa-2026-09-design.md`.
+4. **Primeiro recorte de aquisição:** que tipo de designer e que tipo de trabalho primeiro (social media de agência? e-commerce? estúdio de marca?). O raciocínio de "nicho na aquisição, horizontal no produto" do antigo ADR 007 pode ser reaproveitado se o Felipe quiser.
+5. **Nome e posicionamento:** "Otto" e "o agente faz a produção, você faz o design", aceitos pelo Felipe (ADR 026).
+6. **Desktop:** navegador na v1. Aplicativo, só com gatilho.
 
-| Afirmação | Tipo | Grau | O que a mata | Experimento barato |
-|---|---|---|---|---|
-| Empresas pequenas perdem venda por demora no WhatsApp e sabem disso | Atribuição | NÃO VERIFICADO | 10 donos entrevistados; menos de 5 conseguem citar um episódio concreto com data | Entrevista episódica: "me conta a última vez que perdeu um cliente por demora no WhatsApp" |
-| O empregador alimenta a base de conhecimento na primeira semana | Taxa | NÃO VERIFICADO | Menos de metade das 20 primeiras contas passa de 10 itens na base em 7 dias | Medir no onboarding. Se falhar, o Otto tem que extrair a base do histórico de conversas em vez de pedir |
-| O cliente final aceita ser atendido por IA se a resposta for rápida e certa | Preferência | NÃO VERIFICADO | Taxa de "quero falar com uma pessoa" acima de um limiar a definir nas primeiras 500 conversas | Medir incidência do pedido de humano por conversa, por preset |
-| "Funcionário de IA" comunica melhor que "chatbot com IA" para o empregador | Preferência | INFERIDO | Teste A/B de landing com CTR ou conversão pior para "funcionário" | Duas landings, mesmo tráfego |
+## Primeira entrega técnica
 
-## Concorrência
+Antes de qualquer tela de produto, três spikes. Se qualquer um falhar, a arquitetura muda.
 
-Mapa completo em `docs/mercado/pesquisa-2026-09.md` (2026-09-08). O essencial:
-
-- **O concorrente principal é a Meta.** O Meta Business Agent é IA de atendimento nativa no WhatsApp, chegou ao Brasil em fevereiro de 2026, cobra só token desde agosto e já tem mais de 1 milhão de empresas. Não dá para competir em distribuição, preço de inferência ou "tem IA".
-- **O buraco da Meta é o nosso espaço:** sem memória da relação, sem caixa de entrada de equipe, sem integração com o negócio, e encaminhamento para humano que esfria.
-- **"Funcionário de IA" já é usado pela Zaia** (R$ 249/mês), que acumula reclamação de instabilidade e suporte ausente.
-- **A reclamação nº 1 de toda a categoria é suporte**, não tecnologia. Isso é oportunidade de produto.
-- **73,2% dos consumidores preferem atendimento humano** e 63% valorizam o robô que passa para uma pessoa. O caráter do Otto é requisito de mercado, não enfeite.
-- **Nunca vender o Otto como substituto de gente.** Quem fez isso lá fora colheu reação negativa.
-
-## Perguntas que o Felipe precisa decidir
-
-1. ~~Um Otto, vários cargos~~ **Decidido pelo Felipe em 2026-09-08 (ADR 001):** Otto é uma pessoa só e as funções são cargos. "Vários funcionários de IA com nomes próprios" foi reexaminada e recusada. O plural do produto vive nos cargos, nunca nas caras.
-2. **Caráter fixo, estilo configurável** — recomendação em ADR 002. Confirmar ou mudar.
-3. ~~Revelação de IA~~ **Decidido pelo Felipe em 2026-09-08 (ADR 003):** o Otto não se apresenta como IA por conta própria. Quando perguntado sobre si, diz que é IA, que é o Otto, e cita ottobr.ai uma vez.
-4. ~~Nome de exibição padrão~~ **Decidido pelo Felipe em 2026-09-08 (ADR 013):** o nome é Otto, sempre. A empresa configura o cargo exibido ("Otto, atendente", "Otto, recepção") e o avatar. Regra da foto ainda proposta.
-5. **Segmento inicial.** Princípio decidido em ADR 007: **nicho na aquisição, horizontal no produto e na marca.** Qual nicho primeiro está em validação pelo experimento 001 (**adiado pelo Felipe em 2026-09-08: só roda quando houver site e produto para receber quem clicar**) (`docs/mercado/experimento-001-anuncio-por-nicho.md`) mais 10 conversas de campo. Candidato: assistência técnica de bairro; reserva: barbearia sem sistema. O critério mudou com o mapa de integrações (2026-09-08): além de "onde tem dor de atendimento", vale perguntar **onde o sistema que o cliente já usa ainda não colocou uma IA em cima**. Em saúde já colocou (Amplimed tem a Amélia, que conversa com o paciente em tempo real; iClinic e Feegow têm IA e WhatsApp). Em beleza, começou. Isso favorece prestador de serviço sem sistema, comércio de bairro e agenda informal. Contra a Meta, nicho é mais defensável que genérico. A Anota AI provou o modelo no Brasil (restaurantes, mais de 50 mil estabelecimentos, comprada pelo iFood por ~R$ 60 milhões). Candidatos: clínicas e consultórios, salões e barbearias, lojas de bairro, prestadores de serviço. Escolher um para os primeiros 10 clientes.
-6. **Infraestrutura.** Decidido (ADR 005): hospedagem e inferência na DigitalOcean, WhatsApp direto na Meta Cloud API. A validar, com critérios no ADR: Claude Sonnet 5 como modelo padrão, Haiku 4.5 para tarefas simples, App Platform com banco gerenciado. Pendente: linguagem/framework.
-7. **Cobrança.** Decidido: assinatura com franquia em tokens, acumulável, consumida pelo uso. Pendente: métrica exibida, teto do acumulado, o que acontece quando zera, recarga avulsa, faixas. Recomendações em `docs/produto/cobranca.md`.
-8. **Canais de indicação.** Decidido (ADR 011): marketing multinível descartado. Indicação entre clientes paga em um mês do Otto, um nível; parceiro PJ com carteira recebe 20% da mensalidade com clawback em 90 dias. Pendente: confirmar no campo que contador ou vendedor de maquininha é quem indica sistema para o nicho (pergunta 6 da seção 10 da pesquisa).
+1. **PSD** (ADR 028): um documento com um nó de cada tipo exporta para PSD, abre no Photoshop com texto editável, formas vetoriais, máscaras e efeitos, e a imagem composta bate com o render do Otto.
+2. **Render** (ADR 030): o mesmo documento renderiza igual no navegador e no Node, e o editor segura 60 quadros por segundo com 200 camadas.
+3. **Agente** (ADR 029): com o catálogo mínimo de operações, o agente adapta uma peça para 3 formatos e confere o próprio resultado. Mede tokens, imagens enviadas e voltas.

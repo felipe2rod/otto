@@ -1,6 +1,6 @@
 # 022 — A empresa ensina o Otto conferindo, não escrevendo
 
-Status: aceita
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita
 Data: 2026-09-09 (respondida pelo Felipe no mesmo dia)
 Quem decide: Felipe
 

@@ -1,6 +1,6 @@
 # 004 — Cobrança por uso, com assinatura e franquia acumulável
 
-Status: aceita (o modelo) / **revista em parte pelo ADR 024** (a métrica exibida)
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita (o modelo) / **revista em parte pelo ADR 024** (a métrica exibida)
 Data: 2026-09-08
 Quem decide: Felipe
 

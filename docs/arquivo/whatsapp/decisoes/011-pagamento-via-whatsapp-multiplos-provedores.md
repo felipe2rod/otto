@@ -1,6 +1,6 @@
 # 011 — Pagamento via WhatsApp com múltiplos provedores, sem intermediar dinheiro
 
-Status: aceita (princípio e escopo) / escolhida por Claude (ordem dos provedores)
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita (princípio e escopo) / escolhida por Claude (ordem dos provedores)
 Data: 2026-09-08
 Quem decide: Felipe
 

@@ -1,6 +1,6 @@
 # 024 — O plano é o cargo, e o trabalho se mede numa moeda só
 
-Status: aceita
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: aceita
 Data: 2026-09-09
 Quem decide: Felipe
 

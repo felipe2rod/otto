@@ -1,6 +1,6 @@
 # 018 — Otto Financeiro: responder é v1, avisar de conta em aberto é cargo
 
-Status: proposta
+Status: substituída por 026 (pivô para a ferramenta de design, 2026-09-26). Status anterior: proposta
 Data: 2026-09-08
 Quem decide: Felipe
 
