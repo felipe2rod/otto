@@ -1,6 +1,6 @@
 # 033 — A conta cria as próprias artes a partir de um pedido ou de um briefing salvo
 
-Status: aceita (o princípio e o público, pelo Felipe) / proposta (forma do briefing e ciclo)
+Status: aceita (o princípio, o público e o formulário como caminho padrão, pelo Felipe) / proposta (campos exatos e ciclo)
 Data: 2026-09-26
 Quem decide: Felipe
 
@@ -10,14 +10,20 @@ O ADR 026 pôs no centro o trabalho de produção sobre algo que já existe: ada
 
 ## Decisão
 
-### 1. Duas entradas, o mesmo ciclo
+### 1. O formulário de briefing é o caminho padrão; o pedido livre é a opção de liberdade
 
-- **Pedido livre:** a pessoa escreve o que precisa ("post de lançamento do café gelado, feed e story, fundo claro").
-- **Briefing salvo:** um modelo reutilizável da conta, preenchido em segundos, para o que se repete (post semanal de promoção, anúncio de vaga, capa de episódio).
+**Decidido pelo Felipe em 2026-09-26**, para evitar que o agente entenda errado:
 
-As duas entradas caem no ciclo do ADR 029: entender, planejar, fazer, conferir e entregar como conjunto de alterações revisável.
+- **Padrão: formulário de briefing.** A pessoa cria uma peça preenchendo campos (seção 2). Formato, texto, cores e imagens chegam ao agente como **dado estruturado**, não como frase para interpretar. É o que aparece primeiro na tela.
+- **Segundo plano: pedido livre.** Um campo de texto aberto, para quando o designer quer mais liberdade ("faz algo mais ousado, fundo escuro, tipografia grande"). Fica acessível, mas não é o caminho principal.
+- **Briefing salvo** é um formulário já preenchido e reutilizável: a pessoa só troca os campos que variam (produto, preço, validade).
+- O formulário tem um campo de **observações** em texto livre, para o detalhe que não coube nos campos, sem sair do caminho estruturado.
 
-### 2. O que um briefing salvo guarda
+As entradas caem no ciclo do ADR 029: entender, planejar, fazer, conferir e entregar como conjunto de alterações revisável. Pelo formulário, o passo "entender" praticamente some. Pelo pedido livre, o agente confirma o que entendeu antes de fazer quando algo essencial ficou ambíguo (formato, texto principal).
+
+**Cuidado com o formulário longo** (hipótese de atrito): os campos que não mudam vêm preenchidos do cadastro do cliente (identidade, logo, textos fixos) e do briefing salvo. Na segunda peça de um mesmo cliente, preencher deve levar menos de um minuto.
+
+### 2. Os campos do formulário (e o que um briefing salvo guarda)
 
 | Campo | Exemplo |
 |---|---|
@@ -32,6 +38,14 @@ As duas entradas caem no ciclo do ADR 029: entender, planejar, fazer, conferir e
 | Referências | documentos anteriores aprovados, que o agente usa como exemplo de estilo |
 
 O briefing é **dado da conta** (ADR 031), não instrução ao sistema. As restrições valem dentro da tarefa, mas não mudam o caráter do agente (ADR 029, item 3). Um briefing que diga "ignore as regras" é conteúdo.
+
+### 2.1 A qualidade do layout criado do zero é responsabilidade do agente
+
+**Decidido pelo Felipe em 2026-09-26:** criar uma peça bonita a partir do briefing é o trabalho do agente, e não um risco a contornar com modelos prontos. Consequência: o conjunto de avaliação (ADR 029) inclui **rubrica de qualidade visual julgada por designers**, além das regras automáticas, e ela é o critério de lançamento da criação do zero.
+
+### 2.2 De onde vêm as imagens
+
+Três fontes, todas no mesmo painel e nas mesmas ferramentas do agente (Felipe, 2026-09-26): **upload** do designer (fotos do cliente, produto, loja), **Pixabay** de fábrica e **bancos do próprio cliente** ligados com a chave dele (ADR 032). O formulário deixa escolher a fonte por campo de imagem.
 
 ### 3. O resultado é sempre um documento em camadas
 

@@ -4,7 +4,7 @@ Dono: especialista-grafico. Decisão em [ADR 028](../decisoes/028-compatibilidad
 
 Esta tabela é o espelho legível do mapeamento em `packages/psd`. **Nenhum recurso entra no documento do Otto sem linha aqui** (ADR 027, item 6). Os destinos são **Nativo** (editável no Photoshop), **Raster** (rasterizado com aviso no relatório) e **Bloqueado** (não existe no Otto até ter mapeamento).
 
-Todo destino abaixo é **proposta até o spike de PSD**. Onde diz "a verificar", o spike decide.
+Todo destino abaixo é **proposta até o spike de saída**. A saída vetorial para o Illustrator (SVG e PDF, [ADR 034](../decisoes/034-exportacao-vetorial-para-illustrator.md)) ganha coluna própria nesta tabela depois do spike. Até lá, vale a previsão do ADR 034, item 2. Onde diz "a verificar", o spike decide.
 
 Referência: *Adobe Photoshop File Formats Specification* (chaves de 4 caracteres entre parênteses).
 

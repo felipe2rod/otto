@@ -6,7 +6,7 @@ Quem decide: Felipe
 
 ## Contexto
 
-Para criar uma arte a partir de pedido ou de briefing (ADR 033), o Otto precisa de imagem. Na v1 não há geração por difusão (ADR 026). A fonte é a biblioteca da conta e os bancos de imagens. O Felipe decidiu em 2026-09-26: **o Pixabay vem de fábrica, porque é gratuito, e o cliente pode usar as próprias chaves para se conectar a outros bancos.**
+Para criar uma arte a partir de pedido ou de briefing (ADR 033), o Otto precisa de imagem. Na v1 não há geração por difusão (ADR 026). A fonte é a biblioteca da conta, alimentada por **upload** do designer, e os bancos de imagens. O Felipe decidiu em 2026-09-26: **o Pixabay vem de fábrica, porque é gratuito, e o cliente pode usar as próprias chaves para se conectar a outros bancos.**
 
 Cada banco tem regra própria de uso da API, e às vezes elas são opostas. O Pixabay proíbe usar a imagem por link direto; o Unsplash (a verificar) exige. Por isso a porta não pode esconder essas regras. Ela declara cada uma (ADR 020, `capacidades`).
 

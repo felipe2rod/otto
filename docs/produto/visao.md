@@ -8,11 +8,13 @@ Um editor de design gráfico em camadas, no navegador, com um agente de IA próp
 
 ## Para quem
 
+**Foco no profissional, fácil para o leigo** (Felipe, 2026-09-26): o produto é desenhado para o designer, mas qualquer pessoa consegue criar uma peça satisfatória pelo formulário de briefing.
+
 **Designer profissional**: freelancer, estúdio pequeno ou time interno de marca. Já usa Photoshop e passa boa parte da semana em trabalho de produção: adaptar uma peça para dez formatos, fazer variações de um anúncio, montar posts a partir de um modelo, aplicar identidade visual em material novo.
 
 ## O que o agente faz na v1 (hipótese de valor)
 
-- **Criar a partir de um pedido ou de um briefing salvo** (ADR 033): a conta gera as próprias artes, em camadas, com imagens da biblioteca ou de bancos de imagens (ADR 032).
+- **Criar a partir de um formulário de briefing** (caminho padrão) **ou de um pedido livre** (segundo plano, para mais liberdade) (ADR 033): a conta gera as próprias artes, em camadas, com imagens da biblioteca ou de bancos de imagens (ADR 032).
 
 - **Adaptar formatos:** de uma peça 1080×1080 para story, banner, capa e anúncio, reposicionando e não só esticando.
 - **Variações:** N versões de título, cor ou composição para teste.
@@ -25,7 +27,7 @@ Tudo isso termina num conjunto de alterações que o designer revisa. O agente n
 
 ## O que o editor tem na v1
 
-Pranchetas, grupos, imagem raster, forma vetorial, texto, máscara raster e vetorial, efeitos de camada e camadas de ajuste, sempre no subconjunto que o Photoshop representa (ADR 028). Tokens de identidade visual. Biblioteca de imagens e fontes da conta. Bancos de imagens: Pixabay de fábrica e outros com a chave da conta (ADR 032). Briefings salvos (ADR 033). Importar e exportar PSD. Exportar PNG, JPG e PDF.
+Pranchetas, grupos, imagem raster, forma vetorial, texto, máscara raster e vetorial, efeitos de camada e camadas de ajuste, sempre no subconjunto que o Photoshop representa (ADR 028). Tokens de identidade visual. Biblioteca de imagens e fontes da conta. Bancos de imagens: Pixabay de fábrica e outros com a chave da conta (ADR 032). Briefings salvos (ADR 033). Importar e exportar PSD. Exportar SVG e PDF editáveis para o Illustrator (ADR 034). Exportar PNG, JPG e PDF.
 
 ## O que o Otto não é
 
@@ -42,11 +44,12 @@ Pranchetas, grupos, imagem raster, forma vetorial, texto, máscara raster e veto
 4. **Primeiro recorte de aquisição:** que tipo de designer e que tipo de trabalho primeiro (social media de agência? e-commerce? estúdio de marca?). O raciocínio de "nicho na aquisição, horizontal no produto" do antigo ADR 007 pode ser reaproveitado se o Felipe quiser.
 5. **Nome e posicionamento:** "Otto" e "o agente faz a produção, você faz o design", aceitos pelo Felipe (ADR 026).
 6. **Desktop:** navegador na v1. Aplicativo, só com gatilho.
+7. **Illustrator:** entra na v1 com SVG e PDF editáveis (ADR 034).
 
 ## Primeira entrega técnica
 
 Antes de qualquer tela de produto, três spikes. Se qualquer um falhar, a arquitetura muda.
 
-1. **PSD** (ADR 028): um documento com um nó de cada tipo exporta para PSD, abre no Photoshop com texto editável, formas vetoriais, máscaras e efeitos, e a imagem composta bate com o render do Otto.
+1. **Saída** (ADR 028 e 034): um documento com um nó de cada tipo exporta para PSD, SVG e PDF. Abre no Photoshop com texto editável, formas vetoriais, máscaras e efeitos, e a composta bate com o render do Otto. Abre no Illustrator com forma e texto editáveis.
 2. **Render** (ADR 030): o mesmo documento renderiza igual no navegador e no Node, e o editor segura 60 quadros por segundo com 200 camadas.
 3. **Agente** (ADR 029): com o catálogo mínimo de operações, o agente adapta uma peça para 3 formatos e confere o próprio resultado. Mede tokens, imagens enviadas e voltas.

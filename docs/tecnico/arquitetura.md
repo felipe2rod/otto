@@ -28,7 +28,7 @@ avaliacao/        conjunto de tarefas de design do agente (dono: treinador-do-ot
 
 ## Fluxo de uma tarefa do agente
 
-1. A pessoa escreve um pedido livre ou preenche um briefing salvo (ADR 033) no painel do agente. A API cria uma tarefa (`tarefas_do_agente`) e a enfileira (pg-boss).
+1. A pessoa preenche o formulário de briefing (caminho padrão), usa um briefing salvo ou, em segundo plano, escreve um pedido livre (ADR 033). A API cria uma tarefa (`tarefas_do_agente`) e a enfileira (pg-boss).
 2. O worker revalida a conta dona da tarefa (ADR 023: o payload é hipótese) e roda o ciclo do ADR 029: resumo, plano, lotes de operações, render no servidor, verificação.
 3. Cada lote aplicado é gravado no histórico com autoria `agente` e o id da tarefa, dentro de um **conjunto de alterações** pendente.
 4. O editor recebe o progresso por stream e mostra o conjunto para revisão: aceitar, aceitar em parte, desfazer.
