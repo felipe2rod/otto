@@ -1,0 +1,68 @@
+# Itens que todo negócio desta lista tem. Incluído por referência, nunca copiado.
+# Quase tudo aqui é prioridade 3: a camada 0 (perfil do WhatsApp, Google) costuma
+# preencher sozinha, e o que ela preenche não se perde se o dono sair do onboarding.
+#
+# GRAU DE EVIDÊNCIA: hipótese. Nenhuma destas perguntas foi ouvida de um cliente real.
+# Ver README §7.
+
+comum: todo-negocio
+nome_para_operacao: "Tronco comum — todo negócio"
+
+itens:
+  - chave: horario_de_funcionamento
+    tipo: fato
+    assunto: horario
+    prioridade: 3
+    ordem: 1
+    pergunta: "vcs abrem que horas?"
+    texto: "Horário: {horario}."
+    lacunas:
+      horario: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [perfil_whatsapp, google] }
+    volatilidade: muda_as_vezes
+
+  - chave: abre_no_fim_de_semana
+    tipo: fato
+    assunto: horario
+    prioridade: 3
+    ordem: 2
+    pergunta: "vocês abrem sábado?"
+    texto: "Sábado: {sabado}. Domingo: {domingo}."
+    lacunas:
+      sabado: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [perfil_whatsapp, google] }
+      domingo: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [perfil_whatsapp, google] }
+    volatilidade: muda_as_vezes
+
+  - chave: endereco
+    tipo: fato
+    assunto: endereco
+    prioridade: 3
+    ordem: 3
+    pergunta: "onde vocês ficam?"
+    texto: "Endereço: {endereco}«. Referência: {referencia}»."
+    lacunas:
+      endereco: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [perfil_whatsapp, google] }
+      referencia: { tipo: texto_curto, obrigatoria: false, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: formas_de_pagamento
+    tipo: fato
+    assunto: pagamento
+    prioridade: 2
+    ordem: 20
+    pergunta: "aceita cartão? tem pix?"
+    texto: "Formas de pagamento aceitas: {formas}«. Parcelamos em até {parcelas} vezes»."
+    lacunas:
+      formas: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+      parcelas: { tipo: texto_curto, obrigatoria: false, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: estacionamento
+    tipo: escolha
+    assunto: endereco
+    prioridade: 3
+    ordem: 30
+    pergunta: "tem onde estacionar?"
+    opcoes:
+      sim: "Tem estacionamento para clientes."
+      nao: "Não temos estacionamento próprio."
+    volatilidade: estavel

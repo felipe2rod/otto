@@ -1,7 +1,7 @@
 # 001 — Um Otto, vários cargos
 
-Status: proposta (Claude, aguardando Felipe)
-Data: 2026-09-08
+Status: aceita
+Data: 2026-09-08 (proposta) / 2026-09-08 (aceita pelo Felipe)
 Quem decide: Felipe
 
 ## Contexto
@@ -31,7 +31,9 @@ A pergunta muda de resposta dependendo de quem está olhando, e o Otto tem duas 
 
 ## Decisão
 
-**Opção A.** Otto é uma pessoa só. Funções são cargos.
+**Opção A**, confirmada pelo Felipe em 2026-09-08. Otto é uma pessoa só. Funções são cargos.
+
+A pergunta que fechou: se o produto é "vários funcionários de IA" (opção B) ou um funcionário que acumula funções (opção A). Ficou A, com um argumento que não existia quando este ADR foi escrito e veio da discussão do ADR 018: **as caras dividem o mesmo número de WhatsApp.** Com a opção B, a mesma pessoa recebe mensagem da Lia numa semana e da Bia na outra, do mesmo número, e percebe que os dois são o mesmo sistema fingindo ser dois. O plural do produto vive nos **cargos**, nunca nas caras.
 
 - Nome de cargo: "Otto" + profissão em português (Otto Atendente). Nunca personagem novo.
 - O empregador vê um único Otto no painel, com uma lista de cargos ativos.

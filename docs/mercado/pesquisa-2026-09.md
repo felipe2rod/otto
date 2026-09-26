@@ -208,8 +208,64 @@ Nenhuma destas foi respondida por esta pesquisa. Todas sustentam decisão cara e
 3. Qual foi a última vez que ele perdeu cliente por demora no WhatsApp? Data e episódio, não opinião.
 4. Ele já tentou alguma dessas plataformas? Por que parou?
 5. Quem responde o WhatsApp hoje, e quanto custa essa pessoa?
+6. Quem te indicou o último sistema que você contratou? (Valida o canal de parceiros do ADR 011. Contador ou vendedor de maquininha como resposta recorrente confirma o canal.)
 
 ---
+
+## 11. Nichos: critério, vetos e os próximos 15 (2026-09-09)
+
+Levantado pelo estrategista de mercado depois que o Felipe escolheu nove nichos para as bases pré-escritas do ADR 022. **É parecer, não decisão** — o que fazer com os vetos abaixo é do Felipe.
+
+### O critério, que vale mais que a lista
+
+Cinco filtros. Os dois primeiros vetam; os outros três ordenam. **Regra do 16º nicho: passa em 1, 2 e 3 → entra; 4 e 5 definem a ordem.**
+
+| # | Filtro | Por quê |
+|---|---|---|
+| 1 | **Porta aberta.** Existe alguém que apresenta o Felipe a um dono desse nicho nesta semana | Sem isso, o nicho é planilha |
+| 2 | **A conversa de entrada é fato conferível**, não conselho: preço, prazo, o que trazer, tem horário | Se a resposta certa depende de julgamento profissional, o Otto não pode dar, e a base do nicho vira risco |
+| 3 | **Nenhuma IA embutida no sistema que *esse dono* já paga** | Correção ao critério de `visao.md`: não é "a categoria tem fornecedor com IA", é **penetração**. Existir Trinks não desqualifica a lash designer que usa caderno |
+| 4 | **Ticket:** fatura acima de ~R$ 15 mil/mês, ou 2+ pessoas atendendo | R$ 197 tem que ancorar em diária de atendente, não em percentual do faturamento |
+| 5 | **Densidade:** associação, grupo de WhatsApp, fornecedor comum, feira | É o que faz o 11º cliente custar menos que o 1º |
+
+### Três vetos nos nove escolhidos
+
+- **Clínica odontológica — sai da entrada.** A Simples Dental vende "Secretária IA" que agenda 24/7 pelo WhatsApp; a Dental Office tem assistente de voz com IA e confirmação automática. É o caso Amplimed de novo, agora com nome. Odonto é pista de boliche depois, nunca cabeça de ponte.
+- **Autoescola — sai também**, por um dado que não estava em documento nenhum: a **AtendeCFC** vende IA nativa no WhatsApp integrada ao GestorCFC. O ticket é ótimo (aluno de R$ 2 a 4 mil), mas a vaga já tem dono vertical.
+- **Beleza são cinco itens da lista e um nicho só.** Salão, cabeleireiro, barbeiro, lash designer e estética compartilham a mesma conversa: agenda, preço, tempo de procedimento, política de falta. Contar cinco infla a lista e o esforço. **Ressalva:** Trinks e Belasis já anunciam IA e WhatsApp por menos de R$ 197 — o teto de preço aqui é apertado.
+
+**Os dois melhores dos nove: assistência técnica de celular e loja de artigos religiosos afro-brasileiros**, sem IA vertical encontrada em nenhum dos dois. **Ressalva na loja religiosa:** se a conversa central for consulta ("que erva para isso") em vez de fato, a base vira aconselhamento religioso — fere o caráter e é risco de marca. Só entra se a base for produto, preço, disponibilidade, entrega e discrição.
+
+### Os próximos 15
+
+Não são 15 bases: é **um esqueleto com 15 recheios**, porque todos compartilham a mesma conversa — manda foto ou medida → orçamento → prazo → marca.
+
+**Reparo com orçamento** (vizinhos diretos da assistência de celular): eletrodoméstico e linha branca · refrigeração e ar-condicionado · oficina mecânica de bairro · funilaria e pintura · auto-elétrica, som, acessórios e película · chaveiro e auto-chaveiro 24h.
+
+**Casa e obra, orçamento por medida:** vidraçaria e serralheria · marmoraria · móveis planejados e marcenaria · dedetizadora e controle de pragas · manutenção de piscina.
+
+**Data marcada e encomenda:** buffet infantil e salão de festas · aluguel de equipamento e estrutura de festa · gráfica rápida e comunicação visual · estúdio de tatuagem e piercing.
+
+**Deliberadamente fora:** veterinária e petshop (software vet já tem IA), restaurante e delivery (Anota AI, `integracoes.md` §5), imobiliária e advocacia (CRM vertical com IA, e regulação).
+
+### Escrever três, não 24
+
+O parecer é que escrever 24 bases antes de vender para qualquer nicho é desperdício, por três motivos: a base só vale no momento "confere se acertei" (sem cliente daquele nicho ela é **estoque, e estoque de resposta envelhece sozinho** — é a deriva de conteúdo, queixa nº 7 desta pesquisa); a ordem depende do dado que o ADR 007 ainda não tem; e é um mês de fundador antes do primeiro cliente pagante.
+
+**Ordem recomendada:** (1) assistência técnica de celular, (2) beleza como bloco único, (3) loja religiosa, se o campo confirmar que a conversa é produto e não consulta. **Da quarta em diante, por incidência:** 2 clientes pagantes do nicho ou 5 pedidos — mesmo tipo de gatilho de `integracoes.md` §9.
+
+### O padrão nos nove, que vale mais que a lista
+
+**O eixo comum não é setor, ticket nem TAM. É acesso.** São negócios onde o dono atende o próprio WhatsApp, o número é público, o agendamento acontece na conversa, e o Felipe provavelmente conhece um dono ou é cliente. A loja de artigos religiosos afro-brasileiros é a prova: nenhuma planilha de mercado a colocaria ao lado de odontologia. Ela sai de **rede pessoal e comunidade densa**.
+
+Duas consequências:
+
+- **O canal do Felipe hoje é relação e comunidade, não anúncio.** Isso reordena a validação: as 10 conversas de campo vêm primeiro e saem dessa rede, e o experimento 001 continua depois do site. O filtro 5 sobe de peso — comunidade de terreiro, grupo de barbeiros, associação de lojistas, WhatsApp de fornecedor de peças.
+- **Sete dos nove giram em torno de agenda.** Não muda o ADR 016 ainda, porque o Google Calendar já está na v1. Se as conversas de campo confirmarem, aí sim o **Otto Agenda passa o Otto Vendedor**.
+
+**Uma pergunta nova para as conversas de campo da seção 10**, que aplica o filtro 3 numa frase: *"que sistema você paga hoje, e ele já responde o WhatsApp sozinho?"*
+
+**O que mudaria este parecer:** se 3 ou mais donos de beleza disserem que não pagam Trinks, Belasis nem nada, beleza vira o primeiro nicho — tem volume, densidade e porta aberta, e o teto de preço deixa de ser o problema.
 
 ## Fontes
 
@@ -236,3 +292,10 @@ Consultadas em 2026-09-08.
 - Notícia Preta, 73% preferem atendimento humano: https://noticiapreta.com.br/consumidores-preferem-atendimento-humano-chatbots-ia/
 - Sebrae via Meets, 82% das MPEs usam WhatsApp: https://blog.meets.com.br/whatsapp-business-estatisticas-e-10-tendencias-para-2026/
 - Unred, estatísticas de WhatsApp no Brasil: https://unred.com.br/blog/estatisticas-whatsapp-brasil
+
+Acrescentadas em 2026-09-09 (nichos, seção 11):
+- Simples Dental IA: https://www.simplesdental.com/blog/simples-dental-ia/
+- Dental Office: https://www.dentaloffice.com.br/
+- AtendeCFC, IA para autoescolas: https://atendecfc.com.br/
+- Trinks, WhatsApp inteligente para barbearias: https://blog.trinks.com/whatsapp-inteligente-pra-barbearias-mais-tempo-e-atencao-para-os-seus-clientes/
+- Belasis: https://www.belasis.com.br/

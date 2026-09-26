@@ -1,0 +1,18 @@
+<base empresa="Empresa de teste" gerada_em="2026-09-09">
+[i1|estoque|2026-09-09|dono] O que temos na loja: xxxxx xxxxx xxxxx. O que não está em estoque pode ser encomendado.
+[i2|preco|lista|completa|2026-09-09|dono] Preço dos produtos mais procurados
+  guia simples 000 | guia de firma 000 | vela de sete dias 000 | quartinha 000 | alguidar 000 | jogo de búzios 000 | banho de ervas pronto 000
+[i3|encomenda|2026-09-09|dono] Encomendas ficam prontas em xxxxx xxxxx xxxxx.
+[i4|entrega|2026-09-09|dono] Entregamos em xxxxx xxxxx xxxxx.
+[i5|entrega|2026-09-09|dono] Enviamos para outras cidades pelos Correios ou por transportadora, com o frete pago pelo cliente.
+[i6|escopo|2026-09-09|dono] Montamos o pedido a partir da lista que o cliente trouxer, com o que houver na loja.
+[i9|estoque|2026-09-09|dono] Temos ervas frescas, e a variedade muda conforme o dia.
+[i10|escopo|2026-09-09|dono] Atendemos casas e pedidos grandes, com condição combinada pela equipe.
+[i11|escopo|2026-09-09|dono] Trocas são feitas em até xxxxx xxxxx xxxxx, com o comprovante.
+[i12|pagamento|2026-09-09|dono] Dá para pagar por Pix e retirar depois; o pedido fica separado.
+[i13|horario|2026-09-09|dono] Horário: xxxxx xxxxx xxxxx.
+[i14|horario|2026-09-09|dono] Sábado: xxxxx xxxxx xxxxx. Domingo: xxxxx xxxxx xxxxx.
+[i15|endereco|2026-09-09|dono] Endereço: xxxxx xxxxx xxxxx.
+[i16|pagamento|2026-09-09|dono] Formas de pagamento aceitas: xxxxx xxxxx xxxxx.
+[i17|endereco|2026-09-09|dono] Tem estacionamento para clientes.
+</base>

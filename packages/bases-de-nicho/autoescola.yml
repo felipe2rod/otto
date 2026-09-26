@@ -1,0 +1,187 @@
+# Base do nicho — autoescola (CFC)
+#
+# GRAU DE EVIDÊNCIA: NÃO VERIFICADO. Ver README §7.
+#
+# É o nicho mais diferente dos oito, e por um motivo que muda toda resposta de
+# preço: parte do que o cliente paga NÃO É da autoescola. Taxa de Detran, exame
+# médico e exame psicotécnico são de terceiros, variam por estado e mudam por
+# resolução. Somar tudo num número só é o jeito mais fácil de o Otto mentir sem
+# querer — ele afirmaria um valor que a empresa não controla e não confirmou
+# (regra 6 do caráter).
+
+nicho: autoescola
+segmento: prestador_de_servico
+nome_para_operacao: "Autoescola / CFC"
+inclui: [_comum/todo-negocio.yml, _comum/hora-marcada.yml]
+assuntos: [preco, prazo_de_conserto, escopo, pagamento, agendamento, horario, endereco, documentos]
+
+observacoes_de_risco: |
+  1. DOIS BOLSOS, SEMPRE SEPARADOS. Todo item de preço diz o que a autoescola
+     cobra. O que o Detran cobra é outro item, com outra lacuna, e o Otto nunca
+     soma os dois. O caso N-10 da suíte existe só para isto.
+  2. TAXA DE TERCEIRO É O ITEM MAIS PERECÍVEL DESTE ARQUIVO. Marcado
+     `muda_as_vezes`, vence em 90 dias (`conversa.md` §5.2) e passa a ser dito com
+     a data. Se a empresa não quiser manter, o certo é não ter o item: o Otto diz
+     que não tem e encaminha, que é melhor que dizer um valor de dois anos atrás.
+  3. PRAZO NÃO É PROMESSA. "Em quanto tempo eu tiro a carteira" depende de fila do
+     Detran, de reprovação em prova e de agenda de banca. O item fala do que a
+     autoescola controla (as aulas) e diz que o resto depende do Detran. Nunca
+     "em 45 dias você está com a carteira na mão".
+  4. Exame médico toca saúde de leve. Não vira conselho: o Otto diz onde e quanto
+     custa, nunca se a pessoa vai passar.
+
+  [GUARDIÃO] Vocabulário: "primeira habilitação", "categoria", "renovação",
+  "processo" — é como o balcão fala. Nunca "CNH digital", "curso", "matrícula
+  facilitada". E nunca "aprovação garantida", que é promessa (regra 6).
+
+itens:
+  # ---------- prioridade 1 ----------
+
+  - chave: preco_primeira_habilitacao
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 1
+    pergunta: "quanto custa pra tirar a carteira?"
+    texto: "Primeira habilitação categoria B: a autoescola cobra {preco_processo_b}. As taxas do Detran e os exames são pagos à parte."
+    lacunas:
+      preco_processo_b: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: taxas_de_terceiro
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 2
+    pergunta: "e as taxas do Detran, é fora?"
+    texto: "As taxas do Detran e os exames médico e psicológico ficam em torno de {valor_taxas} e são pagos direto ao órgão."
+    lacunas:
+      valor_taxas: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: parcelamento
+    tipo: fato
+    assunto: pagamento
+    prioridade: 1
+    ordem: 3
+    pergunta: "dá pra parcelar?"
+    texto: "O valor da autoescola pode ser parcelado em até {parcelas}«, {condicao_parcelas}»."
+    lacunas:
+      parcelas: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+      condicao_parcelas: { tipo: texto_curto, obrigatoria: false, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não parcelamos; o pagamento é à vista."
+
+  - chave: preco_aula_avulsa
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 4
+    pergunta: "quanto é a aula avulsa?"
+    texto: "Aula prática avulsa: {preco_aula}."
+    lacunas:
+      preco_aula: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não fazemos aula avulsa, só o processo completo."
+
+  - chave: preco_categoria_a
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 5
+    pergunta: "quanto custa pra moto?"
+    texto: "Primeira habilitação categoria A (moto): a autoescola cobra {preco_processo_a}, fora as taxas do Detran."
+    lacunas:
+      preco_processo_a: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não trabalhamos com categoria A (moto)."
+
+  - chave: prazo_do_processo
+    tipo: fato
+    assunto: prazo_de_conserto
+    prioridade: 1
+    ordem: 6
+    pergunta: "quanto tempo demora todo o processo?"
+    texto: "As aulas costumam levar {prazo_aulas}. O tempo total depende da fila de exames e das provas do Detran, que não são marcadas por nós."
+    lacunas:
+      prazo_aulas: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  # ---------- prioridade 2 ----------
+
+  - chave: documentos_para_matricula
+    tipo: fato
+    assunto: documentos
+    prioridade: 2
+    ordem: 10
+    pergunta: "o que preciso levar pra fazer a matrícula?"
+    texto: "Para a matrícula é preciso levar {documentos}."
+    lacunas:
+      documentos: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: idade_minima
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 11
+    pergunta: "com quantos anos pode começar?"
+    texto: "Idade para abrir o processo: {idade_minima}."
+    lacunas:
+      idade_minima: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: servicos_atendidos
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 12
+    pergunta: "vocês fazem renovação de CNH?"
+    texto: "Serviços atendidos: {servicos}."
+    lacunas:
+      servicos: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [descricao_do_negocio] }
+    volatilidade: estavel
+
+  - chave: aula_pega_em_casa
+    tipo: escolha
+    assunto: agendamento
+    prioridade: 2
+    ordem: 13
+    pergunta: "o instrutor busca em casa?"
+    opcoes:
+      sim: "O instrutor busca e deixa o aluno no endereço combinado."
+      nao: "As aulas começam e terminam na autoescola."
+    volatilidade: estavel
+
+  - chave: horario_das_aulas
+    tipo: fato
+    assunto: agendamento
+    prioridade: 2
+    ordem: 14
+    pergunta: "tem aula de noite? e fim de semana?"
+    texto: "As aulas práticas são marcadas dentro de {janela_de_aulas}."
+    lacunas:
+      janela_de_aulas: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: reprovou_na_prova
+    tipo: fato
+    assunto: preco
+    prioridade: 2
+    ordem: 15
+    pergunta: "se eu reprovar tenho que pagar de novo?"
+    texto: "Em caso de reprovação na prova, o custo de refazer é {custo_reteste}."
+    lacunas:
+      custo_reteste: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: onde_faz_exame
+    tipo: fato
+    assunto: escopo
+    prioridade: 3
+    ordem: 16
+    pergunta: "onde faço o exame médico?"
+    texto: "O exame médico e o psicológico são feitos em {onde_exame}."
+    lacunas:
+      onde_exame: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel

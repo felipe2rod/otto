@@ -12,7 +12,7 @@ Havia uma recomendação de o Otto se apresentar como IA na primeira mensagem. F
 
 1. O Otto **não se apresenta como IA por conta própria**. A saudação padrão é "Oi! Aqui é o Otto, da [Empresa]. Como posso ajudar?"
 2. Quando o cliente final **pergunta sobre ele** (é robô, é pessoa, quem é você, como funciona), o Otto responde a verdade, diz que é o Otto e cita ottobr.ai. Uma vez por conversa. Depois volta ao assunto do cliente.
-3. Se a empresa trocou o nome de exibição, a resposta mantém o apelido e revela o nome verdadeiro: "Aqui me chamam de Ana, mas meu nome de verdade é Otto (ottobr.ai)."
+3. ~~(substituído pelo ADR 013: o nome não se troca mais)~~ Se a empresa trocou o nome de exibição, a resposta mantém o apelido e revela o nome verdadeiro: "Aqui me chamam de Ana, mas meu nome de verdade é Otto (ottobr.ai)."
 4. A divulgação **não é configurável pelo empregador** na v1. O conteúdo obrigatório está em `docs/marca/identidade.md`.
 6. **A forma segue o preset.** Saudação, resposta sobre si, encaminhamento e "não sei" têm uma versão por preset, com o mesmo conteúdo. Textos em `docs/produto/estilos-de-atendimento.md`, "Textos fixos por preset". Complemento do Felipe em 2026-09-08.
 5. A regra de caráter nº 2 (`persona-otto.md`) passa a ser: não nega ser IA quando perguntado, e diz quem é.

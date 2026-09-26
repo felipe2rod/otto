@@ -1,0 +1,195 @@
+# Base do nicho — assistência técnica de celulares
+#
+# GRAU DE EVIDÊNCIA: NÃO VERIFICADO. Nenhuma destas perguntas foi ouvida de um
+# cliente real. Escritas por mim, sem conversa de campo, sem transcrição, sem
+# leitura pública. Ficha e plano de correção no README §7.
+#
+# Nicho candidato do ADR 007. É o mesmo negócio da empresa fictícia
+# "Assistência do Zé" que a suíte de avaliação usa (conversa.md §7.1).
+#
+# CONVENÇÃO DE PREÇO, e ela vale nos 8 arquivos: a primeira tela de um serviço
+# pede UMA faixa ("a partir de R$ ___"), não uma tabela. A tabela existe
+# (`preco_por_aparelho`), mas vem depois — pedir 8 números na tela 1 é o
+# formulário que a decisão C recusou, com outra moldura.
+
+nicho: assistencia-tecnica-celular
+segmento: assistencia_tecnica
+nome_para_operacao: "Assistência técnica de celular"
+inclui: [_comum/todo-negocio.yml]
+assuntos: [preco, prazo_de_conserto, garantia, escopo, pagamento, horario, endereco, agendamento]
+
+observacoes_de_risco: |
+  Nada de saúde, religião ou dado sensível neste nicho. O risco aqui é outro e é o
+  do caráter: preço de conserto varia por aparelho e por peça, e é o nicho em que
+  a tentação de interpolar é maior — se o dono preencheu iPhone 11 e iPhone 12, o
+  Otto não pode deduzir o 13. Caso N-05 da suíte existe por causa disto.
+
+itens:
+  # ---------- prioridade 1: só o dono sabe, e o Otto não pode deduzir ----------
+
+  - chave: preco_troca_tela
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 1
+    pergunta: "quanto custa pra trocar a tela?"
+    texto: "Troca de tela: a partir de R$ {preco_minimo_tela}. O valor exato depende do aparelho."
+    lacunas:
+      preco_minimo_tela: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: preco_troca_bateria
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 2
+    pergunta: "e a bateria, quanto sai?"
+    texto: "Troca de bateria: a partir de R$ {preco_minimo_bateria}. O valor exato depende do aparelho."
+    lacunas:
+      preco_minimo_bateria: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: prazo_do_conserto
+    tipo: fato
+    assunto: prazo_de_conserto
+    prioridade: 1
+    ordem: 3
+    pergunta: "quanto tempo demora?"
+    texto: "Troca de tela e de bateria fica pronta em {prazo}«, se o aparelho chegar até {horario_limite}»."
+    lacunas:
+      prazo: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+      horario_limite: { tipo: texto_curto, obrigatoria: false, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: garantia_do_servico
+    tipo: fato
+    assunto: garantia
+    prioridade: 1
+    ordem: 4
+    pergunta: "tem garantia?"
+    texto: "O serviço tem {garantia_dias} dias de garantia«. A garantia não cobre {nao_cobre}»."
+    lacunas:
+      garantia_dias: { tipo: dias, obrigatoria: true, preenchivel_por: [] }
+      nao_cobre: { tipo: texto_curto, obrigatoria: false, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: orcamento_e_pago
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 5
+    pergunta: "vocês cobram pra olhar o aparelho?"
+    texto: "A avaliação do aparelho custa {valor_avaliacao}, e o valor é abatido se o conserto for feito aqui."
+    lacunas:
+      valor_avaliacao: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "A avaliação do aparelho é gratuita."
+
+  - chave: preco_por_aparelho
+    tipo: lista
+    assunto: preco
+    prioridade: 1
+    ordem: 6
+    pergunta: "quanto custa a tela do meu aparelho?"
+    cabecalho: "Preço de troca de tela por aparelho"
+    linhas_sugeridas:
+      - "iPhone 11"
+      - "iPhone 12"
+      - "iPhone 13"
+      - "Samsung Galaxy A14"
+      - "Samsung Galaxy A54"
+      - "Motorola Moto G54"
+      - "Xiaomi Redmi Note 12"
+    lacuna_por_linha: { tipo: dinheiro }
+    minimo_de_linhas: 3
+    volatilidade: muda_as_vezes
+
+  # ---------- prioridade 2: escopo e regra do negócio, um toque ----------
+
+  - chave: marcas_atendidas
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 10
+    pergunta: "vocês consertam Xiaomi?"
+    texto: "Marcas que consertamos: {marcas}."
+    lacunas:
+      marcas: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [descricao_do_negocio] }
+    volatilidade: estavel
+
+  - chave: conserta_placa
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 11
+    pergunta: "meu celular caiu na água e não liga, vocês olham?"
+    opcoes:
+      sim: "Fazemos reparo de placa, inclusive de aparelho que não liga ou que caiu na água."
+      nao: "Não fazemos reparo de placa. Atendemos troca de peça."
+    volatilidade: estavel
+
+  - chave: conserta_outros_aparelhos
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 12
+    pergunta: "vocês consertam notebook também?"
+    opcoes:
+      sim: "Também atendemos notebook e tablet."
+      nao: "Atendemos só celular."
+    volatilidade: estavel
+
+  - chave: perde_os_dados
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 13
+    pergunta: "vou perder minhas fotos?"
+    opcoes:
+      sim: "Dependendo do serviço, pode ser necessário apagar os dados do aparelho. Isso é avisado antes de começar."
+      nao: "Na troca de tela e de bateria os dados do aparelho não são apagados."
+    volatilidade: estavel
+
+  - chave: da_pra_esperar
+    tipo: escolha
+    assunto: prazo_de_conserto
+    prioridade: 2
+    ordem: 14
+    pergunta: "posso esperar aí ou tenho que deixar?"
+    opcoes:
+      sim: "Alguns serviços saem na hora e dá para esperar no local."
+      nao: "O aparelho fica na assistência, e avisamos por aqui quando ficar pronto."
+    volatilidade: estavel
+
+  - chave: peca_original
+    tipo: escolha
+    assunto: garantia
+    prioridade: 2
+    ordem: 15
+    pergunta: "a peça é original?"
+    opcoes:
+      sim: "Trabalhamos com peça original."
+      nao: "A peça que usamos não é original de fábrica."
+    volatilidade: estavel
+
+  - chave: busca_e_entrega
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 16
+    pergunta: "vocês buscam em casa?"
+    opcoes:
+      sim: "Buscamos e entregamos o aparelho."
+      nao: "Não fazemos busca nem entrega; o aparelho é trazido até a loja."
+    volatilidade: estavel
+
+  - chave: compra_aparelho_usado
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 17
+    pergunta: "vocês compram celular usado?"
+    opcoes:
+      sim: "Compramos aparelho usado. O valor depende do estado e é avaliado no local."
+      nao: "Não compramos aparelho usado."
+    volatilidade: estavel

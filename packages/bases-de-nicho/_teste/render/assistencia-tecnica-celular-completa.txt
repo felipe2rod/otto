@@ -1,0 +1,22 @@
+<base empresa="Empresa de teste" gerada_em="2026-09-09">
+[i1|preco|2026-09-09|dono] Troca de tela: a partir de R$ R$ 000,00. O valor exato depende do aparelho.
+[i2|preco|2026-09-09|dono] Troca de bateria: a partir de R$ R$ 000,00. O valor exato depende do aparelho.
+[i3|prazo_de_conserto|2026-09-09|dono] Troca de tela e de bateria fica pronta em xxxxx xxxxx xxxxx.
+[i4|garantia|2026-09-09|dono] O serviço tem 00 dias de garantia.
+[i5|preco|2026-09-09|dono] A avaliação do aparelho custa R$ 000,00, e o valor é abatido se o conserto for feito aqui.
+[i6|preco|lista|completa|2026-09-09|dono] Preço de troca de tela por aparelho
+  iPhone 11 000 | iPhone 12 000 | iPhone 13 000 | Samsung Galaxy A14 000 | Samsung Galaxy A54 000 | Motorola Moto G54 000 | Xiaomi Redmi Note 12 000
+[i7|escopo|2026-09-09|dono] Marcas que consertamos: xxxxx xxxxx xxxxx.
+[i8|escopo|2026-09-09|dono] Fazemos reparo de placa, inclusive de aparelho que não liga ou que caiu na água.
+[i9|escopo|2026-09-09|dono] Também atendemos notebook e tablet.
+[i10|escopo|2026-09-09|dono] Dependendo do serviço, pode ser necessário apagar os dados do aparelho. Isso é avisado antes de começar.
+[i11|prazo_de_conserto|2026-09-09|dono] Alguns serviços saem na hora e dá para esperar no local.
+[i12|garantia|2026-09-09|dono] Trabalhamos com peça original.
+[i13|escopo|2026-09-09|dono] Buscamos e entregamos o aparelho.
+[i14|escopo|2026-09-09|dono] Compramos aparelho usado. O valor depende do estado e é avaliado no local.
+[i15|horario|2026-09-09|dono] Horário: xxxxx xxxxx xxxxx.
+[i16|horario|2026-09-09|dono] Sábado: xxxxx xxxxx xxxxx. Domingo: xxxxx xxxxx xxxxx.
+[i17|endereco|2026-09-09|dono] Endereço: xxxxx xxxxx xxxxx.
+[i18|pagamento|2026-09-09|dono] Formas de pagamento aceitas: xxxxx xxxxx xxxxx.
+[i19|endereco|2026-09-09|dono] Tem estacionamento para clientes.
+</base>

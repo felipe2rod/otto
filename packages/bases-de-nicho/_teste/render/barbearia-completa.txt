@@ -1,0 +1,23 @@
+<base empresa="Empresa de teste" gerada_em="2026-09-09">
+[i1|preco|2026-09-09|dono] Corte: R$ 000,00.
+[i2|preco|2026-09-09|dono] Barba: R$ 000,00. Corte com barba: R$ 000,00.
+[i3|agendamento|2026-09-09|dono] Atendemos com horário marcado.
+[i4|preco|lista|completa|2026-09-09|dono] Preço por serviço
+  corte 000 | barba 000 | corte com barba 000 | pezinho 000 | sobrancelha 000 | corte infantil 000 | platinado 000 | luzes 000
+[i5|duracao|2026-09-09|dono] Corte leva cerca de xxxxx xxxxx xxxxx. Corte com barba, cerca de xxxxx xxxxx xxxxx.
+[i6|preco|2026-09-09|dono] Corte infantil: R$ 000,00.
+[i8|agendamento|2026-09-09|dono] Dá para escolher o profissional na hora de marcar. Quem confirma a escala é a equipe.
+[i9|escopo|2026-09-09|dono] Serviços que fazemos: xxxxx xxxxx xxxxx.
+[i10|preco|2026-09-09|dono] Plano mensal: xxxxx xxxxx xxxxx.
+[i11|escopo|2026-09-09|dono] Atendemos a domicílio, com valor combinado conforme a região.
+[i12|escopo|2026-09-09|dono] Vendemos produtos de cabelo e barba na loja.
+[i13|horario|2026-09-09|dono] Horário: xxxxx xxxxx xxxxx.
+[i14|horario|2026-09-09|dono] Sábado: xxxxx xxxxx xxxxx. Domingo: xxxxx xxxxx xxxxx.
+[i15|endereco|2026-09-09|dono] Endereço: xxxxx xxxxx xxxxx.
+[i16|pagamento|2026-09-09|dono] Formas de pagamento aceitas: xxxxx xxxxx xxxxx.
+[i17|endereco|2026-09-09|dono] Tem estacionamento para clientes.
+[i18|agendamento|2026-09-09|dono] Atendimento só com horário marcado.
+[i19|agendamento|2026-09-09|dono] Para reservar o horário é preciso pagar um sinal de xxxxx xxxxx xxxxx, que é abatido no valor final.
+[i20|agendamento|2026-09-09|dono] Dá para remarcar avisando com xxxxx xxxxx xxxxx de antecedência.
+[i21|agendamento|2026-09-09|dono] Tolerância de atraso: xxxxx xxxxx xxxxx. Passou disso, o horário precisa ser remarcado.
+</base>

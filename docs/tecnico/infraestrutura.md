@@ -4,16 +4,22 @@ Decisões em ADR 005. Fornecedores aceitos; modelo, deploy e chave em validaçã
 
 ## Componentes
 
-| Componente | Fornecedor | Observação |
-|---|---|---|
-| Hospedagem da aplicação | DigitalOcean (proposta: App Platform) | Sem servidor para operar na v1. Droplets se precisar de controle |
-| Banco de dados | DigitalOcean Managed Database (proposta: PostgreSQL) | Conversas, base de conhecimento, saldo, configuração de estilo |
-| Inferência (IA) | DigitalOcean Gradient AI Serverless Inference | Saldo pré-pago. Modelo proposto: Claude Sonnet 5, com Haiku 4.5 para tarefas simples |
-| WhatsApp | Meta WhatsApp Business Cloud API | Direto, sem BSP. Webhook de entrada, envio por API |
-| Fila/agendamento | pg-boss em PostgreSQL (v1); Kafka gerenciado da DigitalOcean quando houver segundo consumidor | ADR 009. Resumo diário, retentativas, processamento do webhook fora da requisição |
-| ORM | Prisma, atrás de repositório | ADR 009 |
-| Empacotamento | Docker multi-stage; compose local com postgres, api e web | ADR 009 |
-| Pagamento da assinatura | Asaas, via porta `ProvedorDeAssinatura` | ADR 010. Webhook idempotente, mesmo padrão do webhook da Meta |
+Toda linha tem uma porta, e o fornecedor mora só no adaptador (ADR 020).
+
+| Componente | Fornecedor | Porta | Observação |
+|---|---|---|---|
+| Hospedagem da aplicação | DigitalOcean (proposta: App Platform) | Docker | Sem servidor para operar na v1. Droplets se precisar de controle. Nada além de "rodar um contêiner" pode virar requisito |
+| Banco de dados | DigitalOcean Managed Database (proposta: PostgreSQL) | Repositório, por agregado | Conversas, base de conhecimento, saldo, configuração de estilo. Sem extensão proprietária |
+| Inferência (IA) | DigitalOcean Gradient AI Serverless Inference | `ModeloDeConversa` | Saldo pré-pago. Modelo proposto: Claude Sonnet 5, com Haiku 4.5 para tarefas simples. A porta expõe capacidades de cache e tool calling |
+| WhatsApp | Meta WhatsApp Business Cloud API | `CanalDeAtendimento` | Direto, sem BSP. Webhook de entrada, envio por API. ADR 017 |
+| Instagram Direct e Messenger | Meta, mesmo app | `CanalDeAtendimento` | ADR 021, v1.1. Contato por endereço, sem identidade unificada entre canais. **Segundo adaptador real da porta** — é ele que testa o contrato (gatilho do ADR 020). Conferir no protótipo: permissão, endpoint, janela de resposta e se há tarifa por mensagem |
+| Fila/agendamento | pg-boss em PostgreSQL (v1); Kafka gerenciado da DigitalOcean quando houver segundo consumidor | `BarramentoDeEventos` | ADR 009. Resumo diário, retentativas, processamento do webhook fora da requisição |
+| ORM | Prisma, atrás de repositório | Repositório | ADR 009 |
+| Empacotamento | Docker multi-stage; compose local com postgres, api e web | — | ADR 009 |
+| Pagamento da assinatura | Asaas | `ProvedorDeAssinatura` | ADR 010. Webhook idempotente, mesmo padrão do webhook da Meta |
+| Transcrição de áudio | API em lote, sem aviso na v1 | `TranscritorDeAudio` | ADR 005, nota de 2026-09-08 |
+| Mídia recebida (áudio, imagem, comprovante) | A definir, contrato S3-compatível | `ArmazenamentoDeArquivo` | ADR 020. Spaces é um adaptador, não o contrato. Nunca disco local |
+| Aviso ao empregador fora do WhatsApp | Painel na v1; e-mail transacional depois | `AvisoAoEmpregador` | ADR 020. ADR 012 depende dele |
 
 ## Fluxo de uma mensagem
 
@@ -65,9 +71,28 @@ FonteDeOferta      → CatalogoWhatsApp, Bling, Nuvemshop, Planilha, ConfigManua
 FonteDeAgenda      → GoogleCalendar, Trinks, Amplimed, Planilha
 FonteDeCliente     → HistoricoWhatsApp, ContaAzul, CRM
 FonteDePedido      → Bling, Nuvemshop
-FonteDeCobranca    → MercadoPago, Asaas, InfinitePay
+FonteDeCobranca    → PixEstatico (manual), MercadoPago, Asaas, InfinitePay; depois PagBank, Pagar.me, Efí
 ProvedorDeAssinatura → Asaas   (cobrança do empregador pelo Otto, ADR 010)
 ```
+
+## Agnosticismo a fornecedor (ADR 020)
+
+A regra das portas de contexto vale para a plataforma inteira: **nenhum nome de fornecedor no núcleo.** O nome aparece no adaptador, na configuração do módulo, na variável de ambiente e na migração — em nenhum outro lugar.
+
+O que isso exige de quem escreve código:
+
+1. Tipo de fornecedor não cruza a porta: nada de `Prisma.*`, payload da Meta ou objeto do SDK do Asaas em caso de uso.
+2. Teste de contrato por porta, rodando contra todos os adaptadores dela, inclusive o manual ou falso.
+3. Id externo em coluna própria (`fornecedor` + `id_externo`), nunca como chave primária.
+4. Estado do negócio (ciclo, franquia, saldo, situação da conversa) mora no banco do Otto. O fornecedor é conferência, nunca fonte da verdade.
+5. Escolher adaptador é configuração, não deploy.
+6. Teste no CI que falha se nome de fornecedor aparecer fora das pastas de adaptador.
+
+**A porta não pode virar menor denominador comum.** Onde um fornecedor faz algo que os outros não fazem — cache de prefixo por empresa, `order_details` da Meta — a porta expõe `capacidades` e o núcleo degrada de forma explícita.
+
+**Onde a troca não é simples, e a porta não resolve:** assinatura recorrente do Asaas (mandato de cartão não migra) e a própria Meta (não existe outro fornecedor de WhatsApp; BSP é revenda). Detalhe e mitigação no ADR 020, item 5.
+
+**Agnóstico a fornecedor não é agnóstico a tecnologia.** NestJS, TypeScript, Node, Next.js e o modelo relacional não ganham porta.
 
 Toda leitura registra fonte e horário. Escrita (marcar, criar pedido, cobrar) exige confirmação do cliente final e nunca acontece sem leitura prévia bem-sucedida.
 
@@ -77,3 +102,4 @@ Toda leitura registra fonte e horário. Escrita (marcar, criar pedido, cobrar) e
 - App Platform × Droplets: a validar (ADR 005).
 - Requisitos e prazo do Embedded Signup / Tech Provider na Meta. Não verificado.
 - Testes de caráter em Sonnet 5 e Haiku 4.5: são a validação do ADR 005, ver seção acima.
+- Fornecedor de `ArmazenamentoDeArquivo` e como o teste de CI de nome de fornecedor é escrito (ADR 020). Ambos no primeiro código.

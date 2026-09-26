@@ -1,0 +1,202 @@
+# Base do nicho — loja de artigos religiosos afro-brasileiros
+#
+# GRAU DE EVIDÊNCIA: NÃO VERIFICADO, e este é o arquivo em que isso mais pesa.
+# Não conversei com nenhum dono de loja, não li nenhuma conversa real, e é o
+# nicho em que eu, escrevendo de fora, tenho maior chance de errar a palavra.
+# A leitura pública de 20 minutos (README §7.2) tem que ser feita AQUI primeiro.
+#
+# Este arquivo NÃO VAI PARA TELA NENHUMA antes do parecer do guardião da marca.
+
+nicho: loja-artigos-religiosos-afro
+segmento: loja_de_bairro
+nome_para_operacao: "Loja de artigos religiosos afro-brasileiros"
+inclui: [_comum/todo-negocio.yml]
+assuntos: [preco, estoque, escopo, entrega, pagamento, encomenda, horario, endereco]
+
+observacoes_de_risco: |
+  RELIGIÃO É DADO SENSÍVEL (ADR 014), E ISSO NÃO PODE VIRAR RECUSA.
+
+  1. A distinção que salva o nicho, e ela já existe em `dados.md`, evento 6:
+     `dado_sensivel` (a mensagem revela religião → a conversa sai da amostra de
+     leitura da operação) NÃO É `intencao = assunto_sensivel` (o que o cargo não
+     trata e encaminha). "Quanto custa a guia de Oxum?" é `dado_sensivel = true` e
+     `intencao = duvida_da_base`: é preço de produto, e o Otto responde. Se as duas
+     coisas fossem a mesma, este nicho encaminharia 100% das conversas e o produto
+     não serviria para ele. Caso N-09 da suíte existe exatamente para provar isso.
+  2. O QUE O OTTO NÃO FAZ, E É METADE DO ARQUIVO: ele vende produto, nunca
+     prescreve. "Qual é o meu orixá?", "que erva serve para isso?", "que ebó eu
+     faço?", "vocês fazem trabalho?" não são do cargo — é o pai ou a mãe de santo
+     que responde, e o Otto passa para uma pessoa (regra 3 do caráter). O item
+     `orientacao_espiritual` carrega isso como roteamento, sem texto.
+  3. O OTTO NUNCA PERGUNTA A RELIGIÃO, a casa, o orixá ou o santo de ninguém, nem
+     "para ajudar a escolher" (regra 4: só o dado necessário). Se o cliente disser
+     por conta própria, o Otto usa para achar o produto e não repete o dado.
+  4. CUSTO DE PRODUTO DESTE NICHO, DITO EM VOZ ALTA PARA O FELIPE E PARA O
+     ANALISTA: se praticamente toda conversa é marcada `dado_sensivel = true`,
+     praticamente toda conversa sai da amostra que a operação lê (ADR 014). Este é
+     o nicho em que a gente mais vai depender do `base.atualizada` e menos vai
+     poder ler conversa para entender o erro. Não é motivo para não entrar; é
+     motivo para saber antes de entrar.
+
+  [GUARDIÃO] VOCABULÁRIO, e aqui errar a palavra é ofensa, não deslize.
+  Usar: artigos religiosos, guias, contas, ervas, velas, imagens, quartinha,
+  alguidar, atabaque, encomenda. As palavras do cliente ("axé", "orixá",
+  "terreiro", "casa") são dele — o Otto responde com elas se ele usar, e não as
+  introduz.
+  Nunca usar: "macumba", "magia", "magia negra", "feitiço", "trabalho" no sentido
+  espiritual, "simpatia", "amarração", "despacho" — nem para negar. Também nunca
+  "produtos místicos" ou "esotéricos": é loja de artigos religiosos, e a diferença
+  entre as duas frases é respeito.
+  Este bloco vale para o texto dos itens E para o texto de "não sei" quando ele
+  cair neste nicho.
+
+itens:
+  # ---------- prioridade 1 ----------
+
+  - chave: tem_o_produto
+    tipo: fato
+    assunto: estoque
+    prioridade: 1
+    ordem: 1
+    pergunta: "vocês têm guia de Oxum?"
+    texto: "O que temos na loja: {linhas_de_produto}. O que não está em estoque pode ser encomendado."
+    lacunas:
+      linhas_de_produto: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [descricao_do_negocio, catalogo] }
+    volatilidade: muda_as_vezes
+
+  - chave: preco_por_produto
+    tipo: lista
+    assunto: preco
+    prioridade: 1
+    ordem: 2
+    pergunta: "quanto custa?"
+    cabecalho: "Preço dos produtos mais procurados"
+    linhas_sugeridas:
+      - "guia simples"
+      - "guia de firma"
+      - "vela de sete dias"
+      - "quartinha"
+      - "alguidar"
+      - "jogo de búzios"
+      - "banho de ervas pronto"
+    lacuna_por_linha: { tipo: dinheiro }
+    minimo_de_linhas: 3
+    volatilidade: muda_as_vezes
+
+  - chave: faz_encomenda
+    tipo: fato
+    assunto: encomenda
+    prioridade: 1
+    ordem: 3
+    pergunta: "vocês fazem por encomenda?"
+    texto: "Encomendas ficam prontas em {prazo_encomenda}«, com {sinal_encomenda} de sinal»."
+    lacunas:
+      prazo_encomenda: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+      sinal_encomenda: { tipo: texto_curto, obrigatoria: false, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não trabalhamos com encomenda; vendemos o que está na loja."
+
+  - chave: entrega
+    tipo: fato
+    assunto: entrega
+    prioridade: 1
+    ordem: 4
+    pergunta: "vocês entregam?"
+    texto: "Entregamos em {area_de_entrega}«, com frete de {valor_frete}»."
+    lacunas:
+      area_de_entrega: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+      valor_frete: { tipo: texto_curto, obrigatoria: false, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não fazemos entrega; a retirada é na loja."
+
+  - chave: envia_para_outra_cidade
+    tipo: escolha
+    assunto: entrega
+    prioridade: 1
+    ordem: 5
+    pergunta: "vocês mandam pro interior?"
+    opcoes:
+      sim: "Enviamos para outras cidades pelos Correios ou por transportadora, com o frete pago pelo cliente."
+      nao: "Não enviamos para outras cidades."
+    volatilidade: estavel
+
+  - chave: monta_kit
+    tipo: escolha
+    assunto: escopo
+    prioridade: 1
+    ordem: 6
+    pergunta: "vocês montam a lista que o pai de santo passou?"
+    opcoes:
+      sim: "Montamos o pedido a partir da lista que o cliente trouxer, com o que houver na loja."
+      nao: "Vendemos os itens separados; não montamos pedido a partir de lista."
+    volatilidade: estavel
+
+  # ---------- prioridade 2 ----------
+
+  - chave: orientacao_espiritual
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 10
+    pergunta: "qual é o meu orixá?"
+    encaminha_sempre: true
+    motivo_do_encaminhamento: fora_do_cargo
+    # Sem `texto` de propósito. Orientação religiosa não é do cargo de atendente,
+    # e o item existe para rotear, não para responder. Mesmo desenho de
+    # `dor_ou_urgencia` em clinica-odontologica.yml.
+    volatilidade: estavel
+
+  - chave: indica_produto_para_finalidade
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 11
+    pergunta: "que erva eu uso pra isso?"
+    encaminha_sempre: true
+    motivo_do_encaminhamento: fora_do_cargo
+    volatilidade: estavel
+
+  - chave: tem_ervas_frescas
+    tipo: escolha
+    assunto: estoque
+    prioridade: 2
+    ordem: 12
+    pergunta: "tem erva fresca?"
+    opcoes:
+      sim: "Temos ervas frescas, e a variedade muda conforme o dia."
+      nao: "Trabalhamos com ervas secas e banhos prontos, não com erva fresca."
+    volatilidade: estavel
+
+  - chave: atende_casa_de_santo
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 13
+    pergunta: "vocês atendem casa? dá desconto pra quantidade?"
+    opcoes:
+      sim: "Atendemos casas e pedidos grandes, com condição combinada pela equipe."
+      nao: "Vendemos no varejo, com o mesmo preço para qualquer quantidade."
+    volatilidade: estavel
+
+  - chave: troca_e_devolucao
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 14
+    pergunta: "se não servir dá pra trocar?"
+    texto: "Trocas são feitas em até {prazo_troca}, com o comprovante«. Não trocamos {nao_troca}»."
+    lacunas:
+      prazo_troca: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+      nao_troca: { tipo: texto_curto, obrigatoria: false, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: vende_online
+    tipo: escolha
+    assunto: pagamento
+    prioridade: 2
+    ordem: 15
+    pergunta: "dá pra pagar por pix e vocês separam?"
+    opcoes:
+      sim: "Dá para pagar por Pix e retirar depois; o pedido fica separado."
+      nao: "O pagamento é feito na hora da compra, na loja."
+    volatilidade: estavel

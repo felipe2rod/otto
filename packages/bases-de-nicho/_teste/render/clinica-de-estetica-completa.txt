@@ -1,0 +1,23 @@
+<base empresa="Empresa de teste" gerada_em="2026-09-09">
+[i1|preco|2026-09-09|dono] A avaliação custa R$ 000,00.
+[i2|preco|2026-09-09|dono] Limpeza de pele: R$ 000,00, a sessão.
+[i3|preco|lista|completa|2026-09-09|dono] Preço por sessão
+  limpeza de pele 000 | peeling 000 | drenagem linfática 000 | massagem modeladora 000 | depilação a laser, axila 000 | depilação a laser, virilha 000 | microagulhamento 000
+[i4|preco|2026-09-09|dono] Trabalhamos com pacote fechado: xxxxx xxxxx xxxxx.
+[i5|pagamento|2026-09-09|dono] O pacote pode ser parcelado em até xxxxx xxxxx xxxxx.
+[i6|agendamento|2026-09-09|dono] A sessão leva xxxxx xxxxx xxxxx.
+[i7|escopo|2026-09-09|dono] Procedimentos que fazemos: xxxxx xxxxx xxxxx.
+[i10|escopo|2026-09-09|dono] Fazemos procedimentos injetáveis, com profissional habilitado e avaliação antes.
+[i11|escopo|2026-09-09|dono] Cuidados depois do procedimento: xxxxx xxxxx xxxxx. As orientações do caso são passadas pelo profissional na sessão.
+[i12|agendamento|2026-09-09|dono] O intervalo entre as sessões costuma ser de xxxxx xxxxx xxxxx, e o profissional confirma na avaliação.
+[i13|escopo|2026-09-09|dono] Atendemos homens e mulheres.
+[i14|horario|2026-09-09|dono] Horário: xxxxx xxxxx xxxxx.
+[i15|horario|2026-09-09|dono] Sábado: xxxxx xxxxx xxxxx. Domingo: xxxxx xxxxx xxxxx.
+[i16|endereco|2026-09-09|dono] Endereço: xxxxx xxxxx xxxxx.
+[i17|pagamento|2026-09-09|dono] Formas de pagamento aceitas: xxxxx xxxxx xxxxx.
+[i18|endereco|2026-09-09|dono] Tem estacionamento para clientes.
+[i19|agendamento|2026-09-09|dono] Atendimento só com horário marcado.
+[i20|agendamento|2026-09-09|dono] Para reservar o horário é preciso pagar um sinal de xxxxx xxxxx xxxxx, que é abatido no valor final.
+[i21|agendamento|2026-09-09|dono] Dá para remarcar avisando com xxxxx xxxxx xxxxx de antecedência.
+[i22|agendamento|2026-09-09|dono] Tolerância de atraso: xxxxx xxxxx xxxxx. Passou disso, o horário precisa ser remarcado.
+</base>

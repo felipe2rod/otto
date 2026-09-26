@@ -62,11 +62,42 @@ Escolhidos por cobertura ampla e API pública. São as integrações que valem c
 | **Google Sheets** | Planilha | 2, 3, 4 | Pública | Muita PME opera a agenda e a tabela de preço aqui. Ler planilha é integração de verdade para esse público |
 | **Bling** | ERP / estoque / fiscal | 2, 5 | **Pública e aberta**, com portal de desenvolvedor e programa de parceiros | O mais generalista do país, forte em marketplace. Faixa de R$ 250 a R$ 800/mês |
 | **Conta Azul** | ERP financeiro | 2, 4, 6 | REST com documentação OpenAPI; produção exige plano compatível | A empresa afirma que 62% dos contadores brasileiros operam com ela. Chega pelo contador, não pelo dono |
-| **Mercado Pago** | Pagamento | 6 | Pública, checkout e link de pagamento | Ecossistema mais amplo entre PMEs |
-| **Asaas** | Cobrança recorrente | 6 | Pública, feita para SaaS, com régua de cobrança e boleto | Melhor opção quando o negócio cobra mensalidade |
-| **InfinitePay / Stone / Ton** | Pagamento e maquininha | 6 | Link de pagamento por WhatsApp | Todos com PIX sem taxa. Para a v1, gerar link já basta |
+| **Cobrança (contexto 6)** | Pagamento | 6 | Ver seção 4.1 | Decisão própria em ADR 011: múltiplos provedores, Otto não intermedia dinheiro |
 
-**Recomendação de ordem:** Google Calendar, depois Google Sheets, depois Bling. Os três cobrem contexto 2, 3 e 5 para a maioria dos negócios sem exigir que o cliente troque de sistema.
+**Recomendação de ordem:** Google Calendar, depois cobrança (ADR 011), depois Google Sheets, depois Bling.
+
+### 4.1 Cobrança: o cliente final paga dentro do WhatsApp
+
+Decidido em ADR 011. O Otto cria a cobrança **na conta do empregador, no provedor que ele já usa**, e entrega no chat. Não toca no dinheiro.
+
+**Veículo de entrega:** a WhatsApp Cloud API tem pagamentos nativos no Brasil pela mensagem `order_details`, com PIX dinâmico, link, boleto e cartão. A Meta não concilia; o Otto concilia pelo webhook do provedor usando o mesmo `reference_id`. Quando `order_details` não estiver disponível, texto com PIX copia-e-cola e link.
+
+**Contrato da porta `FonteDeCobranca`:**
+
+```
+criarCobranca(empresa, clienteFinal, valor, descricao, referencia, vencimento?)
+  → { id, pixCopiaECola?, qrCode?, linkPagamento?, boletoUrl?, expiraEm }
+consultarStatus(id) → pendente | pago | expirado | cancelado
+webhook do provedor → evento PagamentoConfirmado(referencia) no barramento
+```
+
+**Provedores, por fase:**
+
+| Fase | Provedor | API para criar cobrança com PIX | Nota |
+|---|---|---|---|
+| v1 | **PIX estático** | não precisa | Adaptador manual. O Otto manda a chave PIX da empresa, pede comprovante, avisa o empregador. Serve a 100% dos empregadores |
+| v1 | **Mercado Pago** | pública; QR PIX dinâmico; `notification_url` | Maior base entre PMEs; adquirente do pagamento nativo do WhatsApp |
+| v1 | **Asaas** | pública | Adaptador já existe pelo fluxo 1 |
+| v1 | **InfinitePay** | pública, com playground | Link e checkout; recebe na hora; muito usada em PME |
+| v1.1 | **PagBank** | Orders API pública | PIX, boleto, cartão, recorrência |
+| v1.1 | **Stone / Pagar.me** | pública | Pagar.me é o gateway do grupo Stone |
+| v1.1 | **Efí** | API PIX completa | Cobrança imediata, Pix Automático; exige certificado |
+| v2 | **Cielo, Rede, Getnet** | API de e-commerce | Adquirentes do `order_details` com cartão; mais burocracia |
+| v2 | **SumUp, Cora** | pública (Cora exige plano Pro) | Base menor no alvo |
+| gatilho | **Ton** | não confirmada | Entra se 5 contas pedirem |
+| gatilho | **Bancos** | API PIX com certificado e homologação | Só com demanda medida |
+
+**Regras:** cobrança só depois de o cliente final confirmar valor e item, com preço lido de uma fonte; credenciais do empregador criptografadas por empresa; idempotência por referência; taxa é do empregador, no provedor dele.
 
 Outros ERPs relevantes, para referência: **Tiny** (R$ 280 a R$ 750/mês), **Omie** (R$ 450 a R$ 1.800/mês, mais completo, cliente maior). Não são prioridade de v1.
 
@@ -173,8 +204,9 @@ Três regras:
 |---|---|---|
 | **1. v1** | Camada 0 inteira. Foco no histórico do WhatsApp virando base de conhecimento pré-preenchida | Nada. Já dá para começar |
 | **2. v1** | Google Calendar, leitura e escrita com confirmação | Porta de agenda definida |
-| **3. v1.1** | Google Sheets como fonte de oferta e agenda | Idem |
-| **4. v1.1** | Um meio de cobrança, provavelmente Mercado Pago ou link de pagamento | Decisão de cobrança |
+| **3. v1** | Cobrança no WhatsApp: PIX estático, Mercado Pago, Asaas, InfinitePay, com `order_details` da Meta | ADR 011 |
+| **4. v1.1** | Google Sheets como fonte de oferta e agenda | Porta definida |
+| **4b. v1.1** | PagBank, Stone/Pagar.me, Efí | Demanda medida |
 | **5. v2** | Bling, para quem tem estoque e pedido | Demanda medida, não suposta |
 | **6. v2** | A vertical do segmento escolhido | **Segmento decidido** |
 

@@ -1,0 +1,12 @@
+<base empresa="Empresa de teste" gerada_em="2026-09-09">
+[i1|preco|2026-09-09|dono] Corte: a partir de R$ 000,00, conforme o comprimento.
+[i2|preco|2026-09-09|dono] Progressiva: a partir de R$ 000,00. O valor fechado depende do comprimento e do volume do cabelo.
+[i3|preco|2026-09-09|dono] Coloração: a partir de R$ 000,00. Luzes e mechas saem a partir de R$ 000,00.
+[i4|preco|2026-09-09|dono] Escova: a partir de R$ 000,00. Hidratação: a partir de R$ 000,00.
+[i5|duracao|2026-09-09|dono] Corte leva cerca de xxxxx xxxxx xxxxx. Química leva de xxxxx xxxxx xxxxx, conforme o cabelo.
+[i6|preco|2026-09-09|dono] O produto da química está incluído no valor.
+[i7|agendamento|2026-09-09|dono] Atendimento só com horário marcado.
+[i8|escopo|2026-09-09|dono] Serviços que fazemos: xxxxx xxxxx xxxxx.
+[i9|agendamento|2026-09-09|dono] Para reservar o horário é preciso pagar um sinal de xxxxx xxxxx xxxxx, que é abatido no valor final.
+[i10|escopo|2026-09-09|dono] Atendemos cabelo liso, cacheado e crespo.
+</base>

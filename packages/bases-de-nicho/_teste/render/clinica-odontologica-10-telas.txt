@@ -1,0 +1,12 @@
+<base empresa="Empresa de teste" gerada_em="2026-09-09">
+[i1|preco|2026-09-09|dono] A avaliação custa R$ 000,00.
+[i2|preco|2026-09-09|dono] Limpeza: R$ 000,00.
+[i3|preco|2026-09-09|dono] Clareamento: a partir de R$ 000,00. O valor fechado sai depois da avaliação.
+[i4|preco|2026-09-09|dono] Estes procedimentos só têm preço fechado depois da avaliação, porque depende do caso: xxxxx xxxxx xxxxx.
+[i5|pagamento|2026-09-09|dono] O tratamento pode ser parcelado em até xxxxx xxxxx xxxxx.
+[i6|convenio|2026-09-09|dono] Convênios atendidos: xxxxx xxxxx xxxxx.
+[i7|agendamento|2026-09-09|dono] Atendimento só com horário marcado.
+[i8|urgencia|2026-09-09|dono] Guardamos horários para encaixe no mesmo dia.
+[i9|agendamento|2026-09-09|dono] Para reservar o horário é preciso pagar um sinal de xxxxx xxxxx xxxxx, que é abatido no valor final.
+[i10|escopo|2026-09-09|dono] Atendemos crianças. O responsável precisa estar junto na consulta.
+</base>

@@ -1,0 +1,13 @@
+<base empresa="Empresa de teste" gerada_em="2026-09-09">
+[i1|preco|2026-09-09|dono] A avaliação custa R$ 000,00.
+[i2|preco|2026-09-09|dono] Limpeza de pele: R$ 000,00, a sessão.
+[i3|preco|lista|completa|2026-09-09|dono] Preço por sessão
+  limpeza de pele 000 | peeling 000 | drenagem linfática 000 | massagem modeladora 000 | depilação a laser, axila 000 | depilação a laser, virilha 000 | microagulhamento 000
+[i4|preco|2026-09-09|dono] Trabalhamos com pacote fechado: xxxxx xxxxx xxxxx.
+[i5|pagamento|2026-09-09|dono] O pacote pode ser parcelado em até xxxxx xxxxx xxxxx.
+[i6|agendamento|2026-09-09|dono] A sessão leva xxxxx xxxxx xxxxx.
+[i7|escopo|2026-09-09|dono] Procedimentos que fazemos: xxxxx xxxxx xxxxx.
+[i8|agendamento|2026-09-09|dono] Atendimento só com horário marcado.
+[i9|agendamento|2026-09-09|dono] Para reservar o horário é preciso pagar um sinal de xxxxx xxxxx xxxxx, que é abatido no valor final.
+[i10|agendamento|2026-09-09|dono] Dá para remarcar avisando com xxxxx xxxxx xxxxx de antecedência.
+</base>

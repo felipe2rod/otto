@@ -1,0 +1,197 @@
+# Base do nicho — lash designer (extensão de cílios)
+#
+# GRAU DE EVIDÊNCIA: NÃO VERIFICADO. Ver README §7.
+#
+# Arquivo separado de clinica-de-estetica.yml. A justificativa está no README §8.2
+# e o resumo é: é um serviço só, com ciclo de manutenção próprio, e numa base de
+# estética 7 dos 10 itens do onboarding não seriam dela — que é exatamente o
+# número que a ficha 12.4 de `experiencia.md` usa para declarar a base errada.
+#
+# É também a profissional mais solo dos oito nichos: costuma ser uma pessoa, com o
+# celular na mão entre uma cliente e outra. A tela 1 tem que acertar de primeira.
+
+nicho: lash-designer
+segmento: prestador_de_servico
+nome_para_operacao: "Lash designer / extensão de cílios"
+inclui: [_comum/todo-negocio.yml, _comum/hora-marcada.yml]
+assuntos: [preco, manutencao, duracao, escopo, cuidado, agendamento, pagamento, horario, endereco]
+
+observacoes_de_risco: |
+  1. A UNIDADE DE PREÇO É DUPLA, E ISSO ORGANIZA O ARQUIVO INTEIRO: aplicação
+     (primeira vez) e manutenção (a cada N dias). Toda pergunta de preço aqui é na
+     verdade duas. Item que responde só uma metade produz cliente surpreendida no
+     balcão, que é o pior tipo de acerto.
+  2. ALERGIA E OLHO. "Posso fazer se tenho alergia?", "faz mal pro cílio natural?",
+     "estou com terçol" — não é do cargo. Encaminha (regra 3), sem opinar. É saúde
+     de leve, mas é saúde.
+  3. NÃO PROMETE DURAÇÃO NO OLHO DA CLIENTE. Quanto tempo dura depende do ciclo de
+     cada pessoa. O item fala do intervalo de manutenção que o estúdio pratica, não
+     de quanto vai durar nela.
+  4. FOTO É O CAMINHO NATURAL DESTE NICHO. A cliente manda foto do olho e pergunta
+     "consegue fazer assim?". O Otto não avalia a foto e não promete resultado:
+     confirma o que entendeu e encaminha. É o mesmo comportamento de
+     `persona-otto.md` para mensagem com imagem.
+
+  [GUARDIÃO] Vocabulário: "aplicação", "manutenção", "retirada", "fio a fio",
+  "volume brasileiro", "volume russo", "híbrido", "mapping", "lash lifting" — é o
+  vocabulário da profissional e o da cliente, e trocar por "procedimento de cílios"
+  soa a quem nunca entrou num estúdio. Nunca "postiço" (é outra coisa e a
+  profissional lê como desprezo), nunca "cílios falsos".
+
+itens:
+  # ---------- prioridade 1 ----------
+
+  - chave: preco_aplicacao
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 1
+    pergunta: "quanto custa pra fazer os cílios?"
+    texto: "Aplicação (primeira vez): a partir de {preco_aplicacao}, conforme a técnica."
+    lacunas:
+      preco_aplicacao: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: preco_manutencao
+    tipo: fato
+    assunto: manutencao
+    prioridade: 1
+    ordem: 2
+    pergunta: "e a manutenção, quanto é?"
+    texto: "Manutenção: {preco_manutencao}, feita a cada {intervalo_manutencao}."
+    lacunas:
+      preco_manutencao: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+      intervalo_manutencao: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: preco_por_tecnica
+    tipo: lista
+    assunto: preco
+    prioridade: 1
+    ordem: 3
+    pergunta: "quanto é o volume russo?"
+    cabecalho: "Preço da aplicação por técnica"
+    linhas_sugeridas:
+      - "fio a fio clássico"
+      - "volume brasileiro"
+      - "volume russo"
+      - "híbrido"
+      - "efeito fox eyes"
+      - "lash lifting"
+    lacuna_por_linha: { tipo: dinheiro }
+    minimo_de_linhas: 2
+    volatilidade: muda_as_vezes
+
+  - chave: duracao_da_aplicacao
+    tipo: fato
+    assunto: duracao
+    prioridade: 1
+    ordem: 4
+    pergunta: "demora quanto tempo?"
+    texto: "A aplicação leva {duracao_aplicacao}. A manutenção leva {duracao_manutencao}."
+    lacunas:
+      duracao_aplicacao: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+      duracao_manutencao: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: manutencao_atrasada
+    tipo: fato
+    assunto: manutencao
+    prioridade: 1
+    ordem: 5
+    pergunta: "passou do tempo, ainda dá pra fazer manutenção?"
+    texto: "Passando de {limite_manutencao}, a aplicação é cobrada como primeira vez."
+    lacunas:
+      limite_manutencao: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: preco_retirada
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 6
+    pergunta: "quanto custa pra tirar?"
+    texto: "Retirada: {preco_retirada}«, gratuita quando é feita junto com uma aplicação aqui»."
+    lacunas:
+      preco_retirada: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  # ---------- prioridade 2 ----------
+
+  - chave: alergia_ou_problema_no_olho
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 10
+    pergunta: "tenho alergia, posso fazer?"
+    encaminha_sempre: true
+    motivo_do_encaminhamento: assunto_sensivel
+    # Sem `texto`. Alergia e problema no olho são avaliação, não informação de balcão.
+    volatilidade: estavel
+
+  - chave: consigo_fazer_igual_a_foto
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 11
+    pergunta: "consegue fazer igual a essa foto?"
+    encaminha_sempre: true
+    motivo_do_encaminhamento: fora_do_cargo
+    volatilidade: estavel
+
+  - chave: cuidado_depois
+    tipo: fato
+    assunto: cuidado
+    prioridade: 2
+    ordem: 12
+    pergunta: "pode molhar? posso dormir de bruços?"
+    texto: "Cuidados depois da aplicação: {cuidados}."
+    lacunas:
+      cuidados: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: atende_em_casa
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 13
+    pergunta: "você atende a domicílio?"
+    opcoes:
+      sim: "Atendemos a domicílio, com valor combinado conforme a região."
+      nao: "O atendimento é só no estúdio."
+    volatilidade: estavel
+
+  - chave: pode_vir_de_maquiagem
+    tipo: fato
+    assunto: cuidado
+    prioridade: 2
+    ordem: 14
+    pergunta: "preciso vir sem maquiagem?"
+    texto: "Antes da aplicação: {preparo}."
+    lacunas:
+      preparo: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: outros_servicos
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 15
+    pergunta: "você faz sobrancelha também?"
+    texto: "Outros serviços que fazemos: {outros_servicos}."
+    lacunas:
+      outros_servicos: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [descricao_do_negocio] }
+    volatilidade: estavel
+    negativa: "Fazemos só cílios."
+
+  - chave: garantia_de_reposicao
+    tipo: fato
+    assunto: manutencao
+    prioridade: 2
+    ordem: 16
+    pergunta: "caiu tudo em três dias, vocês refazem?"
+    texto: "Se cair muito fio nos primeiros {prazo_reposicao}, a reposição é feita sem custo."
+    lacunas:
+      prazo_reposicao: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não fazemos reposição sem custo; a manutenção é cobrada normalmente."

@@ -1,0 +1,198 @@
+# Base do nicho — clínica de estética
+#
+# GRAU DE EVIDÊNCIA: NÃO VERIFICADO. Ver README §7.
+#
+# Separada de lash-designer.yml, e a justificativa está no README §8.2: a unidade
+# de preço é sessão-e-pacote, não aplicação-e-manutenção; a avaliação antes do
+# preço é obrigatória; e metade do arquivo esbarra em saúde, o que muda o
+# comportamento do Otto e não só o vocabulário.
+
+nicho: clinica-de-estetica
+segmento: clinica_e_consultorio
+nome_para_operacao: "Clínica de estética"
+inclui: [_comum/todo-negocio.yml, _comum/hora-marcada.yml]
+assuntos: [preco, escopo, agendamento, resultado, contraindicacao, pagamento, horario, endereco]
+
+observacoes_de_risco: |
+  SAÚDE, e mais perto da linha que a odontologia, porque aqui o cliente pergunta
+  sobre o corpo dele antes de perguntar preço.
+
+  1. NÃO É DO CARGO: dizer se um procedimento serve para o caso da pessoa, se ela
+     pode fazer, quantas sessões ela vai precisar, se pode grávida, amamentando,
+     tomando remédio, com a pele assim ou com aquela doença. Tudo isso é avaliação
+     profissional (regras 3 e 4 do caráter). Os itens `contraindicacao` e
+     `quantas_sessoes_para_mim` roteiam e não respondem.
+  2. RESULTADO NUNCA É PROMESSA. "Some a celulite?", "quantos centímetros eu
+     perco?" — o Otto não afirma resultado, nem "em média", nem "costuma". Isso é
+     regra 6 do caráter (não promete o que a empresa não confirmou) e é o erro mais
+     provável deste nicho, porque a linguagem do setor já é escrita assim.
+  3. PREÇO SÓ FECHA DEPOIS DA AVALIAÇÃO em quase tudo. Por isso os itens de preço
+     são faixa ("a partir de") com a avaliação dita na mesma frase — e não um
+     número fechado que vira reclamação no balcão.
+  4. `dado_sensivel = true` na maioria das conversas (ADR 014). Mesma consequência
+     de operação registrada em loja-artigos-religiosos-afro.yml, item 4.
+
+  [GUARDIÃO] Vocabulário: "sessão", "avaliação", "protocolo" — é como o setor fala
+  e como a cliente fala. Nunca "tratamento milagroso", "resultado garantido",
+  "definitivo" (mesmo em depilação a laser, onde o termo do setor é "duradoura"),
+  nem adjetivo de resultado. E nada de emoji no item: quem põe emoji é o preset.
+
+itens:
+  # ---------- prioridade 1 ----------
+
+  - chave: preco_avaliacao
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 1
+    pergunta: "a avaliação é paga?"
+    texto: "A avaliação custa {preco_avaliacao}«, abatida no valor do procedimento»."
+    lacunas:
+      preco_avaliacao: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "A avaliação é gratuita."
+
+  - chave: preco_limpeza_de_pele
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 2
+    pergunta: "quanto custa uma limpeza de pele?"
+    texto: "Limpeza de pele: {preco_limpeza}, a sessão."
+    lacunas:
+      preco_limpeza: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não fazemos limpeza de pele."
+
+  - chave: preco_por_sessao
+    tipo: lista
+    assunto: preco
+    prioridade: 1
+    ordem: 3
+    pergunta: "quanto é a sessão?"
+    cabecalho: "Preço por sessão"
+    linhas_sugeridas:
+      - "limpeza de pele"
+      - "peeling"
+      - "drenagem linfática"
+      - "massagem modeladora"
+      - "depilação a laser, axila"
+      - "depilação a laser, virilha"
+      - "microagulhamento"
+    lacuna_por_linha: { tipo: dinheiro }
+    minimo_de_linhas: 3
+    volatilidade: muda_as_vezes
+
+  - chave: pacote_de_sessoes
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 4
+    pergunta: "tem pacote? sai mais barato?"
+    texto: "Trabalhamos com pacote fechado: {condicao_pacote}."
+    lacunas:
+      condicao_pacote: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não trabalhamos com pacote; cada sessão é paga separada."
+
+  - chave: parcelamento
+    tipo: fato
+    assunto: pagamento
+    prioridade: 1
+    ordem: 5
+    pergunta: "dá pra parcelar o pacote?"
+    texto: "O pacote pode ser parcelado em até {parcelas}."
+    lacunas:
+      parcelas: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não parcelamos; o pagamento é à vista ou por sessão."
+
+  - chave: duracao_da_sessao
+    tipo: fato
+    assunto: agendamento
+    prioridade: 1
+    ordem: 6
+    pergunta: "demora quanto tempo?"
+    texto: "A sessão leva {duracao_sessao}."
+    lacunas:
+      duracao_sessao: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  # ---------- prioridade 2 ----------
+
+  - chave: procedimentos_atendidos
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 10
+    pergunta: "vocês fazem depilação a laser?"
+    texto: "Procedimentos que fazemos: {procedimentos}."
+    lacunas:
+      procedimentos: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [descricao_do_negocio] }
+    volatilidade: estavel
+
+  - chave: contraindicacao
+    tipo: fato
+    assunto: contraindicacao
+    prioridade: 2
+    ordem: 11
+    pergunta: "posso fazer grávida?"
+    encaminha_sempre: true
+    motivo_do_encaminhamento: assunto_sensivel
+    # Sem `texto`. Gravidez, medicação, doença de pele e alergia são avaliação
+    # profissional, não informação de balcão.
+    volatilidade: estavel
+
+  - chave: quantas_sessoes_para_mim
+    tipo: fato
+    assunto: resultado
+    prioridade: 2
+    ordem: 12
+    pergunta: "quantas sessões eu vou precisar?"
+    encaminha_sempre: true
+    motivo_do_encaminhamento: fora_do_cargo
+    volatilidade: estavel
+
+  - chave: procedimento_com_agulha
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 13
+    pergunta: "vocês aplicam botox e preenchimento?"
+    opcoes:
+      sim: "Fazemos procedimentos injetáveis, com profissional habilitado e avaliação antes."
+      nao: "Não fazemos procedimentos injetáveis."
+    volatilidade: estavel
+
+  - chave: cuidado_depois
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 14
+    pergunta: "posso ir pro sol depois?"
+    texto: "Cuidados depois do procedimento: {cuidados}. As orientações do caso são passadas pelo profissional na sessão."
+    lacunas:
+      cuidados: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: intervalo_entre_sessoes
+    tipo: fato
+    assunto: agendamento
+    prioridade: 2
+    ordem: 15
+    pergunta: "de quanto em quanto tempo faz?"
+    texto: "O intervalo entre as sessões costuma ser de {intervalo}, e o profissional confirma na avaliação."
+    lacunas:
+      intervalo: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: atende_homem
+    tipo: escolha
+    assunto: escopo
+    prioridade: 3
+    ordem: 16
+    pergunta: "atende homem?"
+    opcoes:
+      sim: "Atendemos homens e mulheres."
+      nao: "Atendemos somente mulheres."
+    volatilidade: estavel

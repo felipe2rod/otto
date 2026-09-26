@@ -1,0 +1,203 @@
+# Base do nicho — salão de beleza e cabeleireiro
+#
+# GRAU DE EVIDÊNCIA: NÃO VERIFICADO. Ver README §7.
+#
+# DOIS NICHOS PEDIDOS PELO FELIPE, UM ARQUIVO. O salão é o superconjunto do
+# cabeleireiro: os serviços de cabelo são idênticos e a resposta ao cliente é a
+# mesma frase. O que sobra (unha, sobrancelha, depilação) são três itens, todos em
+# prioridade 2 e no fim da fila — o cabeleireiro autônomo os recusa em três toques,
+# e recusar produz conhecimento (`Não fazemos unha.` evita um encaminhamento).
+# Justificativa completa e o que se perde: README §8.1.
+#
+# A hipótese embutida nesse agrupamento tem instrumento próprio: README §7.3.
+#
+# BARBEARIA NÃO ESTÁ AQUI, e não é por vocabulário — é porque a unidade de preço,
+# a duração e a forma de marcar mudam toda resposta. Ver barbearia.yml.
+
+nicho: salao-e-cabeleireiro
+segmento: barbearia_e_salao
+nome_para_operacao: "Salão de beleza e cabeleireiro"
+inclui: [_comum/todo-negocio.yml, _comum/hora-marcada.yml]
+assuntos: [preco, duracao, escopo, agendamento, cuidado, pagamento, horario, endereco]
+
+observacoes_de_risco: |
+  1. PREÇO AQUI NÃO É UM NÚMERO, É UMA FAIXA MAIS UMA PERGUNTA. Química, corte
+     longo e escova dependem do comprimento e do volume do cabelo. A resposta certa
+     é "a partir de R$ ___, depende do comprimento" mais UMA pergunta de fechamento
+     — e uma só, porque o caráter manda uma pergunta por mensagem. Item que afirma
+     um número fechado para química produz reclamação no caixa, e reclamação no
+     caixa é a coisa que o dono lembra quando decide cancelar.
+  2. O OTTO NÃO AVALIA CABELO. Foto de cabelo é o gesto mais frequente deste nicho
+     ("dá pra fazer loiro?", "meu cabelo aguenta?"). Ele confirma o que entendeu e
+     encaminha; não diz que aguenta, não diz quantas sessões, não promete tom.
+     Regra 6 do caráter, e é o erro mais provável do nicho.
+  3. NÃO É SAÚDE, e isso é uma diferença real em relação a estética: aqui não há
+     `dado_sensivel` na maioria das conversas, a operação consegue ler e aprender.
+     A exceção é alopecia, quimioterapia e couro cabeludo com lesão — assunto
+     sensível, encaminha, sem opinar.
+
+  [GUARDIÃO] Vocabulário: "química", "progressiva", "luzes", "mechas", "hidratação",
+  "escova", "comprimento" — é como cliente e cabeleireiro falam. Nunca "tratamento
+  capilar avançado", nunca "transformação", nunca prometer tom ("fica loiro
+  perolado"). E o preço de química sempre com "a partir de", nunca sem.
+
+itens:
+  # ---------- prioridade 1 ----------
+
+  - chave: preco_corte
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 1
+    pergunta: "quanto é o corte?"
+    texto: "Corte: a partir de {preco_corte}, conforme o comprimento."
+    lacunas:
+      preco_corte: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: preco_quimica
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 2
+    pergunta: "quanto custa progressiva?"
+    texto: "Progressiva: a partir de {preco_progressiva}. O valor fechado depende do comprimento e do volume do cabelo."
+    lacunas:
+      preco_progressiva: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não fazemos progressiva."
+
+  - chave: preco_coloracao
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 3
+    pergunta: "quanto sai pra pintar o cabelo?"
+    texto: "Coloração: a partir de {preco_coloracao}«, com a tinta incluída». Luzes e mechas saem a partir de {preco_luzes}."
+    lacunas:
+      preco_coloracao: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+      preco_luzes: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: preco_escova_e_hidratacao
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 4
+    pergunta: "quanto é escova?"
+    texto: "Escova: a partir de {preco_escova}. Hidratação: a partir de {preco_hidratacao}."
+    lacunas:
+      preco_escova: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+      preco_hidratacao: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: duracao_dos_servicos
+    tipo: fato
+    assunto: duracao
+    prioridade: 1
+    ordem: 5
+    pergunta: "quanto tempo demora a progressiva?"
+    texto: "Corte leva cerca de {duracao_corte}. Química leva de {duracao_quimica}, conforme o cabelo."
+    lacunas:
+      duracao_corte: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+      duracao_quimica: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: tinta_inclusa
+    tipo: escolha
+    assunto: preco
+    prioridade: 1
+    ordem: 6
+    pergunta: "a tinta tá inclusa ou eu levo?"
+    opcoes:
+      sim: "O produto da química está incluído no valor."
+      nao: "O valor é da mão de obra; o produto é trazido pela cliente ou comprado aqui à parte."
+    volatilidade: muda_as_vezes
+
+  # ---------- prioridade 2 ----------
+
+  - chave: avaliacao_de_cabelo
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 10
+    pergunta: "meu cabelo aguenta descoloração?"
+    encaminha_sempre: true
+    motivo_do_encaminhamento: fora_do_cargo
+    # Sem `texto`. Avaliar cabelo por foto é opinião profissional, não fato do
+    # negócio. Vale também para "consigo ficar loira?" e "quantas sessões?".
+    volatilidade: estavel
+
+  - chave: servicos_atendidos
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 11
+    pergunta: "vocês fazem penteado pra festa?"
+    texto: "Serviços que fazemos: {servicos}."
+    lacunas:
+      servicos: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [descricao_do_negocio] }
+    volatilidade: estavel
+
+  - chave: atende_cabelo_cacheado_e_crespo
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 12
+    pergunta: "vocês atendem cabelo crespo?"
+    opcoes:
+      sim: "Atendemos cabelo liso, cacheado e crespo."
+      nao: "Não trabalhamos com cabelo cacheado e crespo."
+    volatilidade: estavel
+
+  - chave: atende_homem_e_crianca
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 13
+    pergunta: "corta cabelo de homem? e de criança?"
+    opcoes:
+      sim: "Atendemos homens e crianças também."
+      nao: "Atendemos somente público feminino adulto."
+    volatilidade: estavel
+
+  # --- os três itens que são do salão e não do cabeleireiro autônomo ---
+  # Ficam por último de propósito: quem só faz cabelo os recusa em três toques,
+  # e cada recusa vira uma resposta negativa útil. README §8.1.
+
+  - chave: preco_unha
+    tipo: fato
+    assunto: preco
+    prioridade: 2
+    ordem: 20
+    pergunta: "quanto é a unha?"
+    texto: "Manicure: {preco_manicure}. Pedicure: {preco_pedicure}."
+    lacunas:
+      preco_manicure: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+      preco_pedicure: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não fazemos unha."
+
+  - chave: preco_sobrancelha
+    tipo: fato
+    assunto: preco
+    prioridade: 2
+    ordem: 21
+    pergunta: "faz sobrancelha? quanto?"
+    texto: "Design de sobrancelha: {preco_sobrancelha}."
+    lacunas:
+      preco_sobrancelha: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não fazemos sobrancelha."
+
+  - chave: preco_depilacao
+    tipo: fato
+    assunto: preco
+    prioridade: 2
+    ordem: 22
+    pergunta: "vocês fazem depilação?"
+    texto: "Depilação: a partir de {preco_depilacao}, conforme a área."
+    lacunas:
+      preco_depilacao: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não fazemos depilação."

@@ -1,0 +1,58 @@
+# Itens de quem trabalha com agenda. Entra em odontologia, estética, lash,
+# salão/cabeleireiro, autoescola e — opcionalmente — barbearia.
+# Não entra em assistência técnica nem em loja de balcão.
+#
+# Nenhum item aqui afirma DISPONIBILIDADE. Disponibilidade muda dentro do dia,
+# e `conversa.md` §2.5 é explícito: ou tem porta (`FonteDeAgenda`) e é lida ao vivo,
+# ou o Otto não afirma. O que estes itens carregam é a REGRA da agenda, que é estável.
+#
+# GRAU DE EVIDÊNCIA: hipótese. Ver README §7.
+
+comum: hora-marcada
+nome_para_operacao: "Tronco comum — atendimento com hora marcada"
+
+itens:
+  - chave: precisa_marcar
+    tipo: escolha
+    assunto: agendamento
+    prioridade: 2
+    ordem: 10
+    pergunta: "precisa marcar ou pode chegar?"
+    opcoes:
+      sim: "Atendimento só com horário marcado."
+      nao: "Atendemos por ordem de chegada, sem precisar marcar."
+    volatilidade: estavel
+
+  - chave: cobra_sinal
+    tipo: fato
+    assunto: agendamento
+    prioridade: 2
+    ordem: 11
+    pergunta: "precisa pagar alguma coisa pra marcar?"
+    texto: "Para reservar o horário é preciso pagar um sinal de {sinal}, que é abatido no valor final."
+    lacunas:
+      sinal: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não cobramos sinal para marcar horário."
+
+  - chave: remarcar_e_cancelar
+    tipo: fato
+    assunto: agendamento
+    prioridade: 2
+    ordem: 12
+    pergunta: "posso remarcar?"
+    texto: "Dá para remarcar avisando com {antecedencia_remarcar} de antecedência."
+    lacunas:
+      antecedencia_remarcar: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: atraso
+    tipo: fato
+    assunto: agendamento
+    prioridade: 3
+    ordem: 13
+    pergunta: "e se eu atrasar?"
+    texto: "Tolerância de atraso: {tolerancia}. Passou disso, o horário precisa ser remarcado."
+    lacunas:
+      tolerancia: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel

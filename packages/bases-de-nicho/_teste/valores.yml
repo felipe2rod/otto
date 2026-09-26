@@ -1,0 +1,25 @@
+# Valores de teste. NÃO SÃO EXEMPLO E NÃO SÃO SUGESTÃO.
+#
+# Servem a duas coisas e a nenhuma outra:
+#   1. medir o tamanho de uma base do nicho preenchida (`medir.py`);
+#   2. montar a fixture `preenchido` dos casos de avaliação (README §10).
+#
+# São deliberadamente reconhecíveis como falsos. Um número plausível aqui vira,
+# em três semanas, um número que alguém copiou para uma tela achando que era
+# referência — e a restrição do ADR 022 e da regra 6 do caráter é que a base do
+# nicho não carrega número nenhum.
+
+por_tipo:
+  dinheiro: "R$ 000,00"
+  dias: "00"
+  horas: "00"
+  minutos: "00"
+  meses: "00"
+  sessoes: "00"
+  percentual: "00%"
+  texto_curto: "xxxxx xxxxx xxxxx"
+
+por_linha_de_lista:
+  dinheiro: "000"
+
+escolha: sim

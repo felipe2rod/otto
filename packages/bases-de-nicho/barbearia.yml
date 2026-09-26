@@ -1,0 +1,195 @@
+# Base do nicho — barbearia
+#
+# GRAU DE EVIDÊNCIA: NÃO VERIFICADO. Ver README §7.
+#
+# SEPARADA DE salao-e-cabeleireiro.yml, e não por vocabulário. Três coisas mudam
+# TODA resposta (README §8.1):
+#   1. A unidade de preço é um número fechado ("Corte: R$ ___"), não uma faixa
+#      "a partir de" que depende do comprimento.
+#   2. A duração cabe em "passa aqui" (dezenas de minutos), não em meia tarde.
+#   3. Boa parte atende por ordem de chegada, o que muda se `_comum/hora-marcada.yml`
+#      entra ou não — e esse arquivo inteiro (sinal, remarcação, atraso) é resposta
+#      de cliente.
+#
+# Por isso `_comum/hora-marcada.yml` entra aqui CONDICIONADO ao item `precisa_marcar`:
+# se o dono responder que atende por ordem de chegada, os itens de agenda saem da
+# base dele em vez de virarem quatro respostas erradas.
+
+nicho: barbearia
+segmento: barbearia_e_salao
+nome_para_operacao: "Barbearia"
+inclui: [_comum/todo-negocio.yml]
+inclui_condicional:
+  - arquivo: _comum/hora-marcada.yml
+    quando: "precisa_marcar = sim"
+assuntos: [preco, duracao, escopo, agendamento, fila, pagamento, horario, endereco]
+
+observacoes_de_risco: |
+  1. FILA É DISPONIBILIDADE, E DISPONIBILIDADE NÃO VIRA ITEM. "Tem muita gente
+     aí?", "quanto tempo de espera?" mudam dentro do dia — `conversa.md` §2.5 é
+     explícito: ou tem porta que lê ao vivo, ou o Otto não afirma. Na v1 ele diz
+     que não tem essa informação e encaminha. Escrever "a espera costuma ser de 20
+     minutos" na base é uma promessa de estar errado, todo sábado.
+  2. NÃO PROMETE BARBEIRO. "O Jorge tá hoje?" é escala, muda no dia, e prometer
+     profissional é o mesmo erro da fila com nome próprio.
+  3. Nada de saúde e nada sensível neste nicho. É o mais simples dos oito, e é bom
+     que seja: é o que tem mais chance de a conferência inteira ser feita em dois
+     minutos.
+
+  [GUARDIÃO] Vocabulário: "corte", "barba", "pezinho", "degradê", "combo",
+  "sobrancelha na navalha" — é como o cliente pede no balcão. Nunca "serviços
+  masculinos premium", nunca "experiência". E o preço é número fechado: se o dono
+  quiser faixa, ele escreve; a base não sugere "a partir de".
+
+itens:
+  # ---------- prioridade 1 ----------
+
+  - chave: preco_corte
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 1
+    pergunta: "quanto tá o corte?"
+    texto: "Corte: {preco_corte}."
+    lacunas:
+      preco_corte: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: preco_barba_e_combo
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 2
+    pergunta: "e a barba? quanto sai corte e barba?"
+    texto: "Barba: {preco_barba}. Corte com barba: {preco_combo}."
+    lacunas:
+      preco_barba: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+      preco_combo: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: precisa_marcar
+    tipo: escolha
+    assunto: agendamento
+    prioridade: 1
+    ordem: 3
+    pergunta: "precisa marcar ou pode chegar?"
+    opcoes:
+      sim: "Atendemos com horário marcado."
+      nao: "Atendemos por ordem de chegada, sem precisar marcar."
+    volatilidade: estavel
+
+  - chave: preco_por_servico
+    tipo: lista
+    assunto: preco
+    prioridade: 1
+    ordem: 4
+    pergunta: "quanto é o pezinho?"
+    cabecalho: "Preço por serviço"
+    linhas_sugeridas:
+      - "corte"
+      - "barba"
+      - "corte com barba"
+      - "pezinho"
+      - "sobrancelha"
+      - "corte infantil"
+      - "platinado"
+      - "luzes"
+    lacuna_por_linha: { tipo: dinheiro }
+    minimo_de_linhas: 3
+    volatilidade: muda_as_vezes
+
+  - chave: duracao_do_corte
+    tipo: fato
+    assunto: duracao
+    prioridade: 1
+    ordem: 5
+    pergunta: "demora quanto?"
+    texto: "Corte leva cerca de {duracao_corte}. Corte com barba, cerca de {duracao_combo}."
+    lacunas:
+      duracao_corte: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+      duracao_combo: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: preco_infantil
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 6
+    pergunta: "corta cabelo de criança? quanto?"
+    texto: "Corte infantil: {preco_infantil}."
+    lacunas:
+      preco_infantil: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não atendemos crianças."
+
+  # ---------- prioridade 2 ----------
+
+  - chave: tempo_de_espera
+    tipo: fato
+    assunto: fila
+    prioridade: 2
+    ordem: 10
+    pergunta: "tem muita gente aí agora?"
+    encaminha_sempre: true
+    motivo_do_encaminhamento: nao_sabe
+    # Sem `texto`, e é a decisão mais importante deste arquivo: fila é
+    # disponibilidade, muda dentro do dia e não vira item (`conversa.md` §2.5).
+    # Enquanto não houver porta que leia a fila ao vivo, o Otto não sabe — e é
+    # melhor não saber do que dizer um número que erra todo sábado.
+    volatilidade: estavel
+
+  - chave: escolhe_o_barbeiro
+    tipo: escolha
+    assunto: agendamento
+    prioridade: 2
+    ordem: 11
+    pergunta: "dá pra marcar com o Jorge?"
+    opcoes:
+      sim: "Dá para escolher o profissional na hora de marcar. Quem confirma a escala é a equipe."
+      nao: "O atendimento é com o barbeiro que estiver livre."
+    volatilidade: estavel
+
+  - chave: servicos_atendidos
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 12
+    pergunta: "vocês fazem platinado?"
+    texto: "Serviços que fazemos: {servicos}."
+    lacunas:
+      servicos: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [descricao_do_negocio] }
+    volatilidade: estavel
+
+  - chave: assinatura_ou_pacote
+    tipo: fato
+    assunto: preco
+    prioridade: 2
+    ordem: 13
+    pergunta: "tem plano mensal?"
+    texto: "Plano mensal: {condicao_plano}."
+    lacunas:
+      condicao_plano: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não temos plano mensal; o pagamento é por atendimento."
+
+  - chave: atende_domicilio
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 14
+    pergunta: "vocês vão em casa?"
+    opcoes:
+      sim: "Atendemos a domicílio, com valor combinado conforme a região."
+      nao: "O atendimento é só na barbearia."
+    volatilidade: estavel
+
+  - chave: vende_produto
+    tipo: escolha
+    assunto: escopo
+    prioridade: 3
+    ordem: 15
+    pergunta: "vocês vendem pomada?"
+    opcoes:
+      sim: "Vendemos produtos de cabelo e barba na loja."
+      nao: "Não vendemos produtos."
+    volatilidade: estavel

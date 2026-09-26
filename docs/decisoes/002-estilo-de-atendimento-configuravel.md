@@ -33,7 +33,7 @@ Felipe quer que o empregador escolha a personalidade do atendente de WhatsApp. A
 
 - Caráter travado, versionado no repositório, com as 8 regras de `persona-otto.md`. Nenhuma configuração o sobrescreve. Teste automatizado por preset.
 - Estilo em 4 presets (Cordial padrão, Formal, Descontraído, Direto) escolhidos por exemplo, mais ajustes finos no painel.
-- Nome de exibição padrão "Otto", troca livre.
+- ~~Nome de exibição padrão "Otto", troca livre.~~ Substituído pelo ADR 013 (2026-09-08): nome fixo "Otto"; a empresa configura cargo exibido e avatar.
 - Instrução livre fica para v2, atrás de filtro que recusa instrução que colide com o caráter.
 
 ## Consequências

@@ -1,0 +1,13 @@
+<base empresa="Empresa de teste" gerada_em="2026-09-09">
+[i1|preco|2026-09-09|dono] Corte: R$ 000,00.
+[i2|preco|2026-09-09|dono] Barba: R$ 000,00. Corte com barba: R$ 000,00.
+[i3|agendamento|2026-09-09|dono] Atendemos com horário marcado.
+[i4|preco|lista|completa|2026-09-09|dono] Preço por serviço
+  corte 000 | barba 000 | corte com barba 000 | pezinho 000 | sobrancelha 000 | corte infantil 000 | platinado 000 | luzes 000
+[i5|duracao|2026-09-09|dono] Corte leva cerca de xxxxx xxxxx xxxxx. Corte com barba, cerca de xxxxx xxxxx xxxxx.
+[i6|preco|2026-09-09|dono] Corte infantil: R$ 000,00.
+[i7|agendamento|2026-09-09|dono] Atendimento só com horário marcado.
+[i8|agendamento|2026-09-09|dono] Dá para escolher o profissional na hora de marcar. Quem confirma a escala é a equipe.
+[i9|agendamento|2026-09-09|dono] Para reservar o horário é preciso pagar um sinal de xxxxx xxxxx xxxxx, que é abatido no valor final.
+[i10|escopo|2026-09-09|dono] Serviços que fazemos: xxxxx xxxxx xxxxx.
+</base>

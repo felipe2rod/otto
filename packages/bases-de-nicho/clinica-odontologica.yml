@@ -1,0 +1,192 @@
+# Base do nicho — clínica odontológica
+#
+# GRAU DE EVIDÊNCIA: NÃO VERIFICADO. Ver README §7.
+#
+# É o primeiro dos dois nichos de saúde desta lista. O que muda no comportamento
+# do Otto está em `observacoes_de_risco` e não é decoração: metade do valor deste
+# arquivo é o que ele NÃO deixa o Otto responder.
+
+nicho: clinica-odontologica
+segmento: clinica_e_consultorio
+nome_para_operacao: "Clínica odontológica"
+inclui: [_comum/todo-negocio.yml, _comum/hora-marcada.yml]
+assuntos: [preco, agendamento, escopo, convenio, garantia, urgencia, pagamento, horario, endereco]
+
+observacoes_de_risco: |
+  SAÚDE. Três consequências, e nenhuma é opcional.
+
+  1. Dor, sintoma, remédio e diagnóstico NÃO são do cargo. "Estou com dor há três
+     dias, o que eu tomo?" não é dúvida da base: é conselho que um profissional
+     deveria dar (regra 4 da persona) e situação sensível (regra 3). O item
+     `dor_ou_urgencia` carrega isso como encaminhamento, não como resposta.
+  2. O classificador marca `dado_sensivel = true` (ADR 014) e a conversa sai da
+     amostra de leitura. Isso não muda nada para o cliente final: ele continua
+     sendo atendido. Marcar não é recusar.
+  3. O Otto nunca afirma que um procedimento serve para um caso. Preço de
+     procedimento ele diz; indicação de procedimento, não. A fronteira é: preço,
+     duração, forma de pagamento e agenda são fato do negócio; "você precisa de
+     canal" é diagnóstico.
+
+  [GUARDIÃO] Vocabulário: "avaliação", nunca "consulta de emergência" (promete
+  atendimento que ninguém confirmou). "Procedimento", não "serviço". "Dentista",
+  não "doutor" — credencial que engana é o mesmo problema do cargo exibido
+  (ADR 013).
+
+  PENDÊNCIA JURÍDICA, e ela é real: publicidade de preço em odontologia tem regra
+  do CFO. NÃO VERIFIQUEI e não afirmo nada. Se a regra restringir preço em canal
+  aberto, os itens de `preco` deste arquivo mudam de forma — o Otto pediria o
+  contato e encaminharia em vez de dizer o número. README, pendência 3.
+
+itens:
+  # ---------- prioridade 1 ----------
+
+  - chave: preco_avaliacao
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 1
+    pergunta: "quanto custa a primeira consulta?"
+    texto: "A avaliação custa {preco_avaliacao}«, e o valor é abatido se o tratamento for feito aqui»."
+    lacunas:
+      preco_avaliacao: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "A avaliação é gratuita."
+
+  - chave: preco_limpeza
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 2
+    pergunta: "quanto é uma limpeza?"
+    texto: "Limpeza: {preco_limpeza}."
+    lacunas:
+      preco_limpeza: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: preco_clareamento
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 3
+    pergunta: "quanto custa clareamento?"
+    texto: "Clareamento: a partir de {preco_clareamento}. O valor fechado sai depois da avaliação."
+    lacunas:
+      preco_clareamento: { tipo: dinheiro, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não fazemos clareamento."
+
+  - chave: preco_depende_de_avaliacao
+    tipo: fato
+    assunto: preco
+    prioridade: 1
+    ordem: 4
+    pergunta: "quanto custa um canal?"
+    texto: "Estes procedimentos só têm preço fechado depois da avaliação, porque depende do caso: {procedimentos_com_avaliacao}."
+    lacunas:
+      procedimentos_com_avaliacao: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: parcelamento
+    tipo: fato
+    assunto: pagamento
+    prioridade: 1
+    ordem: 5
+    pergunta: "dá pra parcelar?"
+    texto: "O tratamento pode ser parcelado em até {parcelas}«, {condicao_parcelas}»."
+    lacunas:
+      parcelas: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+      condicao_parcelas: { tipo: texto_curto, obrigatoria: false, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+    negativa: "Não parcelamos o tratamento."
+
+  - chave: convenios
+    tipo: fato
+    assunto: convenio
+    prioridade: 1
+    ordem: 6
+    pergunta: "vocês atendem meu convênio?"
+    texto: "Convênios atendidos: {convenios}."
+    lacunas:
+      convenios: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [descricao_do_negocio] }
+    volatilidade: muda_as_vezes
+    negativa: "Atendemos só particular, sem convênio."
+
+  # ---------- prioridade 2 ----------
+
+  - chave: dor_ou_urgencia
+    tipo: fato
+    assunto: urgencia
+    prioridade: 2
+    ordem: 10
+    pergunta: "tô com muita dor de dente, o que eu faço?"
+    encaminha_sempre: true
+    motivo_do_encaminhamento: assunto_sensivel
+    # Sem `texto` de propósito: item de encaminhamento não vira linha no <base>.
+    # A regra de comportamento é do bloco 1; aqui é só roteamento.
+    volatilidade: estavel
+
+  - chave: atende_urgencia
+    tipo: escolha
+    assunto: urgencia
+    prioridade: 2
+    ordem: 11
+    pergunta: "vocês atendem encaixe no mesmo dia?"
+    opcoes:
+      sim: "Guardamos horários para encaixe no mesmo dia."
+      nao: "Não temos encaixe no mesmo dia; o atendimento é só com horário marcado."
+    volatilidade: estavel
+
+  - chave: atende_crianca
+    tipo: escolha
+    assunto: escopo
+    prioridade: 2
+    ordem: 12
+    pergunta: "atende criança?"
+    opcoes:
+      sim: "Atendemos crianças. O responsável precisa estar junto na consulta."
+      nao: "Atendemos a partir da adolescência; não fazemos odontopediatria."
+    volatilidade: estavel
+
+  - chave: especialidades
+    tipo: fato
+    assunto: escopo
+    prioridade: 2
+    ordem: 13
+    pergunta: "vocês colocam aparelho?"
+    texto: "Especialidades atendidas: {especialidades}."
+    lacunas:
+      especialidades: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [descricao_do_negocio] }
+    volatilidade: estavel
+
+  - chave: garantia_do_trabalho
+    tipo: fato
+    assunto: garantia
+    prioridade: 2
+    ordem: 14
+    pergunta: "se soltar a restauração vocês refazem?"
+    texto: "O trabalho tem {garantia} de garantia, com as revisões em dia."
+    lacunas:
+      garantia: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: muda_as_vezes
+
+  - chave: duracao_da_consulta
+    tipo: fato
+    assunto: agendamento
+    prioridade: 3
+    ordem: 15
+    pergunta: "demora quanto tempo a consulta?"
+    texto: "A avaliação leva cerca de {duracao_avaliacao}."
+    lacunas:
+      duracao_avaliacao: { tipo: minutos, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel
+
+  - chave: leva_documento
+    tipo: fato
+    assunto: agendamento
+    prioridade: 3
+    ordem: 16
+    pergunta: "preciso levar alguma coisa?"
+    texto: "Na primeira consulta é preciso levar {documentos}."
+    lacunas:
+      documentos: { tipo: texto_curto, obrigatoria: true, preenchivel_por: [] }
+    volatilidade: estavel

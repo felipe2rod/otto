@@ -1,0 +1,23 @@
+<base empresa="Empresa de teste" gerada_em="2026-09-09">
+[i1|preco|2026-09-09|dono] Aplicação (primeira vez): a partir de R$ 000,00, conforme a técnica.
+[i2|manutencao|2026-09-09|dono] Manutenção: R$ 000,00, feita a cada xxxxx xxxxx xxxxx.
+[i3|preco|lista|completa|2026-09-09|dono] Preço da aplicação por técnica
+  fio a fio clássico 000 | volume brasileiro 000 | volume russo 000 | híbrido 000 | efeito fox eyes 000 | lash lifting 000
+[i4|duracao|2026-09-09|dono] A aplicação leva xxxxx xxxxx xxxxx. A manutenção leva xxxxx xxxxx xxxxx.
+[i5|manutencao|2026-09-09|dono] Passando de xxxxx xxxxx xxxxx, a aplicação é cobrada como primeira vez.
+[i6|preco|2026-09-09|dono] Retirada: R$ 000,00.
+[i9|cuidado|2026-09-09|dono] Cuidados depois da aplicação: xxxxx xxxxx xxxxx.
+[i10|escopo|2026-09-09|dono] Atendemos a domicílio, com valor combinado conforme a região.
+[i11|cuidado|2026-09-09|dono] Antes da aplicação: xxxxx xxxxx xxxxx.
+[i12|escopo|2026-09-09|dono] Outros serviços que fazemos: xxxxx xxxxx xxxxx.
+[i13|manutencao|2026-09-09|dono] Se cair muito fio nos primeiros xxxxx xxxxx xxxxx, a reposição é feita sem custo.
+[i14|horario|2026-09-09|dono] Horário: xxxxx xxxxx xxxxx.
+[i15|horario|2026-09-09|dono] Sábado: xxxxx xxxxx xxxxx. Domingo: xxxxx xxxxx xxxxx.
+[i16|endereco|2026-09-09|dono] Endereço: xxxxx xxxxx xxxxx.
+[i17|pagamento|2026-09-09|dono] Formas de pagamento aceitas: xxxxx xxxxx xxxxx.
+[i18|endereco|2026-09-09|dono] Tem estacionamento para clientes.
+[i19|agendamento|2026-09-09|dono] Atendimento só com horário marcado.
+[i20|agendamento|2026-09-09|dono] Para reservar o horário é preciso pagar um sinal de xxxxx xxxxx xxxxx, que é abatido no valor final.
+[i21|agendamento|2026-09-09|dono] Dá para remarcar avisando com xxxxx xxxxx xxxxx de antecedência.
+[i22|agendamento|2026-09-09|dono] Tolerância de atraso: xxxxx xxxxx xxxxx. Passou disso, o horário precisa ser remarcado.
+</base>

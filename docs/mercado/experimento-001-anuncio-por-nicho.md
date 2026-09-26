@@ -1,6 +1,6 @@
 # Experimento 001 — anúncio genérico × anúncio por nicho
 
-Status: desenhado, não rodado
+Status: desenhado, **adiado** (Felipe, 2026-09-08: "não é hora pra isso, nem temos site ainda"). Roda quando houver site e um Otto para receber quem clicar. As 10 conversas de campo não dependem de site e podem acontecer antes
 Data do desenho: 2026-09-08
 Decisão que sustenta: ADR 007, qual nicho primeiro
 
@@ -43,7 +43,7 @@ Por braço, em números absolutos primeiro e percentual depois. Base pequena eng
 ## Limites declarados
 
 - Com verba pequena, n é pequeno. O experimento é **direcional**, e por isso o critério está em número absoluto de episódios, não em taxa.
-- Mede quem clica em anúncio, não o mercado. Complemento obrigatório: **10 conversas de campo** com donos do nicho candidato, com as perguntas da seção 10 de `pesquisa-2026-09.md` mais "o que você gerencia hoje em caderno ou planilha?".
+- Mede quem clica em anúncio, não o mercado. Complemento obrigatório: **10 conversas de campo** com donos do nicho candidato, com as perguntas da seção 10 de `pesquisa-2026-09.md` mais "o que você gerencia hoje em caderno ou planilha?" e "quem te indicou o último sistema que você contratou?" (esta última valida o canal de parceiros do ADR 011: se a resposta recorrente for contador ou vendedor de maquininha, o canal está achado).
 - Quem responde anúncio de "IA para WhatsApp" pode ser o comprador de software que já comparou, não o dono com a mão ocupada. Hipótese do estrategista; o campo verifica.
 
 ## Registro do resultado

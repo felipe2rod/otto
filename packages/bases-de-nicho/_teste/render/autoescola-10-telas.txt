@@ -1,0 +1,12 @@
+<base empresa="Empresa de teste" gerada_em="2026-09-09">
+[i1|preco|2026-09-09|dono] Primeira habilitação categoria B: a autoescola cobra R$ 000,00. As taxas do Detran e os exames são pagos à parte.
+[i2|preco|2026-09-09|dono] As taxas do Detran e os exames médico e psicológico ficam em torno de R$ 000,00 e são pagos direto ao órgão.
+[i3|pagamento|2026-09-09|dono] O valor da autoescola pode ser parcelado em até xxxxx xxxxx xxxxx.
+[i4|preco|2026-09-09|dono] Aula prática avulsa: R$ 000,00.
+[i5|preco|2026-09-09|dono] Primeira habilitação categoria A (moto): a autoescola cobra R$ 000,00, fora as taxas do Detran.
+[i6|prazo_de_conserto|2026-09-09|dono] As aulas costumam levar xxxxx xxxxx xxxxx. O tempo total depende da fila de exames e das provas do Detran, que não são marcadas por nós.
+[i7|documentos|2026-09-09|dono] Para a matrícula é preciso levar xxxxx xxxxx xxxxx.
+[i8|agendamento|2026-09-09|dono] Atendimento só com horário marcado.
+[i9|escopo|2026-09-09|dono] Idade para abrir o processo: xxxxx xxxxx xxxxx.
+[i10|agendamento|2026-09-09|dono] Para reservar o horário é preciso pagar um sinal de xxxxx xxxxx xxxxx, que é abatido no valor final.
+</base>
