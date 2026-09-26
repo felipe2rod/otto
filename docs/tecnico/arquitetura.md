@@ -28,7 +28,7 @@ avaliacao/        conjunto de tarefas de design do agente (dono: treinador-do-ot
 
 ## Fluxo de uma tarefa do agente
 
-1. O designer escreve o pedido no painel do agente. A API cria uma tarefa (`tarefas_do_agente`) e a enfileira (pg-boss).
+1. A pessoa escreve um pedido livre ou preenche um briefing salvo (ADR 033) no painel do agente. A API cria uma tarefa (`tarefas_do_agente`) e a enfileira (pg-boss).
 2. O worker revalida a conta dona da tarefa (ADR 023: o payload é hipótese) e roda o ciclo do ADR 029: resumo, plano, lotes de operações, render no servidor, verificação.
 3. Cada lote aplicado é gravado no histórico com autoria `agente` e o id da tarefa, dentro de um **conjunto de alterações** pendente.
 4. O editor recebe o progresso por stream e mostra o conjunto para revisão: aceitar, aceitar em parte, desfazer.
@@ -48,6 +48,9 @@ avaliacao/        conjunto de tarefas de design do agente (dono: treinador-do-ot
 - `operacoes`: log de lotes entre snapshots, com autoria e tarefa.
 - `arquivos`: imagens e fontes por hash de conteúdo, por conta.
 - `tokens`: identidade visual por conta ou por documento.
+- `briefings`: modelos reutilizáveis da conta (ADR 033).
+- `conexoes_de_banco`: banco de imagens ligado pela conta, com a chave criptografada (ADR 032).
+- Cache de busca em banco de imagens por 24 h (exigência do Pixabay).
 - `tarefas_do_agente`, `exportacoes`.
 
 Toda tabela leva o id da conta, com RLS (ADR 023).
@@ -56,9 +59,10 @@ Toda tabela leva o id da conta, com RLS (ADR 023).
 
 | Porta | Adaptador inicial | Estado |
 |---|---|---|
-| `ModeloDoAgente` | Claude (fornecedor da inferência em aberto) | ADR 029 |
+| `ModeloDoAgente` | Claude via DigitalOcean (imagem e cache a confirmar no spike) | ADR 029 |
 | `FormatoDeArquivoEmCamadas` | ag-psd (a verificar no spike) | ADR 028 |
 | `ArmazenamentoDeArquivo` | S3-compatível | ADR 020 |
+| `BancoDeImagens` | Pixabay (chave do Otto); outros com chave da conta | ADR 032 |
 | `BarramentoDeEventos` | pg-boss | ADR 009 |
 | `ProvedorDeAssinatura` | a decidir | ADR 020, nota |
 | Repositórios | Prisma | ADR 009 |
@@ -69,4 +73,4 @@ Toda tabela leva o id da conta, com RLS (ADR 023).
 - Estratégia de snapshot × log de operações (a cada N operações? por tamanho?).
 - Cache de camadas no editor para documentos grandes.
 - Limite de tamanho de documento e de arquivo por conta.
-- Fornecedor da inferência (ADR 029).
+- Imagem e cache de Claude via DigitalOcean (ADR 029, item 4.1).

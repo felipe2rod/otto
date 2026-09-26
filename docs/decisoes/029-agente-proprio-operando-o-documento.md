@@ -14,7 +14,8 @@ O ADR 026 decidiu um agente embutido e nenhuma API ou MCP aberta para agente ext
 
 | Grupo | Ferramentas |
 |---|---|
-| Ler | `resumirDocumento(filtro, profundidade)`, `lerNo(id)`, `listarTokens()`, `listarFontes()`, `listarBiblioteca()` |
+| Ler | `resumirDocumento(filtro, profundidade)`, `lerNo(id)`, `listarTokens()`, `listarFontes()`, `listarBiblioteca()`, `lerBriefing(id)` (ADR 033) |
+| Imagens | `buscarImagens(consulta, filtros)`, `trazerImagem(resultado)`: bancos de imagens (ADR 032), os mesmos do painel de biblioteca |
 | Ver | `renderizar(noOuRegiao, escala)` |
 | Mudar | `aplicarOperacoes(lote, simular?)`: o catálogo do ADR 027 inteiro, em transação |
 | Conferir | `verificar(escopo)`: o lint de design do ADR 027 |

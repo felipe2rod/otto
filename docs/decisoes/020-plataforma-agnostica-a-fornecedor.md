@@ -4,7 +4,7 @@ Status: aceita (o princípio, pelo Felipe) / escolhida por Claude, reversível (
 Data: 2026-09-09
 Quem decide: Felipe
 
-> **Nota do pivô (2026-09-26, ADR 026).** O princípio continua valendo. O mapa de portas foi refeito: saem `CanalDeAtendimento`, `FonteDeCobranca`, `TranscritorDeAudio`, as portas de contexto e `AvisoAoEmpregador`. Entram `ModeloDoAgente` (antes `ModeloDeConversa`, ADR 029), `FormatoDeArquivoEmCamadas` (PSD, ADR 028) e, quando existir, `GeradorDeImagem`. Continuam `ArmazenamentoDeArquivo` (imagens e fontes, por hash de conteúdo), `BarramentoDeEventos`, repositórios e `ProvedorDeAssinatura`, este último sem fornecedor decidido depois do arquivamento do ADR 010. CanvasKit não ganha porta (limite 3: tecnologia, não fornecedor).
+> **Nota do pivô (2026-09-26, ADR 026).** O princípio continua valendo. O mapa de portas foi refeito: saem `CanalDeAtendimento`, `FonteDeCobranca`, `TranscritorDeAudio`, as portas de contexto e `AvisoAoEmpregador`. Entram `ModeloDoAgente` (antes `ModeloDeConversa`, ADR 029), `FormatoDeArquivoEmCamadas` (PSD, ADR 028) `BancoDeImagens` (ADR 032, um adaptador por banco, chave do Otto ou da conta) e, quando existir, `GeradorDeImagem`. Continuam `ArmazenamentoDeArquivo` (imagens e fontes, por hash de conteúdo), `BarramentoDeEventos`, repositórios e `ProvedorDeAssinatura`, este último sem fornecedor decidido depois do arquivamento do ADR 010. CanvasKit não ganha porta (limite 3: tecnologia, não fornecedor).
 
 ## Contexto
 

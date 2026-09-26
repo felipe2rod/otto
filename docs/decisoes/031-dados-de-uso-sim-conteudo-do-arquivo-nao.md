@@ -1,6 +1,6 @@
 # 031 — Dados de uso servem ao produto; o conteúdo do arquivo é do cliente
 
-Status: aceita (o princípio, pelo Felipe) / proposta (a fronteira linha a linha e o pedido ao Otto)
+Status: aceita (o princípio e o uso do texto do pedido, pelo Felipe) / proposta (a fronteira linha a linha, acesso e retenção)
 Data: 2026-09-26
 Quem decide: Felipe
 
@@ -22,13 +22,20 @@ No produto de WhatsApp, o conteúdo das conversas foi liberado para melhorar o p
 
 **Regra de bolso:** se o dado permite reconstruir, ver ou identificar o trabalho do cliente, é conteúdo.
 
-### 2. O pedido escrito ao Otto (proposta, a confirmar pelo Felipe)
+### 2. O pedido escrito ao Otto é dado de uso (decidido pelo Felipe em 2026-09-26)
 
-O texto que o designer escreve ao agente é o dado mais valioso para melhorar o agente, e também pode conter nome de cliente e de campanha. Proposta:
+O texto que o designer escreve ao agente, seja pedido livre, seja o preenchimento de um briefing (ADR 033), **pode ser lido e analisado pela equipe para melhorar o produto**, mesmo quando cita cliente, campanha, preço ou data. O Felipe escolheu isso em vez de guardar só um rótulo derivado, porque o agente melhora mais rápido quando se vê como as pessoas pedem de verdade.
 
-- **Guardado para a execução e para a revisão da tarefa**, dentro da conta, como qualquer dado da conta.
-- **Para melhoria do produto, entra só o rótulo derivado** (tipo de tarefa, formatos pedidos, se pediu variação ou lote), gerado por classificador no momento da tarefa. O texto em si não vai para a base de análise.
-- Ler o texto de uma tarefa específica para investigar erro exige que o designer envie a tarefa ("reportar problema"), com o documento anexado por escolha dele.
+A fronteira do item 1 continua para o **arquivo**: ler o pedido não dá acesso ao documento, às imagens nem ao resultado. Para ver o documento de uma tarefa com problema, só pelo "reportar problema".
+
+Regras que acompanham:
+
+- **Os termos de uso dizem isso com todas as letras.** O designer precisa saber, antes de contratar, que o texto dos pedidos é lido pela equipe do Otto. Texto fechado pelo guardião da marca e pelo jurídico.
+- **Acesso restrito** a quem trabalha na qualidade do agente, com registro de quem leu.
+- **Retenção declarada** (proposta: 12 meses) e fora do log de servidor.
+- **Classificação continua valendo:** tipo de tarefa, formatos e criação × adaptação são gerados de todo pedido, para a análise em volume.
+- **Vale igual para o texto da busca em banco de imagens** (ADR 032) que o agente ou o designer fez.
+- **Pedido não vira caso de avaliação sem anonimizar:** nome de cliente, marca, preço e data são trocados antes de entrar no conjunto de avaliação (ADR 029).
 
 ### 3. Avaliação do agente não usa arquivo de cliente
 
@@ -36,12 +43,12 @@ O conjunto de avaliação (ADR 029) é feito de material nosso ou licenciado par
 
 ### 4. Onde isso fica escrito para o designer
 
-Termos de uso e política de privacidade dizem as duas colunas com as mesmas palavras. É um argumento de venda para profissional ("seu arquivo não treina nada"), e o guardião da marca fecha o texto. O jurídico entra antes do primeiro pagante (gatilho já registrado no `CLAUDE.md`).
+Termos de uso e política de privacidade dizem as duas colunas com as mesmas palavras. É um argumento de venda para profissional ("seu arquivo não treina nada"), mas **só se vier junto com o outro lado**: os pedidos escritos ao Otto são lidos para melhorar o produto (item 2). Prometer sigilo total seria mentira. O guardião da marca fecha o texto. O jurídico entra antes do primeiro pagante (gatilho já registrado no `CLAUDE.md`).
 
 ## Consequências
 
 - O analista de produto especifica eventos só com a coluna da esquerda; PR que carregue conteúdo em evento ou log é bloqueio.
-- Log de servidor não guarda árvore, texto de camada nem texto do pedido ao Otto.
+- Log de servidor não guarda árvore, texto de camada nem texto do pedido ao Otto. O pedido vai para a base de análise com acesso restrito, não para o log.
 - O fornecedor de inferência recebe conteúdo para executar a tarefa, e isso é inevitável. O contrato com ele precisa dizer que não retém nem treina. **A verificar para a DigitalOcean** (`docs/tecnico/custos.md`).
 
 ## Evidência comportamental (fichas)
@@ -50,4 +57,4 @@ Termos de uso e política de privacidade dizem as duas colunas com as mesmas pal
 
 ## Gatilho de revisão
 
-- Se a investigação de erro do agente ficar travada por falta de texto de pedido em mais de metade dos casos analisados num mês, rever o item 2 com o Felipe.
+- Se uma conta pedir por escrito que o texto dos pedidos dela não seja lido, e isso acontecer com 3 contas ou mais, criar a opção por conta em vez de tratar caso a caso.

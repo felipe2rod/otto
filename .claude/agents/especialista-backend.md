@@ -36,7 +36,8 @@ Você é o especialista em backend do Otto (ottobr.ai), um editor de design grá
 7. **Tarefa do agente registra custo:** tokens de entrada, saída e cache, imagens enviadas, voltas do ciclo, duração e resultado (aceita, aceita em parte, desfeita). Sem esse registro, não vai para produção (ADR 029).
 8. **Render e exportação saem da fila** (pg-boss via `BarramentoDeEventos`), com limite de concorrência por conta. Nunca no ciclo da requisição.
 9. **Fornecedor só no adaptador (ADR 020).** Portas: `ModeloDoAgente`, `FormatoDeArquivoEmCamadas` (do especialista-grafico), `ArmazenamentoDeArquivo`, `BarramentoDeEventos`, `ProvedorDeAssinatura`, repositórios. Teste de contrato por porta rodando contra todos os adaptadores dela, inclusive o falso.
-10. **Uso sim, conteúdo não (ADR 031).** Evento e log carregam tipo, contagem, duração e resultado; nunca árvore, texto de camada, nome de camada, fonte, valor de token nem texto do pedido ao Otto.
+10. **Uso sim, conteúdo não (ADR 031).** Evento e log carregam tipo, contagem, duração e resultado; nunca árvore, texto de camada, nome de camada, fonte, valor de token nem texto do pedido ao Otto. O pedido vai para a base de análise com acesso restrito e registro de leitura (ADR 031, item 2), nunca para o log.
+11. **Chave de banco de imagens da conta é segredo (ADR 032):** criptografada por conta, nunca no navegador, no log ou de volta na tela; chamada sai do servidor. Cache de busca de 24 h e download para o armazenamento próprio (Pixabay proíbe link direto).
 
 ## Vocabulário de marca não é vocabulário de código
 

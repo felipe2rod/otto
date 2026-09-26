@@ -12,6 +12,8 @@ Um editor de design gráfico em camadas, no navegador, com um agente de IA próp
 
 ## O que o agente faz na v1 (hipótese de valor)
 
+- **Criar a partir de um pedido ou de um briefing salvo** (ADR 033): a conta gera as próprias artes, em camadas, com imagens da biblioteca ou de bancos de imagens (ADR 032).
+
 - **Adaptar formatos:** de uma peça 1080×1080 para story, banner, capa e anúncio, reposicionando e não só esticando.
 - **Variações:** N versões de título, cor ou composição para teste.
 - **Montar a partir de briefing:** texto + imagens da biblioteca + identidade da conta → primeira versão em camadas.
@@ -23,7 +25,7 @@ Tudo isso termina num conjunto de alterações que o designer revisa. O agente n
 
 ## O que o editor tem na v1
 
-Pranchetas, grupos, imagem raster, forma vetorial, texto, máscara raster e vetorial, efeitos de camada e camadas de ajuste, sempre no subconjunto que o Photoshop representa (ADR 028). Tokens de identidade visual. Biblioteca de imagens e fontes da conta. Importar e exportar PSD. Exportar PNG, JPG e PDF.
+Pranchetas, grupos, imagem raster, forma vetorial, texto, máscara raster e vetorial, efeitos de camada e camadas de ajuste, sempre no subconjunto que o Photoshop representa (ADR 028). Tokens de identidade visual. Biblioteca de imagens e fontes da conta. Bancos de imagens: Pixabay de fábrica e outros com a chave da conta (ADR 032). Briefings salvos (ADR 033). Importar e exportar PSD. Exportar PNG, JPG e PDF.
 
 ## O que o Otto não é
 
