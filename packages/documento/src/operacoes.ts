@@ -112,6 +112,29 @@ export const Operacao = z.discriminatedUnion('op', [
     alvo: Alvo,
     posicao: z.union([z.enum(['frente', 'tras']), z.number().int().min(0)]).describe('"frente", "tras" ou índice (0 = embaixo)'),
   }),
+  z
+    .object({
+      op: z.literal('duplicar'),
+      alvo: Alvo,
+      nome: z.string().min(1).optional().describe('nome da cópia; sem ele, "<nome> cópia"'),
+      dx: z.number().default(0).describe('deslocamento da cópia em x'),
+      dy: z.number().default(0).describe('deslocamento da cópia em y'),
+    })
+    .describe('Copia a camada (grupo: com tudo dentro) e põe a cópia logo acima da original, no mesmo grupo. A cópia nasce desbloqueada. O que vai dentro de um grupo copiado ganha " cópia" no nome.'),
+  z
+    .object({
+      op: z.literal('transferir'),
+      alvo: Alvo,
+      grupo: Alvo.optional().describe('grupo de destino; sem ele, a raiz da prancheta'),
+      prancheta: AlvoPrancheta.optional().describe('prancheta de destino; sem ela, a do grupo de destino ou a da própria camada'),
+      posicao: z
+        .union([z.enum(['frente', 'tras']), z.number().int().min(0)])
+        .default('frente')
+        .describe('"frente" (no topo do destino), "tras" ou índice (0 = embaixo)'),
+    })
+    .describe(
+      'Tira a camada de onde está e a põe em outro grupo, na raiz da prancheta ou em outra prancheta, sem mudar x e y. Para só mudar a ordem entre irmãs, use reordenar. Se o nome já existir na prancheta de destino, ganha um número.',
+    ),
   z.object({ op: z.literal('remover'), alvo: Alvo }),
   z
     .object({
@@ -304,6 +327,14 @@ function exigirNomeLivre(prancheta: Prancheta, nome: string, exceto?: string): v
   if (todasAsCamadas(prancheta.filhos).some((n) => n.nome === nome && n.id !== exceto)) {
     throw new FalhaDeOperacao(`já existe uma camada "${nome}" em "${prancheta.nome}"; nomes são únicos dentro da prancheta`, 'nome');
   }
+}
+
+/** O primeiro nome livre a partir de "base": base, "base 2", "base 3"... "ocupados" recebe o escolhido. */
+function nomeLivre(ocupados: Set<string>, base: string): string {
+  let nome = base;
+  for (let n = 2; ocupados.has(nome); n++) nome = `${base} ${n}`;
+  ocupados.add(nome);
+  return nome;
 }
 
 function validarNo(bruto: unknown): TNo {
@@ -543,6 +574,62 @@ function aplicarUma(e: Estado, op: Operacao): Documento {
         const destino = op.posicao === 'frente' ? sem.length : op.posicao === 'tras' ? 0 : Math.min(op.posicao, sem.length);
         return [...sem.slice(0, destino), no, ...sem.slice(destino)];
       });
+    }
+    case 'duplicar': {
+      const achado = acharNo(doc, op.alvo);
+      const { prancheta, no, irmaos } = achado;
+      if (op.nome !== undefined) exigirNomeLivre(prancheta, op.nome);
+      const ocupados = new Set(todasAsCamadas(prancheta.filhos).map((n) => n.nome));
+      const copiar = (n: TNo, raiz: boolean): TNo => {
+        // cópia funda: o nó novo não divide nada com o de origem. O id sai do lote, na ordem em que a árvore é percorrida
+        const copia = { ...structuredClone(n), id: e.novoId(), nome: raiz && op.nome !== undefined ? op.nome : nomeLivre(ocupados, `${n.nome} cópia`), bloqueado: false } as TNo;
+        tocados.add(copia.id);
+        if (copia.tipo === 'grupo' && n.tipo === 'grupo') copia.filhos = n.filhos.map((f) => copiar(f, false));
+        return copia;
+      };
+      if (op.nome !== undefined) ocupados.add(op.nome);
+      const copia = deslocarNo(copiar(no, true), op.dx, op.dy);
+      // base de um conjunto de recorte: a cópia vai acima das camadas presas a ela, para não virar a base delas
+      let depois = achado.indice + 1;
+      if (!no.recortadaNaDeBaixo) while (irmaos[depois]?.recortadaNaDeBaixo) depois++;
+      return comIrmaos(doc, achado, (lista) => [...lista.slice(0, depois), copia, ...lista.slice(depois)]);
+    }
+    case 'transferir': {
+      const achado = acharNo(doc, op.alvo);
+      const { no } = achado;
+      exigirDesbloqueado(no, autoria);
+      const grupo = op.grupo !== undefined ? acharNo(doc, op.grupo) : undefined;
+      if (grupo && grupo.no.tipo !== 'grupo') throw new FalhaDeOperacao(`"${grupo.no.nome}" não é um grupo`, 'grupo');
+      const destino = op.prancheta !== undefined ? acharPrancheta(doc, op.prancheta) : (grupo?.prancheta ?? achado.prancheta);
+      if (grupo && grupo.prancheta !== destino) throw new FalhaDeOperacao(`o grupo "${grupo.no.nome}" está em "${grupo.prancheta.nome}", não em "${destino.nome}"`, 'grupo');
+      if (grupo && (grupo.no === no || (no.tipo === 'grupo' && todasAsCamadas(no.filhos).includes(grupo.no))))
+        throw new FalhaDeOperacao(`o grupo "${no.nome}" não pode ir para dentro dele mesmo`, 'grupo');
+      if (grupo?.no.bloqueado) throw new FalhaDeOperacao(`o grupo "${grupo.no.nome}" está bloqueado e não recebe camadas`, 'grupo');
+      // outra prancheta: o nome é único dentro dela. O que colidir ganha número; o id continua o mesmo
+      let transferido = no;
+      if (destino !== achado.prancheta) {
+        const ocupados = new Set(todasAsCamadas(destino.filhos).map((n) => n.nome));
+        const renomear = (n: TNo): TNo => {
+          const nome = nomeLivre(ocupados, n.nome);
+          const filhos = n.tipo === 'grupo' ? n.filhos.map(renomear) : undefined;
+          const mudouDentro = n.tipo === 'grupo' && filhos?.some((f, i) => f !== n.filhos[i]);
+          if (nome === n.nome && !mudouDentro) return n;
+          if (nome !== n.nome) tocados.add(n.id);
+          return { ...n, nome, ...(filhos ? { filhos } : {}) } as TNo;
+        };
+        transferido = renomear(no);
+      }
+      tocados.add(no.id);
+      const inserir = (lista: readonly TNo[]): TNo[] => {
+        const indice = op.posicao === 'frente' ? lista.length : op.posicao === 'tras' ? 0 : Math.min(op.posicao, lista.length);
+        return [...lista.slice(0, indice), transferido, ...lista.slice(indice)];
+      };
+      const sem = substituir(doc, achado, []);
+      const prancheta = sem.pranchetas.find((p) => p.id === destino.id) as Prancheta;
+      if (!grupo) return comPrancheta(sem, { ...prancheta, filhos: inserir(prancheta.filhos) });
+      const filhos = trocarFilhosDoGrupo(prancheta.filhos, grupo.no.id, inserir);
+      if (!filhos) throw new FalhaDeOperacao(`o grupo "${grupo.no.nome}" não está mais em "${prancheta.nome}"`, 'grupo');
+      return comPrancheta(sem, { ...prancheta, filhos });
     }
     case 'remover': {
       const achado = acharNo(doc, op.alvo);

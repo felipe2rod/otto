@@ -4,7 +4,14 @@
 // - não há gerador de id aqui: o id de nó novo deriva do id do lote (ver ids.ts e operacoes.ts).
 import { z } from 'zod';
 
+/** Versão do formato da árvore salva. Só muda quando um documento antigo deixa de ser válido como está. */
 export const VERSAO_DO_FORMATO = 1;
+/**
+ * Versão do catálogo de operações. Muda quando entra, sai ou muda uma operação: editor e servidor aplicam o mesmo lote
+ * e precisam ter o mesmo catálogo. Não é a versão do formato: operação nova não invalida documento salvo.
+ * 2: entraram "duplicar" e "transferir".
+ */
+export const VERSAO_DO_CATALOGO = 2;
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'cor em hex #RRGGBB');
 /** Cor solta (#RRGGBB) ou referência a token ("token:primaria"). */
