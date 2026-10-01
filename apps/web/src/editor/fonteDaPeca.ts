@@ -1,6 +1,7 @@
 // De onde o editor tira a peça, os recursos e para onde manda cada lote. Em /editor/p/[id] é a
 // API; na bancada de desenvolvimento, um documento de exemplo local. O editor não sabe qual é.
 import { ListaDeFontes } from '@otto/shared';
+import { type ApiDeArquivos, criarApiDeArquivos } from '../api/arquivos';
 import { criarCliente } from '../api/cliente';
 import { type ApiDeLotes, criarApiDeLotes } from '../api/lotes';
 import { criarApiDePecas, type ResultadoDeAbrir } from '../api/pecas';
@@ -12,6 +13,10 @@ export interface FonteDaPeca {
   abrir(id: string): Promise<ResultadoDeAbrir>;
   /** Envio de lote, desfazer e refazer. Ausente: a peça abre SÓ PARA LEITURA. */
   lotes?: ApiDeLotes;
+  /** Envio de imagem e importação de SVG. Ausente: não dá para inserir arquivo. */
+  arquivos?: ApiDeArquivos;
+  /** Renomear a peça (o nome é do registro, não da árvore). Ausente: o nome não se troca daqui. */
+  renomear?(id: string, nome: string): Promise<{ ok: true; nome: string } | { ok: false; codigo: string }>;
   /** Bytes de imagem e de fonte para o motor. */
   recursos: RecursosDoRender;
   listarFontes(): Promise<FamiliaDeFonte[]>;
@@ -20,8 +25,11 @@ export interface FonteDaPeca {
 export function criarFonteDaApi(pecaId: string): FonteDaPeca {
   const cliente = criarCliente();
   let fontes: Promise<FamiliaDeFonte[]> | undefined;
+  const pecas = criarApiDePecas(cliente);
   return {
-    abrir: criarApiDePecas(cliente).abrir,
+    abrir: pecas.abrir,
+    renomear: pecas.renomear,
+    arquivos: criarApiDeArquivos(cliente),
     lotes: criarApiDeLotes(cliente, pecaId),
     recursos: criarRecursosDoRender(),
     listarFontes() {

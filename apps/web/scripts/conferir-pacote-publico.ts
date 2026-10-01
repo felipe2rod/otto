@@ -3,6 +3,7 @@
 //   pnpm --filter @otto/web conferir:pacote
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { SENTINELA_DO_MOTOR } from '@otto/render/sentinela';
 import { SENTINELA_DO_EDITOR } from '../src/editor/sentinela.ts';
 import { ROTAS_PUBLICAS } from '../src/site/rotas.ts';
 import { conferirPacotePublico } from './pacotePublico.ts';
@@ -34,10 +35,9 @@ const resultado = conferirPacotePublico(
   {
     // A página de "não encontrado" também é pública.
     rotas: [...ROTAS_PUBLICAS, '/_not-found'],
-    // A sentinela do editor primeiro. A outra é o motor: @otto/render ainda não exporta uma sentinela
-    // própria, então vale o nome da biblioteca de render, que o código de carga do motor cita
-    // ("canvaskit.js", CanvasKitInit) e nada mais no web.
-    proibidos: [SENTINELA_DO_EDITOR, 'canvaskit'],
+    // A sentinela do editor primeiro (é a que TEM de existir em algum script do build), depois a do
+    // motor de render, que o motor carrega consigo (MotorDeRender.sentinela).
+    proibidos: [SENTINELA_DO_EDITOR, SENTINELA_DO_MOTOR],
     // A bancada (página ".dev.tsx") só existe com `next dev`.
     rotasQueNaoPodemExistir: ['/editor/bancada'],
   },

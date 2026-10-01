@@ -32,3 +32,46 @@
   background: var(--laranja-fundo);
   border-color: var(--laranja);
 }
+
+.divisor {
+  width: 22px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--linha);
+}
+
+.inserir {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--texto-2);
+  font: 600 16px var(--mono);
+  cursor: pointer;
+}
+
+.inserir:hover {
+  background: var(--grafite-3);
+  color: var(--texto);
+}
+
+.inserir[data-desligado="sim"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* o campo de arquivo cobre o botão inteiro e fica invisível: o foco e o clique são dele */
+.inserir input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.inserir:focus-within {
+  outline: 2px solid var(--laranja);
+  outline-offset: 1px;
+}

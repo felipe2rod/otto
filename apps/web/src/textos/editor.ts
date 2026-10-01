@@ -20,8 +20,25 @@ export const editor = {
     paineis: 'Painéis',
     dicaDosPaineis: 'Esconder e mostrar os painéis (Tab, com o foco no canvas)',
     exportar: 'Exportar',
+    renomear: (peca: string): string => `Renomear ${peca}`,
+    nomeDaPeca: 'Nome da peça',
     salvamento: { salvo: 'salvo', salvando: 'salvando…', 'sem-conexao': 'sem conexão', leitura: 'só leitura' },
     avisosDoRender: (n: number): string => (n === 1 ? '1 aviso do canvas' : `${n} avisos do canvas`),
+  },
+
+  /** Envio de imagem e de SVG (experiencia.md, 3.3 e 3.4). */
+  envio: {
+    enviando: (arquivo: string): string => `Enviando ${arquivo}…`,
+    nota: 'Nota do envio',
+    tipoNaoAceito: (arquivo: string): string => `Não reconheci ${arquivo}. Aceito PNG, JPG, WebP e SVG.`,
+    grandeDemais: (arquivo: string, limiteEmMb: number): string => `${arquivo} passa do limite de ${limiteEmMb} MB.`,
+    imagemGrandeDemais: (arquivo: string, lado: number): string => `${arquivo} é grande demais em pixels. O lado maior pode ter até ${lado} px.`,
+    ilegivel: (arquivo: string): string => `Não consegui ler ${arquivo}. O arquivo parece corrompido.`,
+    svgSemFormas: (arquivo: string): string => `${arquivo} não tem forma que eu consiga importar. Converta o texto em curvas e exporte de novo.`,
+    svgInvalido: (arquivo: string): string => `Não consegui ler ${arquivo} como SVG.`,
+    naoEnviou: (arquivo: string): string => `${arquivo} não enviou. Tente de novo.`,
+    importadoComAvisos: (arquivo: string, avisos: string): string => `Importei ${arquivo}. Ficou de fora: ${avisos}.`,
+    soltar: 'Solte para inserir na peça',
   },
 
   /** O que o canvas deixou de mostrar. Discreto, mas nunca escondido. */
@@ -40,6 +57,7 @@ export const editor = {
     mover: { nome: 'Mover', tecla: 'V' },
     mao: { nome: 'Mão', tecla: 'H' },
     zoom: { nome: 'Zoom', tecla: 'Z' },
+    inserir: 'Inserir imagem ou SVG',
     comTecla: (nome: string, tecla: string): string => `${nome} (${tecla})`,
   },
 
@@ -104,6 +122,9 @@ export const editor = {
     tipos: { texto: 'texto', forma: 'forma', imagem: 'imagem', vetor: 'vetor', grupo: 'grupo', ajuste: 'camada de ajuste' },
     linha: (nome: string, tipo: string): string => `${nome}, ${tipo}`,
     prancheta: (nome: string, largura: number, altura: number): string => `${nome}, prancheta ${largura}×${altura}`,
+    copia: (camada: string, n: number): string => (n === 1 ? `${camada} cópia` : `${camada} cópia ${n}`),
+    pranchetaNova: 'Feed',
+    fonteEmFalta: 'a fonte desta camada não carregou',
     comMascara: 'com máscara',
     recortada: 'máscara de recorte na camada de baixo',
   },
@@ -134,6 +155,10 @@ export const editor = {
     paraAFrente: (camada: string): string => `trazer ${camada} para a frente`,
     paraTras: (camada: string): string => `enviar ${camada} para trás`,
     alterar: (propriedade: string, camada: string): string => `${propriedade.toLowerCase()} de ${camada}`,
+    duplicar: (camada: string): string => `duplicar ${camada}`,
+    redimensionar: (camada: string): string => `redimensionar ${camada}`,
+    inserir: (camada: string): string => `inserir ${camada}`,
+    trocarImagem: (camada: string): string => `trocar a imagem de ${camada}`,
   },
 
   propriedades: {
@@ -165,6 +190,8 @@ export const editor = {
     focoX: 'Foco X %',
     focoY: 'Foco Y %',
     zoomDaFoto: 'Zoom %',
+    trocarImagem: 'Trocar imagem',
+    medidasDaImagem: (largura: number, altura: number): string => `Original: ${largura}×${altura}`,
     fundo: 'Fundo',
     corSolta: (valor: string): string => `${valor} (solta)`,
     token: (nome: string, valor: string): string => `token ${nome} · ${valor}`,
@@ -200,6 +227,8 @@ export const editor = {
       texto: 'A peça está salva. Recarregue a página para tentar de novo.',
     },
     recarregar: 'Recarregar',
+    fonteEmFalta: (fontes: string): string => `Não consegui carregar ${fontes}. O texto com essa fonte não aparece no canvas.`,
+    tentarFonteDeNovo: 'Tentar de novo',
     telaEstreita: 'Para revisar e editar, abra no computador.',
   },
 } as const;

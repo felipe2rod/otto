@@ -29,9 +29,8 @@ const scriptsCitados = (texto: string): string[] => [...new Set(texto.match(SCRI
 
 /**
  * @param opcoes.rotas rotas públicas (a lista de src/site/rotas.ts)
- * @param opcoes.proibidos sequências que não podem aparecer em script público. A primeira é a
- *   sentinela do editor, e ela TEM de existir em algum script do build: é a prova de que a
- *   procura funciona depois da minificação.
+ * @param opcoes.proibidos sentinelas que não podem aparecer em script público. Cada uma TEM de
+ *   existir em algum script do build: é a prova de que a procura funciona depois da minificação.
  */
 export function conferirPacotePublico(
   build: LeitorDoBuild,
@@ -91,16 +90,16 @@ export function conferirPacotePublico(
     if (achado) violacoes.push(`${rota} é rota só de desenvolvimento e está no build (${achado})`);
   }
 
-  // Controle: a sentinela precisa estar em ALGUM script do build. Se não estiver (foi renomeada, o
-  // empacotador a removeu), não achá-la nas páginas públicas não quer dizer nada.
-  const sentinela = opcoes.proibidos[0];
-  if (sentinela !== undefined && violacoes.length === 0) {
-    const procurada = sentinela.toLowerCase();
-    const existe = build
+  // Controle: cada sentinela precisa estar em ALGUM script do build. Se não estiver (foi renomeada,
+  // o empacotador a removeu), não achá-la nas páginas públicas não quer dizer nada.
+  if (violacoes.length === 0) {
+    const scripts = build
       .listar('static')
       .filter((a) => a.endsWith('.js'))
-      .some((a) => build.ler(a)?.toLowerCase().includes(procurada));
-    if (!existe) violacoes.push(`a sentinela "${sentinela}" não está em nenhum script do build: o teste não prova nada`);
+      .map((a) => build.ler(a)?.toLowerCase() ?? '');
+    for (const sentinela of opcoes.proibidos) {
+      if (!scripts.some((texto) => texto.includes(sentinela.toLowerCase()))) violacoes.push(`a sentinela "${sentinela}" não está em nenhum script do build: o teste não prova nada`);
+    }
   }
 
   return { violacoes, conferido: { paginas, scripts: todosOsScripts.size } };

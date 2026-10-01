@@ -2,15 +2,16 @@
 // interface no story e contorno da seleção. Mora numa segunda camada, com Canvas 2D. Mudar a seleção
 // não recompõe a cena, e trocar o motor não toca aqui (docs/mvp/frontend.md, seção 4).
 //
-// Alças de redimensionar e a marca em âmbar das camadas tocadas pelo Otto entram com as fatias
-// que as usam.
+// A marca em âmbar das camadas tocadas pelo Otto entra com a fatia da tarefa.
 import type { Caixa, Prancheta } from '@otto/documento';
 import type { Area, Camera } from '../nucleo/camera';
 import type { Selecao } from '../nucleo/interface';
+import { alcasDe } from './alcas';
 import { disporPranchetas, guiasDoStory } from './guias';
 
 // O canvas não lê variável CSS: as cores repetem as de estilos/tokens.css.
 const LARANJA = '#ff5b1f';
+const PAPEL = '#f4efe3';
 const AMBAR = '#f4c430';
 const TEXTO_2 = '#a8a397';
 const TEXTO_3 = '#85827a';
@@ -26,6 +27,8 @@ export interface Cena {
   selecao: Selecao;
   /** Caixa de cada camada selecionada, no plano do editor (canvas/alvo.ts). */
   caixasDaSelecao: readonly Caixa[];
+  /** A caixa que mostra alças de redimensionar (uma camada só, sem rotação, em peça editável). */
+  alcas?: Caixa | undefined;
   /** Pranchetas e camadas tocadas pelo Otto na tarefa viva. */
   tocados: ReadonlySet<string>;
   rotuloDaZonaDaInterface: string;
@@ -105,22 +108,20 @@ export function desenharSobreposicoes(ctx: Contexto, cena: Cena): void {
     ctx.restore();
   }
 
-  // contorno da seleção, com os quatro cantos marcados (ainda não são alças: não redimensionam)
+  // contorno de cada camada selecionada
   ctx.strokeStyle = LARANJA;
-  ctx.fillStyle = LARANJA;
   ctx.lineWidth = 1.5;
-  for (const c of cena.caixasDaSelecao) {
-    const x = camera.x + c.x * camera.zoom;
-    const y = camera.y + c.y * camera.zoom;
-    const largura = c.w * camera.zoom;
-    const altura = c.h * camera.zoom;
-    ctx.strokeRect(x, y, largura, altura);
-    for (const [cx, cy] of [
-      [x, y],
-      [x + largura, y],
-      [x, y + altura],
-      [x + largura, y + altura],
-    ] as const)
-      ctx.fillRect(cx - 3, cy - 3, 6, 6);
+  for (const c of cena.caixasDaSelecao) ctx.strokeRect(camera.x + c.x * camera.zoom, camera.y + c.y * camera.zoom, c.w * camera.zoom, c.h * camera.zoom);
+
+  // alças: quadrado claro com borda laranja, nos quatro cantos e nos quatro lados
+  if (cena.alcas) {
+    ctx.lineWidth = 1;
+    for (const ponto of Object.values(alcasDe(cena.alcas))) {
+      const x = camera.x + ponto.x * camera.zoom;
+      const y = camera.y + ponto.y * camera.zoom;
+      ctx.fillStyle = PAPEL;
+      ctx.fillRect(x - 4, y - 4, 8, 8);
+      ctx.strokeRect(x - 4, y - 4, 8, 8);
+    }
   }
 }

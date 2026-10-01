@@ -48,9 +48,18 @@ describe('teste de pacote público', () => {
     expect(r.violacoes).toEqual([`/ carrega código do editor: "${SENTINELA}" em server/app/index.html`]);
   });
 
-  it('a comparação não liga para maiúscula e minúscula', () => {
-    const r = conferirPacotePublico(build({ ...SAO, 'static/chunks/publico.js': 'var CanvasKitInit' }), { rotas: ['/'], proibidos: [SENTINELA, 'canvaskit'] });
-    expect(r.violacoes).toEqual(['/ carrega código do editor: "canvaskit" em static/chunks/publico.js']);
+  it('com duas sentinelas (editor e motor), acusa a que aparecer no script público', () => {
+    const comMotor = { ...SAO, 'static/chunks/motor.js': 'sentinela="marca-do-motor"' };
+    const opcoes = { rotas: ['/'], proibidos: [SENTINELA, 'marca-do-motor'] };
+    expect(conferirPacotePublico(build(comMotor), opcoes).violacoes).toEqual([]);
+
+    const vazou = conferirPacotePublico(build({ ...comMotor, 'static/chunks/publico.js': 'x="MARCA-DO-MOTOR"' }), opcoes);
+    expect(vazou.violacoes).toEqual(['/ carrega código do editor: "marca-do-motor" em static/chunks/publico.js']);
+  });
+
+  it('falha se a sentinela do motor não está em pacote nenhum (o motor deixou de ser empacotado, ou a marca mudou)', () => {
+    const r = conferirPacotePublico(build(SAO), { rotas: ['/'], proibidos: [SENTINELA, 'marca-do-motor'] });
+    expect(r.violacoes).toEqual(['a sentinela "marca-do-motor" não está em nenhum script do build: o teste não prova nada']);
   });
 
   it('falha se a sentinela não está em pacote nenhum: sem ela o teste não prova nada', () => {

@@ -123,3 +123,35 @@
   color: var(--laranja);
   background: var(--laranja-fundo);
 }
+
+.botaoDeArquivo {
+  position: relative;
+  display: block;
+  padding: 5px 8px;
+  background: var(--grafite-3);
+  border: 1px solid var(--grafite-4);
+  border-radius: 3px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.botaoDeArquivo:hover {
+  background: var(--grafite-4);
+}
+
+.botaoDeArquivo[data-desligado="sim"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.botaoDeArquivo input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.botaoDeArquivo:focus-within {
+  outline: 2px solid var(--laranja);
+  outline-offset: 1px;
+}

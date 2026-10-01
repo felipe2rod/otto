@@ -8,7 +8,7 @@ import type { Documento, No, Prancheta } from '@otto/documento';
 import { type KeyboardEvent, memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { editor as textos } from '../../textos/editor';
 import { type AmbienteDoEditor, useAmbiente } from '../ambiente';
-import { loteDeBloqueio, loteDeRenomear, loteDeReordenar, loteDeVisibilidade } from '../nucleo/acoes';
+import { loteDeBloqueio, loteDeRenomear, loteDeReordenar, loteDeReordenarPara, loteDeVisibilidade } from '../nucleo/acoes';
 import { useArmazem } from '../nucleo/armazem';
 import type { Selecao } from '../nucleo/interface';
 import estilos from './PainelDeCamadas.module.css';
@@ -20,21 +20,31 @@ const ALTURA_PADRAO = 600;
 
 const ICONE: Readonly<Record<No['tipo'], string>> = { texto: 'T', forma: '▭', imagem: '▨', vetor: '✦', grupo: '▤', ajuste: '◐' };
 
-type Linha = { tipo: 'prancheta'; prancheta: Prancheta; id: string; nivel: 1 } | { tipo: 'no'; no: No; id: string; nivel: number };
+type Linha = { tipo: 'prancheta'; prancheta: Prancheta; id: string; nivel: 1 } | { tipo: 'no'; no: No; id: string; nivel: number; caminho: string };
+
+/** Quanto o ponteiro precisa andar para um clique virar arraste, em pixels. */
+const INICIO_DO_ARRASTE = 4;
+
+/** Onde a camada arrastada vai cair: sobre qual linha, e em que metade dela. */
+interface Destino {
+  id: string;
+  onde: 'acima' | 'abaixo';
+}
 
 /** A árvore achatada, na ordem em que aparece: cada prancheta, e as camadas de cima para baixo. */
 function achatar(doc: Documento, recolhidos: ReadonlySet<string>): Linha[] {
   const linhas: Linha[] = [];
-  const descer = (nos: readonly No[], nivel: number) => {
+  const descer = (nos: readonly No[], nivel: number, prancheta: string) => {
     for (let i = nos.length - 1; i >= 0; i--) {
       const no = nos[i] as No;
-      linhas.push({ tipo: 'no', no, id: no.id, nivel });
-      if (no.tipo === 'grupo' && !recolhidos.has(no.id)) descer(no.filhos, nivel + 1);
+      // "Prancheta/Camada": é como o motor cita a camada no que ficou em falta
+      linhas.push({ tipo: 'no', no, id: no.id, nivel, caminho: `${prancheta}/${no.nome}` });
+      if (no.tipo === 'grupo' && !recolhidos.has(no.id)) descer(no.filhos, nivel + 1, prancheta);
     }
   };
   for (const prancheta of doc.pranchetas) {
     linhas.push({ tipo: 'prancheta', prancheta, id: prancheta.id, nivel: 1 });
-    if (!recolhidos.has(prancheta.id)) descer(prancheta.filhos, 2);
+    if (!recolhidos.has(prancheta.id)) descer(prancheta.filhos, 2, prancheta.nome);
   }
   return linhas;
 }
@@ -49,17 +59,30 @@ interface PropriedadesDaLinha {
   recolhida: boolean;
   travado: boolean;
   renomeando: boolean;
+  /** A fonte desta camada de texto não carregou: ela não aparece no canvas. */
+  semFonte: boolean;
+  /** A camada arrastada vai cair acima ou abaixo desta linha. */
+  destino: 'acima' | 'abaixo' | null;
   topo: number;
   ambiente: AmbienteDoEditor;
   aoAlternarGrupo: (id: string) => void;
   aoRenomear: (id: string | null) => void;
+  aoApertar: (id: string, y: number) => void;
+  aoPassar: (id: string, y: number, meio: number) => void;
 }
 
-const LinhaDaArvore = memo(function LinhaDaArvore({ linha, idNoDom, ativa, recolhida, travado, renomeando, topo, ambiente, aoAlternarGrupo, aoRenomear }: PropriedadesDaLinha) {
+const LinhaDaArvore = memo(function LinhaDaArvore(props: PropriedadesDaLinha) {
+  const { linha, idNoDom, ativa, recolhida, travado, renomeando, semFonte, destino, topo, ambiente, aoAlternarGrupo, aoRenomear, aoApertar, aoPassar } = props;
   const ehGrupo = linha.tipo === 'prancheta' || linha.no.tipo === 'grupo';
   const nome = linha.tipo === 'prancheta' ? linha.prancheta.nome : linha.no.nome;
   const rotulo = linha.tipo === 'prancheta' ? textos.camadas.prancheta(nome, linha.prancheta.largura, linha.prancheta.altura) : textos.camadas.linha(nome, textos.camadas.tipos[linha.no.tipo]);
-  const selecionar = () => ambiente.interface.selecionar(linha.tipo === 'prancheta' ? { tipo: 'prancheta', id: linha.id } : { tipo: 'camadas', ids: [linha.id] });
+  // Shift (ou Ctrl) + clique acrescenta a camada à seleção, ou tira se já estava
+  const selecionar = (e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => {
+    if (linha.tipo === 'prancheta') return ambiente.interface.selecionar({ tipo: 'prancheta', id: linha.id });
+    if (e.shiftKey || e.ctrlKey || e.metaKey) return ambiente.interface.alternarNaSelecao(linha.id);
+    ambiente.interface.selecionar({ tipo: 'camadas', ids: [linha.id] });
+  };
+  const arrastavel = linha.tipo === 'no' && !travado && !linha.no.bloqueado && !renomeando;
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: o teclado da árvore é tratado no elemento com role="tree" (setas, com aria-activedescendant)
@@ -74,6 +97,12 @@ const LinhaDaArvore = memo(function LinhaDaArvore({ linha, idNoDom, ativa, recol
       className={estilos.linha}
       data-prancheta={linha.tipo === 'prancheta' ? 'sim' : undefined}
       data-oculta={linha.tipo === 'no' && !linha.no.visivel ? 'sim' : undefined}
+      data-destino={destino ?? undefined}
+      onPointerDown={(e) => arrastavel && e.button === 0 && aoApertar(linha.id, e.clientY)}
+      onPointerMove={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        aoPassar(linha.id, e.clientY, r.top + r.height / 2);
+      }}
       style={{ top: topo, paddingLeft: 6 + (linha.nivel - 1) * 14 }}
       onClick={selecionar}
     >
@@ -111,6 +140,11 @@ const LinhaDaArvore = memo(function LinhaDaArvore({ linha, idNoDom, ativa, recol
             // biome-ignore lint/a11y/noStaticElementInteractions: o duplo clique é atalho de mouse; pelo teclado, o nome se troca no painel de propriedades
             <span className={estilos.nome} onDoubleClick={() => !travado && !linha.no.bloqueado && aoRenomear(linha.id)}>
               {nome}
+            </span>
+          )}
+          {semFonte && (
+            <span className={estilos.marcaDeFalta} title={textos.camadas.fonteEmFalta} role="img" aria-label={textos.camadas.fonteEmFalta}>
+              !
             </span>
           )}
           {linha.no.recortadaNaDeBaixo && (
@@ -190,6 +224,12 @@ export function PainelDeCamadas() {
   const doc = useArmazem(ambiente.documento, (d) => d);
   const selecao = useArmazem(ambiente.interface.armazem, (e) => e.selecao);
   const travado = useArmazem(ambiente.somenteLeitura, (v) => v);
+  const fontesEmFalta = useArmazem(ambiente.faltas, (f) => f.emFalta.fontes);
+  const semFonte = useMemo(() => new Set(fontesEmFalta.flatMap((f) => f.camadas)), [fontesEmFalta]);
+  const [destino, setDestino] = useState<Destino | null>(null);
+  /** A camada apertada, e onde: vira arraste quando o ponteiro anda. */
+  const arraste = useRef<{ id: string; y: number; andou: boolean } | null>(null);
+  const destinoRef = useRef<Destino | null>(null);
   const [recolhidos, setRecolhidos] = useState<ReadonlySet<string>>(new Set());
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [rolagem, setRolagem] = useState({ topo: 0, altura: ALTURA_PADRAO });
@@ -220,6 +260,39 @@ export function PainelDeCamadas() {
 
   const alternarGrupo = useRef((id: string) => setRecolhidos((atual) => new Set(atual.has(id) ? [...atual].filter((x) => x !== id) : [...atual, id]))).current;
   const renomear = useRef((id: string | null) => setRenomeando(id)).current;
+
+  // Reordenar por arraste, só entre irmãs (o catálogo não muda camada de pai). Soltar é UM lote.
+  const apertar = useRef((id: string, y: number) => {
+    arraste.current = { id, y, andou: false };
+  }).current;
+  const passar = useRef((id: string, y: number, meio: number) => {
+    const a = arraste.current;
+    if (!a) return;
+    if (!a.andou && Math.abs(y - a.y) < INICIO_DO_ARRASTE && id === a.id) return;
+    a.andou = true;
+    const novo: Destino | null = id === a.id ? null : { id, onde: y < meio ? 'acima' : 'abaixo' };
+    if (novo?.id !== destinoRef.current?.id || novo?.onde !== destinoRef.current?.onde) {
+      destinoRef.current = novo;
+      setDestino(novo);
+    }
+  }).current;
+  useEffect(() => {
+    const soltar = () => {
+      const a = arraste.current;
+      const d = destinoRef.current;
+      arraste.current = null;
+      destinoRef.current = null;
+      setDestino(null);
+      const atual = ambiente.documento.obter();
+      if (a?.andou && d && atual) ambiente.aplicar(loteDeReordenarPara(atual, a.id, d.id, d.onde));
+    };
+    window.addEventListener('pointerup', soltar);
+    window.addEventListener('pointercancel', soltar);
+    return () => {
+      window.removeEventListener('pointerup', soltar);
+      window.removeEventListener('pointercancel', soltar);
+    };
+  }, [ambiente]);
 
   const selecionarLinha = (linha: Linha | undefined) => {
     if (linha) ambiente.interface.selecionar(linha.tipo === 'prancheta' ? { tipo: 'prancheta', id: linha.id } : { tipo: 'camadas', ids: [linha.id] });
@@ -267,10 +340,19 @@ export function PainelDeCamadas() {
             role="tree"
             tabIndex={0}
             aria-label={textos.paineis.camadas.titulo}
+            aria-multiselectable="true"
             aria-activedescendant={indiceAtivo >= 0 ? `${prefixo}-${linhas[indiceAtivo]?.id}` : undefined}
             className={estilos.arvore}
             style={{ height: linhas.length * ALTURA_DA_LINHA }}
             onKeyDown={aoTeclar}
+            // O Shift+clique do navegador estende a seleção de texto da página, e arrastar em cima
+            // dela começa um arraste nativo que cancela o ponteiro. Aqui ele é só da seleção de camadas.
+            onMouseDown={(e) => {
+              if (!e.shiftKey || e.target instanceof HTMLInputElement) return;
+              e.preventDefault();
+              e.currentTarget.focus({ preventScroll: true });
+            }}
+            onDragStart={(e) => e.preventDefault()}
           >
             {linhas.slice(primeira, ultima).map((linha, i) => (
               <LinhaDaArvore
@@ -281,6 +363,10 @@ export function PainelDeCamadas() {
                 recolhida={recolhidos.has(linha.id)}
                 travado={travado}
                 renomeando={renomeando === linha.id}
+                semFonte={linha.tipo === 'no' && semFonte.has(linha.caminho)}
+                destino={destino?.id === linha.id ? destino.onde : null}
+                aoApertar={apertar}
+                aoPassar={passar}
                 topo={(primeira + i) * ALTURA_DA_LINHA}
                 ambiente={ambiente}
                 aoAlternarGrupo={alternarGrupo}

@@ -30,6 +30,7 @@ export type Acao =
   /** Setas: move a seleção, em unidades do documento. */
   | { tipo: 'mover'; dx: number; dy: number }
   | { tipo: 'remover' }
+  | { tipo: 'duplicar' }
   /** Um passo na pilha: 1 traz para a frente, -1 envia para trás. */
   | { tipo: 'reordenar'; sentido: 1 | -1 }
   /** Tecla que no Photoshop é ferramenta e aqui não é. Não faz nada; serve para o evento de uso. */
@@ -51,6 +52,7 @@ export function resolverAtalho(tecla: Tecla, contexto: Contexto): Acao | null {
     if (tecla.key === '+' || tecla.key === '=') return { tipo: 'zoom', sentido: 1 };
     if (tecla.key === '-') return { tipo: 'zoom', sentido: -1 };
     if (letra === 'z') return tecla.shiftKey ? { tipo: 'refazer' } : { tipo: 'desfazer' };
+    if (letra === 'j') return { tipo: 'duplicar' };
     if (tecla.key === ']') return { tipo: 'reordenar', sentido: 1 };
     if (tecla.key === '[') return { tipo: 'reordenar', sentido: -1 };
     return null;

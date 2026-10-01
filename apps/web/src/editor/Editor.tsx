@@ -7,14 +7,14 @@
 // Otto e interface. Aqui nascem a visão (câmera), a interface e, quando a peça abre, a sessão do
 // documento: é por ela que TODO gesto (arraste, seta, painel, Delete) vira lote do catálogo, com a
 // fila otimista, o conflito de versão e a falta de conexão tratados num lugar só.
-import type { Documento, Medidor, Operacao } from '@otto/documento';
+import { type Documento, type Medidor, type Operacao, todasAsCamadas } from '@otto/documento';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { editor as textos } from '../textos/editor';
 import { erros } from '../textos/erros';
 import { type AmbienteDoEditor, ProvedorDoEditor } from './ambiente';
-import { AreaDoCanvas } from './canvas/AreaDoCanvas';
+import { AreaDoCanvas, type OndeSoltou } from './canvas/AreaDoCanvas';
 import { caixaDoConteudo } from './canvas/guias';
-import { type FabricaDeMotor, type MotorDeRender, naoDesenhado } from './canvas/motor';
+import { type FabricaDeMotor, type MotorDeRender, naoDesenhado, type RecursosEmFalta } from './canvas/motor';
 import { temWebGL as detectarWebGL } from './canvas/webgl';
 import { type FaltasDoRender, SEM_FALTAS } from './casca/AvisosDoRender';
 import { BarraDeFerramentas } from './casca/BarraDeFerramentas';
@@ -22,8 +22,9 @@ import { BarraDoTopo } from './casca/BarraDoTopo';
 import { EstadoDaPeca, type SituacaoDaPeca } from './casca/EstadoDaPeca';
 import { Painel } from './casca/Painel';
 import estilos from './Editor.module.css';
+import { type Aviso, criarEnvio } from './envio';
 import { criarFonteDaApi, type FonteDaPeca } from './fonteDaPeca';
-import { loteDeMoverPorSeta, loteDeRemover, loteDeReordenar } from './nucleo/acoes';
+import { loteDeDuplicar, loteDeMoverPorSeta, loteDeRemover, loteDeReordenar } from './nucleo/acoes';
 import { criarArmazem, useArmazem } from './nucleo/armazem';
 import { resolverAtalho } from './nucleo/atalhos';
 import { aplicadorDoCatalogo } from './nucleo/catalogo';
@@ -77,7 +78,8 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   const [estado] = useState(() => criarArmazem<EstadoDaPecaAberta>(SEM_PECA));
   const [somenteLeitura] = useState(() => criarArmazem(true));
   const [faltas] = useState(() => criarArmazem<FaltasDoRender>(SEM_FALTAS));
-  const [aviso] = useState(() => criarArmazem<string | null>(null));
+  const [aviso] = useState(() => criarArmazem<Aviso | null>(null));
+  const [enviando] = useState(() => criarArmazem<readonly string[]>([]));
 
   const [comWebGL] = useState(temWebGL);
   const [situacao, setSituacao] = useState<SituacaoDaPeca>({ estado: 'abrindo' });
@@ -85,39 +87,63 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   const paineisVisiveis = useArmazem(iface.armazem, (e) => e.paineisVisiveis);
   const mensagem = useArmazem(aviso, (a) => a);
   const semConexao = useArmazem(estado, (e) => e.salvamento === 'sem-conexao');
+  const fontesEmFalta = useArmazem(faltas, (f) => f.emFalta.fontes);
+  const arquivosEmEnvio = useArmazem(enviando, (e) => e);
+  const podeEditar = useArmazem(somenteLeitura, (v) => !v);
 
   // A sessão e o motor mudam sem ninguém precisar renderizar: ficam em ref, lidos por função estável.
   const sessaoRef = useRef<Sessao | undefined>(undefined);
   const medidorRef = useRef<Medidor | undefined>(undefined);
   const revertendo = useRef(false);
   const [obterSessao] = useState(() => () => sessaoRef.current);
+  const motorRef = useRef<MotorDeRender | null>(null);
   const [aoTerMotor] = useState(() => (motor: MotorDeRender | null) => {
+    motorRef.current = motor;
     // o medidor de tinta é o do motor: o mesmo motor de texto do servidor (alinhar e distribuir)
     medidorRef.current = motor?.medidor;
   });
-  const [aoPrepararRecursos] = useState(() => (motor: MotorDeRender) => {
-    const emFalta = motor.emFalta;
-    faltas.definir((f) => ({ ...f, emFalta }));
+  const [aoMudarEmFalta] = useState(() => (emFalta: RecursosEmFalta) => faltas.definir((f) => ({ ...f, emFalta })));
+
+  /** Seleciona camadas pelo nome, na peça como está agora (os ids de nó novo só existem depois do lote). */
+  const [selecionarPorNome] = useState(() => (nomes: string[]) => {
+    const doc = documento.obter();
+    const ids =
+      doc?.pranchetas.flatMap((p) =>
+        todasAsCamadas(p.filhos)
+          .filter((n) => nomes.includes(n.nome))
+          .map((n) => n.id),
+      ) ?? [];
+    iface.selecionar({ tipo: 'camadas', ids });
   });
 
   /** O que os painéis e os atalhos usam para escrever: um caminho só, sempre pela sessão. */
-  const ambiente = useMemo<AmbienteDoEditor>(
-    () => ({
-      interface: iface,
-      documento,
-      somenteLeitura,
-      listarFontes: () => fonte.listarFontes(),
-      aplicar(lote) {
-        const sessao = sessaoRef.current;
-        if (!lote || !sessao) return false;
-        const r = sessao.aplicar(lote.descricao, lote.operacoes);
-        // o motivo local é texto do catálogo, escrito para o agente: a tela diz a frase dela
-        if (!r.ok) aviso.definir(erros.doCodigo(r.motivo === 'somente_leitura' || r.motivo === 'sem_conexao' ? r.motivo : 'lote_invalido'));
-        return r.ok;
+  const ambiente = useMemo<AmbienteDoEditor>(() => {
+    const aplicar: AmbienteDoEditor['aplicar'] = (lote) => {
+      const sessao = sessaoRef.current;
+      if (!lote || !sessao) return false;
+      const r = sessao.aplicar(lote.descricao, lote.operacoes);
+      // o motivo local é texto do catálogo, escrito para o agente: a tela diz a frase dela
+      if (!r.ok) aviso.definir({ texto: erros.doCodigo(r.motivo === 'somente_leitura' || r.motivo === 'sem_conexao' ? r.motivo : 'lote_invalido'), tom: 'erro' });
+      return r.ok;
+    };
+    const envio = criarEnvio({
+      arquivos: () => fonte.arquivos,
+      documento: documento.obter,
+      // sem prancheta sob o ponteiro: a da seleção, ou a primeira
+      pranchetaPadrao: () => {
+        const doc = documento.obter();
+        const { selecao } = iface.armazem.obter();
+        if (!doc || !selecao) return undefined;
+        if (selecao.tipo === 'prancheta') return selecao.id;
+        return doc.pranchetas.find((p) => todasAsCamadas(p.filhos).some((n) => selecao.ids.includes(n.id)))?.id;
       },
-    }),
-    [iface, documento, somenteLeitura, fonte, aviso],
-  );
+      aplicar,
+      selecionarPorNome,
+      aviso,
+      enviando,
+    });
+    return { interface: iface, documento, somenteLeitura, faltas, listarFontes: () => fonte.listarFontes(), aplicar, inserirArquivos: envio.inserir, trocarImagem: envio.trocarImagem };
+  }, [iface, documento, somenteLeitura, faltas, fonte, aviso, enviando, selecionarPorNome]);
 
   // Abre a peça e cria a sessão do documento. Sem WebGL nem busca: a peça não abre assim.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `tentativa` existe para o "tentar de novo" repetir a busca
@@ -167,7 +193,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
           faltas.definir((f) => ({ ...f, naoDesenhado: lista }));
         }
         if (e.recusa) {
-          aviso.definir(erros.doCodigo(e.recusa.codigo));
+          aviso.definir({ texto: erros.doCodigo(e.recusa.codigo), tom: 'erro' });
           sessao.dispensarRecusa();
         }
       };
@@ -200,8 +226,22 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       revertendo.current = false;
     });
     if (r.ok) sessao.adotar({ doc: r.doc, versao: r.versao });
-    else aviso.definir(erros.doCodigo(r.codigo));
+    else aviso.definir({ texto: erros.doCodigo(r.codigo), tom: 'erro' });
   });
+
+  /** Pede ao motor as fontes e imagens outra vez (o que não chegou é tentado de novo). */
+  const tentarRecursosDeNovo = async () => {
+    const doc = documento.obter();
+    if (doc) await motorRef.current?.prepararRecursos(doc).catch(() => undefined);
+  };
+
+  /** O nome da peça é do registro, não da árvore: renomear não é lote nem passo do histórico. */
+  const renomearPeca = async (novo: string) => {
+    if (situacao.estado !== 'aberta' || !fonte.renomear || novo.trim() === '' || novo.trim() === situacao.nome) return;
+    const r = await fonte.renomear(pecaId, novo.trim());
+    if (r.ok) setSituacao({ estado: 'aberta', nome: r.nome });
+    else aviso.definir({ texto: erros.doCodigo(r.codigo), tom: 'erro' });
+  };
 
   // Atalhos. Uma tabela só (nucleo/atalhos.ts); aqui é só a ligação com o teclado.
   useEffect(() => {
@@ -249,6 +289,13 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
           if (ambiente.aplicar(lote)) iface.selecionar(null);
           break;
         }
+        case 'duplicar': {
+          const copia = doc && loteDeDuplicar(doc, selecao);
+          if (!copia) return;
+          // a cópia nasce selecionada, como no Photoshop
+          if (ambiente.aplicar(copia.lote)) selecionarPorNome(copia.nomes);
+          break;
+        }
         case 'reordenar': {
           const id = selecao?.tipo === 'camadas' && selecao.ids.length === 1 ? selecao.ids[0] : undefined;
           const lote = doc && id ? loteDeReordenar(doc, id, acao.sentido) : null;
@@ -271,7 +318,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       window.removeEventListener('keyup', aoSoltar);
       window.removeEventListener('blur', aoPerderOFoco);
     };
-  }, [iface, visao, documento, ambiente, reverter]);
+  }, [iface, visao, documento, ambiente, reverter, selecionarPorNome]);
 
   // Sem conexão: a edição trava (a sessão recusa lote novo) e o lote parado é reenviado, com o
   // mesmo id, quando o navegador volta a ter rede e de tempos em tempos.
@@ -306,6 +353,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
     <ProvedorDoEditor ambiente={ambiente}>
       <div className={estilos.editor} data-otto={SENTINELA_DO_EDITOR} data-paineis={paineisVisiveis ? 'visiveis' : 'ocultos'}>
         <BarraDoTopo
+          {...(fonte.renomear ? { aoRenomear: (novo: string) => void renomearPeca(novo) } : {})}
           nomeDaPeca={nome}
           estado={estado}
           faltas={faltas}
@@ -319,7 +367,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
 
         {paineisVisiveis && (
           <>
-            <BarraDeFerramentas interface={iface} />
+            <BarraDeFerramentas interface={iface} podeInserir={podeEditar && fonte.arquivos !== undefined} aoInserir={(arquivos) => void ambiente.inserirArquivos(arquivos)} />
             <div className={estilos.esquerda}>
               <Painel titulo={textos.paineis.otto.titulo} vazio={textos.paineis.otto.vazio} destaque />
             </div>
@@ -335,7 +383,8 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
                 documento={documento}
                 sessao={obterSessao}
                 aoTerMotor={aoTerMotor}
-                aoPrepararRecursos={aoPrepararRecursos}
+                aoMudarEmFalta={aoMudarEmFalta}
+                {...(fonte.arquivos ? { aoSoltarArquivos: (arquivos: File[], onde: OndeSoltou | undefined) => void ambiente.inserirArquivos(arquivos, onde) } : {})}
                 recursos={fonte.recursos}
                 {...(criarMotor ? { criarMotor } : {})}
               />
@@ -345,9 +394,22 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
                   {erros.doCodigo('sem_conexao')}
                 </p>
               )}
+              {fontesEmFalta.length > 0 && (
+                <div className={estilos.faixaDeFonte} role="status">
+                  <p>{textos.avisos.fonteEmFalta(fontesEmFalta.map((f) => `${f.familia} ${f.peso}`).join(', '))}</p>
+                  <button type="button" onClick={() => void tentarRecursosDeNovo()}>
+                    {textos.avisos.tentarFonteDeNovo}
+                  </button>
+                </div>
+              )}
+              {arquivosEmEnvio.length > 0 && (
+                <p className={estilos.enviando} role="status">
+                  {arquivosEmEnvio.map((nomeDoArquivo) => textos.envio.enviando(nomeDoArquivo)).join(' ')}
+                </p>
+              )}
               {mensagem && (
-                <div className={estilos.aviso} role="alert">
-                  <p>{mensagem}</p>
+                <div className={estilos.aviso} data-tom={mensagem.tom} {...(mensagem.tom === 'erro' ? { role: 'alert' } : { role: 'status', 'aria-label': textos.envio.nota })}>
+                  <p>{mensagem.texto}</p>
                   <button type="button" aria-label={textos.avisos.fechar} onClick={() => aviso.definir(null)}>
                     <span aria-hidden="true">×</span>
                   </button>

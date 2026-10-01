@@ -3,11 +3,15 @@
   inset: 0;
   overflow: hidden;
   touch-action: none;
+  user-select: none;
   cursor: default;
   outline: none;
-  /* A mesma cor que o motor usa para limpar o canvas (FUNDO_DA_AREA, em motor.ts): é o que aparece
-     enquanto ele não carregou. O pontilhado da POC saiu: o motor pinta o fundo sem transparência. */
+  /* A área de trabalho é daqui: o motor desenha só as pranchetas, com o fundo vazado. O pontilhado
+     acompanha a câmera (as variáveis são escritas a cada quadro), para a vista não parecer parada. */
   background-color: #121211;
+  background-image: radial-gradient(circle at 1px 1px, #22221f 1px, transparent 0);
+  background-size: var(--fundo-passo, 22px) var(--fundo-passo, 22px);
+  background-position: var(--fundo-x, 0) var(--fundo-y, 0);
 }
 
 .area[data-ferramenta="mao"] {
@@ -87,4 +91,19 @@
   border-radius: 4px;
   padding: 6px 12px;
   font-weight: 500;
+}
+
+.area[data-soltando="sim"]::after {
+  content: attr(data-convite);
+  position: absolute;
+  inset: 10px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--laranja);
+  border-radius: 8px;
+  /* escuro o bastante para o convite ser lido por cima de qualquer arte */
+  background: rgba(18, 18, 17, 0.78);
+  color: var(--papel);
+  font: 22px var(--serif);
+  pointer-events: none;
 }

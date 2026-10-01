@@ -58,6 +58,11 @@ describe('atalhos', () => {
     expect(resolverAtalho(tecla({ key: 'Backspace' }), emPainel)).toEqual({ tipo: 'remover' });
   });
 
+  it('Ctrl+J duplica a camada', () => {
+    expect(resolverAtalho(tecla({ key: 'j', ctrlKey: true }), noCanvas)).toEqual({ tipo: 'duplicar' });
+    expect(resolverAtalho(tecla({ key: 'j' }), noCanvas)).toBeNull();
+  });
+
   it('Ctrl+] traz para a frente e Ctrl+[ envia para trás, um passo', () => {
     expect(resolverAtalho(tecla({ key: ']', ctrlKey: true }), noCanvas)).toEqual({ tipo: 'reordenar', sentido: 1 });
     expect(resolverAtalho(tecla({ key: '[', ctrlKey: true }), noCanvas)).toEqual({ tipo: 'reordenar', sentido: -1 });

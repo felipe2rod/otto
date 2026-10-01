@@ -1,8 +1,7 @@
-// Teste de alvo provisório: que camada está sob o ponteiro. O definitivo (com rotação de verdade e
-// forma da camada) é de @otto/documento e ainda não veio.
+// Geometria da seleção na tela. O teste de alvo em si é de @otto/documento e tem os testes dele lá.
 import { aplicarLote, type Documento, disporPranchetas, documentoVazio } from '@otto/documento';
 import { describe, expect, it } from 'vitest';
-import { acharEm, caixasDaSelecao } from './alvo';
+import { caixasDaSelecao, noDaAlca } from './alvo';
 
 function montar(): Documento {
   const forma = (nome: string, x: number, y: number, extra: Record<string, unknown> = {}) => ({
@@ -34,40 +33,6 @@ function montar(): Documento {
 }
 
 const doc = montar();
-const nome = (alvo: ReturnType<typeof acharEm>) => alvo?.no?.nome ?? alvo?.prancheta.nome ?? null;
-
-describe('teste de alvo', () => {
-  it('acha a camada sob o ponto', () => {
-    expect(nome(acharEm(doc, { x: 110, y: 110 }))).toBe('Baixo');
-  });
-
-  it('onde duas se sobrepõem, vale a de cima', () => {
-    expect(nome(acharEm(doc, { x: 250, y: 180 }))).toBe('Cima');
-  });
-
-  it('ponto na prancheta, fora de qualquer camada, acha a prancheta', () => {
-    const alvo = acharEm(doc, { x: 900, y: 1200 });
-    expect(alvo?.no).toBeUndefined();
-    expect(alvo?.prancheta.nome).toBe('Feed');
-  });
-
-  it('camada bloqueada ou oculta não é alvo no canvas', () => {
-    expect(nome(acharEm(doc, { x: 650, y: 150 }))).toBe('Feed');
-    expect(nome(acharEm(doc, { x: 650, y: 450 }))).toBe('Feed');
-  });
-
-  it('desconta a posição da prancheta no plano do editor', () => {
-    const story = doc.pranchetas[1];
-    const origem = story && disporPranchetas(doc.pranchetas).get(story.id);
-    if (!origem) throw new Error('falta o story');
-    expect(nome(acharEm(doc, { x: origem.x + 60, y: 60 }))).toBe('No story');
-  });
-
-  it('ponto fora de toda prancheta não acha nada', () => {
-    expect(acharEm(doc, { x: -50, y: -50 })).toBeUndefined();
-    expect(acharEm(doc, { x: 1100, y: 100 })).toBeUndefined();
-  });
-});
 
 describe('caixas da seleção, no plano do editor', () => {
   const cima = doc.pranchetas[0]?.filhos[1];
@@ -87,5 +52,31 @@ describe('caixas da seleção, no plano do editor', () => {
   it('sem seleção de camada não há caixa', () => {
     expect(caixasDaSelecao(doc, null, null)).toEqual([]);
     expect(caixasDaSelecao(doc, { tipo: 'prancheta', id: 'x' }, null)).toEqual([]);
+  });
+});
+
+describe('qual camada tem alças', () => {
+  const cima = doc.pranchetas[0]?.filhos[1];
+  const travada = doc.pranchetas[0]?.filhos[2];
+  const noStory = doc.pranchetas[1]?.filhos[0];
+  if (!cima || !travada || !noStory) throw new Error('faltam camadas');
+
+  it('uma camada selecionada, sem rotação: tem alças, na caixa dela e no plano do editor', () => {
+    expect(noDaAlca(doc, { tipo: 'camadas', ids: [cima.id] })).toMatchObject({ caixa: { x: 200, y: 150, w: 200, h: 100 }, caixaNoPlano: { x: 200, y: 150 } });
+    const origem = disporPranchetas(doc.pranchetas).get(doc.pranchetas[1]?.id ?? '');
+    expect(noDaAlca(doc, { tipo: 'camadas', ids: [noStory.id] })?.caixaNoPlano.x).toBe((origem?.x ?? 0) + 50);
+  });
+
+  it('várias camadas, camada bloqueada, prancheta ou nada: sem alças', () => {
+    expect(noDaAlca(doc, { tipo: 'camadas', ids: [cima.id, noStory.id] })).toBeUndefined();
+    expect(noDaAlca(doc, { tipo: 'camadas', ids: [travada.id] })).toBeUndefined();
+    expect(noDaAlca(doc, { tipo: 'prancheta', id: doc.pranchetas[0]?.id ?? '' })).toBeUndefined();
+    expect(noDaAlca(doc, null)).toBeUndefined();
+  });
+
+  it('camada girada não tem alça nesta fatia', () => {
+    const girada = aplicarLote(doc, [{ op: 'alterar', alvo: cima.id, props: { rotacao: 30 } }], { autoria: { tipo: 'designer' }, idDoLote: 'g' });
+    if (!girada.ok) throw new Error('devia girar');
+    expect(noDaAlca(girada.doc, { tipo: 'camadas', ids: [cima.id] })).toBeUndefined();
   });
 });

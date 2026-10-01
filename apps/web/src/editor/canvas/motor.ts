@@ -14,16 +14,14 @@ export { naoDesenhado } from '@otto/render';
 
 export type FabricaDeMotor = (canvas: HTMLCanvasElement, recursos: RecursosDoRender) => Promise<MotorDeRender>;
 
-/**
- * Cor da área de trabalho, atrás das pranchetas. Quem a pinta é o motor (ele limpa o canvas inteiro
- * a cada quadro, sem transparência), então a cor do editor entra por aqui. É a mesma do CSS da área,
- * que aparece enquanto o motor não carregou.
- */
-export const FUNDO_DA_AREA = '#121211';
-
 export const criarMotor: FabricaDeMotor = async (canvas, recursos) => {
   const { criarMotor: criarNoNavegador } = await import('@otto/render/navegador');
-  return criarNoNavegador(canvas, recursos, { fundo: FUNDO_DA_AREA });
+  // Fundo transparente: o canvas fica vazado fora das pranchetas e a área de trabalho (cor e
+  // pontilhado) é do CSS do editor, por baixo dele.
+  const motor = await criarNoNavegador(canvas, recursos, { fundo: 'transparente' });
+  // Só em desenvolvimento: o motor fica à mão no console, para ler os contadores ao medir quadros.
+  if (process.env.NODE_ENV === 'development') (window as unknown as { __ottoMotor?: MotorDeRender }).__ottoMotor = motor;
+  return motor;
 };
 
 /** O motor recusa abrir sem WebGL com um erro deste nome (ErroSemWebGL, de @otto/render/navegador). */

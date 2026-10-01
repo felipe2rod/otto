@@ -121,6 +121,52 @@
   line-height: 1;
 }
 
+.aviso[data-tom="nota"] {
+  background: var(--grafite-2);
+  border-color: var(--ambar);
+  color: var(--texto);
+}
+
+.faixaDeFonte {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--ambar-fundo);
+  border-bottom: 1px solid rgba(244, 196, 48, 0.5);
+  color: var(--ambar);
+}
+
+.faixaDeFonte p {
+  margin: 0;
+}
+
+.faixaDeFonte button {
+  padding: 3px 10px;
+  background: none;
+  border: 1px solid currentcolor;
+  border-radius: 4px;
+  color: inherit;
+}
+
+.enviando {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--grafite-1);
+  border: 1px solid var(--linha);
+  border-radius: 5px;
+  font: 11px var(--mono);
+  color: var(--texto-2);
+}
+
 /* Abaixo de 1280 px a coluna direita recolhe. */
 @media (max-width: 1279px) {
   .editor {

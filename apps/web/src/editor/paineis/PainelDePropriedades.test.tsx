@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { editor as textos } from '../../textos/editor';
 import { ambienteDeTeste, documentoDeTeste } from './apoioDeTeste';
 import { PainelDePropriedades } from './PainelDePropriedades';
@@ -18,10 +18,11 @@ const doc = () =>
       prancheta: 'Feed',
       no: { tipo: 'texto', nome: 'Título', conteudo: 'Olá', fonte: 'Anton', peso: 400, tamanho: 96, x: 90, y: 840, largura: 900, altura: 200, cor: 'token:primaria' },
     },
+    { op: 'criarNo', prancheta: 'Feed', no: { tipo: 'imagem', nome: 'Foto', arquivo: 'a'.repeat(64), larguraOriginal: 800, alturaOriginal: 600, x: 0, y: 0, largura: 400, altura: 300 } },
     { op: 'criarNo', prancheta: 'Feed', no: { tipo: 'forma', nome: 'Travada', forma: 'elipse', x: 0, y: 0, largura: 50, altura: 50, preenchimento: '#000000', bloqueado: true } },
   ]);
 
-function montar(qual?: 'Selo' | 'Título' | 'Travada' | 'prancheta' | 'varias', opcoes: { somenteLeitura?: boolean } = {}) {
+function montar(qual?: 'Selo' | 'Título' | 'Travada' | 'Foto' | 'prancheta' | 'varias', opcoes: { somenteLeitura?: boolean } = {}) {
   const a = ambienteDeTeste(doc(), opcoes);
   const feed = a.documento.obter()?.pranchetas[0];
   const id = (nome: string) => feed?.filhos.find((n) => n.nome === nome)?.id ?? '';
@@ -153,5 +154,22 @@ describe('painel de propriedades: cada confirmação é UM lote do catálogo', (
     expect(screen.getByText(p.bloqueada)).toBeDefined();
     cleanup();
     expect(montar('Selo', { somenteLeitura: true }).campo(p.x).disabled).toBe(true);
+  });
+});
+
+describe('painel de propriedades: trocar a imagem', () => {
+  it('escolher um arquivo no "Trocar imagem" entrega a camada e o arquivo ao editor', () => {
+    const { ambiente, id } = montar('Foto');
+    const arquivo = new File([new Uint8Array(4)], 'nova.jpg', { type: 'image/jpeg' });
+    fireEvent.change(screen.getByLabelText(p.trocarImagem), { target: { files: [arquivo] } });
+
+    expect(ambiente.trocarImagem).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(ambiente.trocarImagem).mock.calls[0]?.[0].id).toBe(id('Foto'));
+    expect(vi.mocked(ambiente.trocarImagem).mock.calls[0]?.[1]).toBe(arquivo);
+  });
+
+  it('mostra as medidas da imagem de origem', () => {
+    montar('Foto');
+    expect(screen.getByText(p.medidasDaImagem(800, 600))).toBeDefined();
   });
 });

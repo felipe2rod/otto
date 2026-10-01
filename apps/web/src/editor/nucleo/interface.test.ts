@@ -44,4 +44,22 @@ describe('estado de interface', () => {
     i.selecionar({ tipo: 'camadas', ids: [] });
     expect(i.armazem.obter().selecao).toBeNull();
   });
+
+  it('Shift+clique acrescenta a camada à seleção, e tira se já estava', () => {
+    const i = criarInterface();
+    i.alternarNaSelecao('a');
+    i.alternarNaSelecao('b');
+    expect(i.armazem.obter().selecao).toEqual({ tipo: 'camadas', ids: ['a', 'b'] });
+    i.alternarNaSelecao('a');
+    expect(i.armazem.obter().selecao).toEqual({ tipo: 'camadas', ids: ['b'] });
+    i.alternarNaSelecao('b');
+    expect(i.armazem.obter().selecao).toBeNull();
+  });
+
+  it('acrescentar camada com uma prancheta selecionada troca a seleção pela camada', () => {
+    const i = criarInterface();
+    i.selecionar({ tipo: 'prancheta', id: 'p1' });
+    i.alternarNaSelecao('a');
+    expect(i.armazem.obter().selecao).toEqual({ tipo: 'camadas', ids: ['a'] });
+  });
 });

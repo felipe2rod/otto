@@ -64,7 +64,7 @@ function DaPrancheta({ prancheta, doc, travado }: { prancheta: Prancheta; doc: D
 }
 
 function DoNo({ no, doc, travado }: { no: No; doc: Documento; travado: boolean }) {
-  const { aplicar } = useAmbiente();
+  const { aplicar, trocarImagem } = useAmbiente();
   const desativado = travado || no.bloqueado;
   const alterar = (props: Record<string, unknown>, propriedade: string) => aplicar(loteDeAlterar(no, props, propriedade));
   /** Campo numérico: lê o texto, transforma e manda. O Campo já recusou o que não é número. */
@@ -144,6 +144,24 @@ function DoNo({ no, doc, travado }: { no: No; doc: Documento; travado: boolean }
 
       {no.tipo === 'imagem' && (
         <Grupo titulo={p.grupos.imagem}>
+          <div className={estilos.campo} data-largo="sim">
+            <span>{p.medidasDaImagem(no.larguraOriginal, no.alturaOriginal)}</span>
+            {/* o campo de arquivo é o controle: o rótulo dá a ele a cara de botão */}
+            <label className={estilos.botaoDeArquivo} data-desligado={desativado ? 'sim' : undefined}>
+              {p.trocarImagem}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={desativado}
+                aria-label={p.trocarImagem}
+                onChange={(e) => {
+                  const arquivo = e.target.files?.[0];
+                  e.target.value = '';
+                  if (arquivo) void trocarImagem(no, arquivo);
+                }}
+              />
+            </label>
+          </div>
           <label className={estilos.campo}>
             <span>{p.ajuste}</span>
             <select value={no.ajuste} disabled={desativado} onChange={(e) => alterar({ ajuste: e.target.value }, p.ajuste)}>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { Documento } from '@otto/documento';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { editor as textos } from '../../textos/editor';
 import { montarDocumentoDeExemplo } from '../bancada/documentoDeExemplo';
@@ -9,8 +9,8 @@ import { criarArmazem } from '../nucleo/armazem';
 import { criarInterface } from '../nucleo/interface';
 import { criarVisao } from '../nucleo/visao';
 import { AreaDoCanvas } from './AreaDoCanvas';
-import { criarArmazemDaPrevia } from './controleDeGestos';
-import type { FabricaDeMotor, MotorDeRender } from './motor';
+import { criarArmazemAoVivo, criarArmazemDaPrevia } from './controleDeGestos';
+import type { FabricaDeMotor, MotorDeRender, RecursosEmFalta } from './motor';
 
 beforeAll(() => {
   // o jsdom não tem canvas: sem contexto 2D, as sobreposições simplesmente não desenham
@@ -22,6 +22,7 @@ const EXEMPLO = montarDocumentoDeExemplo({ hash: 'a'.repeat(64), largura: 1200, 
 
 function motorFalso() {
   let aoPerder: (() => void) | undefined;
+  let aoFaltar: ((f: RecursosEmFalta) => void) | undefined;
   const motor = {
     redimensionar: vi.fn(),
     definirDocumento: vi.fn(),
@@ -30,7 +31,10 @@ function motorFalso() {
     prepararRecursos: vi.fn(async () => undefined),
     medidor: { tinta: () => ({ x: 0, y: 0, w: 0, h: 0 }) },
     emFalta: { fontes: [], imagens: [] },
-    aoMudarEmFalta: vi.fn(() => () => {}),
+    aoMudarEmFalta: vi.fn((aviso: (f: RecursosEmFalta) => void) => {
+      aoFaltar = aviso;
+      return () => {};
+    }),
     sentinela: 'motor-de-teste',
     contadores: { composicoesDePrancheta: 0, partes: 0, quadros: 0 },
     renderizarReferencia: vi.fn(),
@@ -39,7 +43,7 @@ function motorFalso() {
     }),
     destruir: vi.fn(),
   } satisfies MotorDeRender;
-  return { motor, perderContexto: () => aoPerder?.() };
+  return { motor, perderContexto: () => aoPerder?.(), faltar: (f: RecursosEmFalta) => aoFaltar?.(f) };
 }
 
 function montar() {
@@ -145,6 +149,57 @@ describe('área do canvas', () => {
 
     render(<AreaDoCanvas {...armazens()} criarMotor={() => Promise.reject(new Error('rede'))} />);
     expect((await screen.findByRole('alert')).textContent).toContain(textos.avisos.motorNaoCarregou.titulo);
+  });
+
+  it('o documento ao vivo (redimensionar) vai ao motor no lugar do da sessão, e ao encerrar o da sessão volta', async () => {
+    const { motor } = motorFalso();
+    const documento = criarArmazem<Documento | undefined>(EXEMPLO);
+    const aoVivo = criarArmazemAoVivo();
+    render(<AreaDoCanvas visao={criarVisao()} interface={criarInterface()} documento={documento} aoVivo={aoVivo} criarMotor={async () => motor} />);
+    await waitFor(() => expect(motor.definirDocumento).toHaveBeenCalledWith(EXEMPLO));
+    const preparos = motor.prepararRecursos.mock.calls.length;
+
+    const temporario = { ...EXEMPLO, pranchetas: [...EXEMPLO.pranchetas] };
+    act(() => aoVivo.definir(temporario));
+    expect(motor.definirDocumento).toHaveBeenLastCalledWith(temporario);
+    // o documento ao vivo usa os mesmos recursos: não busca fonte nem imagem a cada quadro
+    expect(motor.prepararRecursos.mock.calls.length).toBe(preparos);
+
+    act(() => aoVivo.definir(null));
+    expect(motor.definirDocumento).toHaveBeenLastCalledWith(EXEMPLO);
+  });
+
+  it('repassa o que o motor avisa que faltou', async () => {
+    const { motor, faltar } = motorFalso();
+    const aoMudarEmFalta = vi.fn();
+    render(
+      <AreaDoCanvas visao={criarVisao()} interface={criarInterface()} documento={criarArmazem<Documento | undefined>(undefined)} criarMotor={async () => motor} aoMudarEmFalta={aoMudarEmFalta} />,
+    );
+    await waitFor(() => expect(motor.aoMudarEmFalta).toHaveBeenCalled());
+
+    const falta = { fontes: [{ familia: 'Didot', peso: 700, camadas: ['Feed/Título'] }], imagens: [] };
+    faltar(falta);
+    expect(aoMudarEmFalta).toHaveBeenCalledWith(falta);
+  });
+
+  it('soltar arquivos sobre o canvas entrega os arquivos e a prancheta sob o ponteiro', async () => {
+    const { motor } = motorFalso();
+    const visao = criarVisao();
+    const aoSoltarArquivos = vi.fn();
+    const tela = render(
+      <AreaDoCanvas visao={visao} interface={criarInterface()} documento={criarArmazem<Documento | undefined>(EXEMPLO)} criarMotor={async () => motor} aoSoltarArquivos={aoSoltarArquivos} />,
+    );
+    await waitFor(() => expect(motor.definirDocumento).toHaveBeenCalled());
+    act(() => visao.camera.definir({ x: 0, y: 0, zoom: 1 }));
+    const area = tela.container.querySelector('[data-area-do-canvas]') as HTMLElement;
+    const arquivo = new File([new Uint8Array(4)], 'foto.png', { type: 'image/png' });
+
+    // o jsdom não põe posição em evento de arrastar: o evento é montado à mão, com a posição do ponteiro
+    const soltar = new MouseEvent('drop', { bubbles: true, cancelable: true, clientX: 300, clientY: 400 });
+    Object.defineProperty(soltar, 'dataTransfer', { value: { files: [arquivo], types: ['Files'] } });
+    fireEvent(area, soltar);
+
+    expect(aoSoltarArquivos).toHaveBeenCalledWith([arquivo], { pranchetaId: EXEMPLO.pranchetas[0]?.id, x: 300, y: 400 });
   });
 
   it('avisa quando o navegador derruba o contexto gráfico', async () => {

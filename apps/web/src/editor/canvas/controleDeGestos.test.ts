@@ -26,6 +26,7 @@ let iface: Interface;
 let sessao: SessaoDoDocumento<Documento, Operacao>;
 let enviados: LoteDoEditor<Operacao>[];
 let previa: ReturnType<typeof criarArmazem<PreviaDeGesto | null>>;
+let aoVivo: ReturnType<typeof criarArmazem<Documento | null>>;
 let quadros: (() => void)[];
 /** O que aconteceu, em ordem: é o que prova que o documento chega ao motor antes de a prévia encerrar. */
 let ordem: string[];
@@ -61,11 +62,13 @@ beforeEach(() => {
     },
   );
   previa = criarArmazem<PreviaDeGesto | null>(null);
+  aoVivo = criarArmazem<Documento | null>(null);
+  aoVivo.assinar(() => ordem.push(aoVivo.obter() ? 'ao-vivo' : 'fim-do-ao-vivo'));
   quadros = [];
   ordem = [];
   sessao.assinar(() => ordem.push('documento'));
   previa.assinar(() => ordem.push(previa.obter() ? 'previa' : 'fim-da-previa'));
-  desligar = ligarControleDeGestos(elemento, { visao, interface: iface, sessao: () => sessao, previa, agendar: (q) => quadros.push(q), descrever: (nome) => `mover ${nome}` });
+  desligar = ligarControleDeGestos(elemento, { visao, interface: iface, sessao: () => sessao, previa, aoVivo, agendar: (q) => quadros.push(q) });
 });
 
 /** Ponteiro em unidades do documento (o teste converte para tela pelo zoom de 50%). */
@@ -184,5 +187,150 @@ describe('gestos: arrastar', () => {
     desligar();
     ponteiro('pointerdown', dentro);
     expect(iface.armazem.obter().selecao).toBeNull();
+  });
+});
+
+describe('gestos: seleção múltipla', () => {
+  const outra = inicial.pranchetas[0]?.filhos.at(-2);
+  const caixaDaOutra = outra && caixaDe(outra);
+  if (!outra || !caixaDaOutra) throw new Error('o documento de exemplo precisa de duas camadas');
+  // um ponto que só a segunda camada cobre (ela fica abaixo do título, mais embaixo na prancheta)
+  const naOutra = { x: caixaDaOutra.x + 4, y: caixaDaOutra.y + caixaDaOutra.h - 4 };
+
+  it('Shift+clique acrescenta a camada à seleção, e Shift+clique de novo tira', () => {
+    ponteiro('pointerdown', dentro);
+    ponteiro('pointerup', dentro);
+    ponteiro('pointerdown', naOutra, { shiftKey: true });
+    ponteiro('pointerup', naOutra, { shiftKey: true });
+    expect(iface.armazem.obter().selecao).toEqual({ tipo: 'camadas', ids: [camada.id, outra.id] });
+
+    ponteiro('pointerdown', dentro, { shiftKey: true });
+    expect(iface.armazem.obter().selecao).toEqual({ tipo: 'camadas', ids: [outra.id] });
+  });
+
+  it('Shift+clique não começa arraste', () => {
+    ponteiro('pointerdown', dentro, { shiftKey: true });
+    ponteiro('pointermove', { x: dentro.x + 40, y: dentro.y }, { shiftKey: true });
+    rodarQuadro();
+    expect(previa.obter()).toBeNull();
+  });
+
+  it('arrastar uma camada da seleção move todas: uma prévia e UM lote, com um `mover` por camada', () => {
+    iface.selecionar({ tipo: 'camadas', ids: [camada.id, outra.id] });
+    ponteiro('pointerdown', dentro);
+    ponteiro('pointermove', { x: dentro.x + 20, y: dentro.y + 10 });
+    rodarQuadro();
+    expect(previa.obter()).toEqual({ ids: [camada.id, outra.id], dx: 20, dy: 10 });
+
+    ponteiro('pointerup', { x: dentro.x + 20, y: dentro.y + 10 });
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0]?.operacoes).toEqual([
+      { op: 'mover', alvo: camada.id, x: caixa.x + 20, y: caixa.y + 10 },
+      { op: 'mover', alvo: outra.id, x: caixaDaOutra.x + 20, y: caixaDaOutra.y + 10 },
+    ]);
+    expect(iface.armazem.obter().selecao).toEqual({ tipo: 'camadas', ids: [camada.id, outra.id] });
+  });
+
+  // Visto no navegador: o Shift+clique estendia a seleção de TEXTO da página, e o aperto seguinte
+  // sobre ela virava arraste nativo do navegador, que cancela o ponteiro no meio do gesto.
+  it('o Shift+clique não deixa o navegador estender a seleção de texto, e o foco continua na área', () => {
+    elemento.tabIndex = -1;
+    const aperto = new MouseEvent('mousedown', { bubbles: true, cancelable: true, shiftKey: true });
+    elemento.dispatchEvent(aperto);
+    expect(aperto.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(elemento);
+
+    const comum = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    elemento.dispatchEvent(comum);
+    expect(comum.defaultPrevented).toBe(false);
+  });
+
+  it('o navegador não começa arraste nativo dentro da área', () => {
+    const arraste = new Event('dragstart', { bubbles: true, cancelable: true });
+    elemento.dispatchEvent(arraste);
+    expect(arraste.defaultPrevented).toBe(true);
+  });
+
+  it('clicar numa camada fora da seleção troca a seleção por ela', () => {
+    iface.selecionar({ tipo: 'camadas', ids: [outra.id] });
+    ponteiro('pointerdown', dentro);
+    expect(iface.armazem.obter().selecao).toEqual({ tipo: 'camadas', ids: [camada.id] });
+  });
+});
+
+describe('gestos: redimensionar pela alça', () => {
+  /** O canto sudeste da camada do topo. */
+  const sudeste = { x: caixa.x + caixa.w, y: caixa.y + caixa.h };
+  const selecionar = () => iface.selecionar({ tipo: 'camadas', ids: [camada.id] });
+  const camadaAoVivo = () => aoVivo.obter()?.pranchetas[0]?.filhos.at(-1);
+
+  it('arrastar a alça mostra a camada no tamanho novo AO VIVO, sem lote e sem trocar o documento da sessão', () => {
+    selecionar();
+    ponteiro('pointerdown', sudeste);
+    ponteiro('pointermove', { x: sudeste.x + 60, y: sudeste.y + 30 });
+    rodarQuadro();
+
+    expect(camadaAoVivo()).toMatchObject({ x: caixa.x, y: caixa.y, largura: caixa.w + 60, altura: caixa.h + 30 });
+    expect(sessao.obter().visivel).toBe(inicial);
+    expect(enviados).toEqual([]);
+    expect(previa.obter()).toBeNull();
+    // as outras pranchetas são os mesmos objetos: o motor só recompõe a que mudou
+    expect(aoVivo.obter()?.pranchetas[1]).toBe(inicial.pranchetas[1]);
+  });
+
+  it('soltar grava UM lote `alterar` com posição e tamanho, e o documento chega antes de o "ao vivo" encerrar', () => {
+    selecionar();
+    ponteiro('pointerdown', sudeste);
+    ponteiro('pointermove', { x: sudeste.x + 60, y: sudeste.y + 30 });
+    rodarQuadro();
+    ordem = [];
+    ponteiro('pointerup', { x: sudeste.x + 60, y: sudeste.y + 30 });
+
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0]?.operacoes).toEqual([{ op: 'alterar', alvo: camada.id, props: { x: caixa.x, y: caixa.y, largura: caixa.w + 60, altura: caixa.h + 30 } }]);
+    expect(ordem).toEqual(['documento', 'fim-do-ao-vivo']);
+  });
+
+  it('com Shift, o canto mantém a proporção', () => {
+    selecionar();
+    ponteiro('pointerdown', sudeste);
+    ponteiro('pointermove', { x: sudeste.x + caixa.w, y: sudeste.y }, { shiftKey: true });
+    rodarQuadro();
+    expect(camadaAoVivo()).toMatchObject({ largura: caixa.w * 2, altura: caixa.h * 2 });
+  });
+
+  it('vários movimentos no mesmo quadro viram um documento ao vivo só', () => {
+    selecionar();
+    ponteiro('pointerdown', sudeste);
+    ordem = [];
+    for (let i = 1; i <= 8; i++) ponteiro('pointermove', { x: sudeste.x + i * 10, y: sudeste.y });
+    rodarQuadro();
+    expect(ordem).toEqual(['ao-vivo']);
+  });
+
+  it('Esc cancela: a camada volta ao tamanho e nenhum lote sai', () => {
+    selecionar();
+    ponteiro('pointerdown', sudeste);
+    ponteiro('pointermove', { x: sudeste.x + 60, y: sudeste.y });
+    rodarQuadro();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    ponteiro('pointerup', { x: sudeste.x + 60, y: sudeste.y });
+
+    expect(aoVivo.obter()).toBeNull();
+    expect(enviados).toEqual([]);
+  });
+
+  it('sem camada selecionada, ou com a peça só para leitura, o canto é um clique comum', () => {
+    ponteiro('pointerdown', sudeste);
+    ponteiro('pointermove', { x: sudeste.x + 60, y: sudeste.y });
+    rodarQuadro();
+    expect(aoVivo.obter()).toBeNull();
+
+    sessao.definirSomenteLeitura(true);
+    selecionar();
+    ponteiro('pointerdown', sudeste);
+    ponteiro('pointermove', { x: sudeste.x + 60, y: sudeste.y });
+    rodarQuadro();
+    expect(aoVivo.obter()).toBeNull();
   });
 });

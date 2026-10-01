@@ -7,7 +7,10 @@ import estilos from './BarraDeFerramentas.module.css';
 
 const FERRAMENTAS: readonly Ferramenta[] = ['mover', 'mao', 'zoom'];
 
-export function BarraDeFerramentas({ interface: iface }: { interface: Interface }) {
+/** O que o seletor de arquivo oferece. A API confere o conteúdo: a extensão aqui é só conveniência. */
+const ACEITA = 'image/png,image/jpeg,image/webp,image/svg+xml,.svg';
+
+export function BarraDeFerramentas({ interface: iface, podeInserir = false, aoInserir }: { interface: Interface; podeInserir?: boolean; aoInserir?: (arquivos: File[]) => void }) {
   const ativa = useArmazem(iface.armazem, (e) => e.ferramenta);
   return (
     <div className={estilos.barra} role="toolbar" aria-label={textos.ferramentas.rotulo} aria-orientation="vertical">
@@ -28,6 +31,24 @@ export function BarraDeFerramentas({ interface: iface }: { interface: Interface 
           </button>
         );
       })}
+      <span className={estilos.divisor} aria-hidden="true" />
+      {/* Inserir não é ferramenta (não muda o que o clique no canvas faz): é uma ação, e fica separada */}
+      <label className={estilos.inserir} title={textos.ferramentas.inserir} data-desligado={podeInserir ? undefined : 'sim'}>
+        <span aria-hidden="true">+</span>
+        <input
+          type="file"
+          multiple
+          accept={ACEITA}
+          disabled={!podeInserir}
+          aria-label={textos.ferramentas.inserir}
+          onChange={(e) => {
+            const arquivos = [...(e.target.files ?? [])];
+            // limpa o campo: escolher o mesmo arquivo de novo precisa disparar outra vez
+            e.target.value = '';
+            if (arquivos.length > 0) aoInserir?.(arquivos);
+          }}
+        />
+      </label>
     </div>
   );
 }

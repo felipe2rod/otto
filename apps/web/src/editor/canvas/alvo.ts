@@ -1,41 +1,9 @@
-// PROVISÓRIO: teste de alvo (que camada está sob o ponteiro) pela caixa de cada camada.
-// O definitivo é de @otto/documento e ainda não veio: com a rotação de verdade (aqui a camada
-// girada responde pela caixa que a envolve) e, no que couber, pela forma. Quando vier, `acharEm`
-// passa a ser reexportação.
-import { type Caixa, caixaDe, camadasVisuaisVisiveis, type Documento, disporPranchetas, type No, type Prancheta, todasAsCamadas } from '@otto/documento';
-import type { Ponto } from '../nucleo/camera';
+// Geometria da seleção no plano do editor. O teste de alvo (que camada está sob o ponteiro) é de
+// @otto/documento (`acharEm`, com rotação, elipse e canto arredondado); aqui fica o que é da tela:
+// a caixa de cada camada selecionada e qual camada tem alças.
+import { type Caixa, caixaDe, type Documento, disporPranchetas, type No, todasAsCamadas } from '@otto/documento';
 import type { Selecao } from '../nucleo/interface';
 import type { PreviaDeGesto } from './motor';
-
-export interface Alvo {
-  prancheta: Prancheta;
-  /** Ausente: o ponto está na prancheta, fora de qualquer camada que se possa pegar. */
-  no?: No;
-}
-
-const contem = (c: Caixa, p: Ponto): boolean => p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h;
-
-/** @param ponto no plano do editor (unidades do documento, com as pranchetas lado a lado) */
-export function acharEm(doc: Documento, ponto: Ponto): Alvo | undefined {
-  const posicoes = disporPranchetas(doc.pranchetas);
-  for (const prancheta of doc.pranchetas) {
-    const origem = posicoes.get(prancheta.id);
-    if (!origem) continue;
-    const local = { x: ponto.x - origem.x, y: ponto.y - origem.y };
-    if (local.x < 0 || local.y < 0 || local.x > prancheta.largura || local.y > prancheta.altura) continue;
-
-    // de cima para baixo. Camada bloqueada não se pega no canvas, só na lista (experiencia.md, 3.9)
-    const visiveis = camadasVisuaisVisiveis(prancheta.filhos);
-    for (let i = visiveis.length - 1; i >= 0; i--) {
-      const no = visiveis[i] as No;
-      if (no.bloqueado) continue;
-      const caixa = caixaDe(no);
-      if (caixa && contem(caixa, local)) return { prancheta, no };
-    }
-    return { prancheta };
-  }
-  return undefined;
-}
 
 /** Caixa de cada camada selecionada, no plano do editor, já deslocada pela prévia do arraste. */
 export function caixasDaSelecao(doc: Documento, selecao: Selecao, previa: PreviaDeGesto | null): Caixa[] {
@@ -55,4 +23,30 @@ export function caixasDaSelecao(doc: Documento, selecao: Selecao, previa: Previa
     }
   }
   return caixas;
+}
+
+export interface NoComAlcas {
+  no: No;
+  /** A caixa da camada, em coordenadas da prancheta: é o que o lote de redimensionar altera. */
+  caixa: Caixa;
+  /** A mesma caixa no plano do editor (com a posição da prancheta): é onde as alças aparecem. */
+  caixaNoPlano: Caixa;
+}
+
+/**
+ * A camada que mostra alças de redimensionar: UMA camada selecionada, visual, sem rotação, visível
+ * e desbloqueada. Grupo e camada girada não têm alça nesta fatia.
+ */
+export function noDaAlca(doc: Documento, selecao: Selecao): NoComAlcas | undefined {
+  if (selecao?.tipo !== 'camadas' || selecao.ids.length !== 1) return undefined;
+  const posicoes = disporPranchetas(doc.pranchetas);
+  for (const prancheta of doc.pranchetas) {
+    const no = todasAsCamadas(prancheta.filhos).find((n) => n.id === selecao.ids[0]);
+    const origem = posicoes.get(prancheta.id);
+    if (!no || !origem) continue;
+    if (no.tipo === 'grupo' || no.tipo === 'ajuste' || no.rotacao !== 0 || no.bloqueado || !no.visivel) return undefined;
+    const caixa = { x: no.x, y: no.y, w: no.largura, h: no.altura };
+    return { no, caixa, caixaNoPlano: { ...caixa, x: origem.x + no.x, y: origem.y + no.y } };
+  }
+  return undefined;
 }

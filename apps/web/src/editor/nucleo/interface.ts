@@ -22,6 +22,8 @@ export interface Interface {
   ferramentaEmUso(): Ferramenta;
   alternarPaineis(): void;
   selecionar(selecao: Selecao): void;
+  /** Shift+clique: acrescenta a camada à seleção, ou tira se já estava. */
+  alternarNaSelecao(id: string): void;
 }
 
 export const ferramentaEmUso = (estado: EstadoDeInterface): Ferramenta => (estado.maoTemporaria ? 'mao' : estado.ferramenta);
@@ -35,5 +37,11 @@ export function criarInterface(): Interface {
     ferramentaEmUso: () => ferramentaEmUso(armazem.obter()),
     alternarPaineis: () => armazem.definir((e) => ({ ...e, paineisVisiveis: !e.paineisVisiveis })),
     selecionar: (selecao) => armazem.definir((e) => ({ ...e, selecao: selecao?.tipo === 'camadas' && selecao.ids.length === 0 ? null : selecao })),
+    alternarNaSelecao: (id) =>
+      armazem.definir((e) => {
+        const atuais = e.selecao?.tipo === 'camadas' ? e.selecao.ids : [];
+        const ids = atuais.includes(id) ? atuais.filter((x) => x !== id) : [...atuais, id];
+        return { ...e, selecao: ids.length === 0 ? null : { tipo: 'camadas', ids } };
+      }),
   };
 }

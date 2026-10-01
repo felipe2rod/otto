@@ -7,7 +7,7 @@ import type { ResultadoDeAbrir } from '../api/pecas';
 import { editor as textos } from '../textos/editor';
 import { erros } from '../textos/erros';
 import { montarDocumentoDeExemplo } from './bancada/documentoDeExemplo';
-import type { MotorDeRender } from './canvas/motor';
+import type { MotorDeRender, RecursosEmFalta } from './canvas/motor';
 import { Editor } from './Editor';
 import type { FonteDaPeca } from './fonteDaPeca';
 import { paraTela } from './nucleo/camera';
@@ -20,6 +20,9 @@ afterEach(cleanup);
 
 const EXEMPLO = montarDocumentoDeExemplo({ hash: 'a'.repeat(64), largura: 1200, altura: 800 });
 
+/** O que o último motor de mentira assinou para saber de recurso em falta. */
+let avisarFalta: ((f: RecursosEmFalta) => void) | undefined;
+
 function motorFalso(): MotorDeRender {
   return {
     redimensionar: vi.fn(),
@@ -29,7 +32,10 @@ function motorFalso(): MotorDeRender {
     prepararRecursos: vi.fn(async () => undefined),
     medidor: { tinta: () => ({ x: 0, y: 0, w: 0, h: 0 }) },
     emFalta: { fontes: [], imagens: [] },
-    aoMudarEmFalta: vi.fn(() => () => {}),
+    aoMudarEmFalta: vi.fn((aviso: (f: RecursosEmFalta) => void) => {
+      avisarFalta = aviso;
+      return () => {};
+    }),
     sentinela: 'motor-de-teste',
     contadores: { composicoesDePrancheta: 0, partes: 0, quadros: 0 },
     renderizarReferencia: vi.fn(),
@@ -40,7 +46,16 @@ function motorFalso(): MotorDeRender {
 
 type Lotes = NonNullable<FonteDaPeca['lotes']>;
 
-function montar(opcoes: { abrir?: ResultadoDeAbrir | (() => Promise<ResultadoDeAbrir>); webgl?: boolean; lotes?: Partial<Lotes>; motor?: Partial<MotorDeRender> } = {}) {
+function montar(
+  opcoes: {
+    abrir?: ResultadoDeAbrir | (() => Promise<ResultadoDeAbrir>);
+    webgl?: boolean;
+    lotes?: Partial<Lotes>;
+    motor?: Partial<MotorDeRender>;
+    arquivos?: Partial<NonNullable<FonteDaPeca['arquivos']>>;
+    renomear?: FonteDaPeca['renomear'];
+  } = {},
+) {
   const motor = { ...motorFalso(), ...opcoes.motor };
   const criarMotor = vi.fn(async () => motor);
   const abrir = opcoes.abrir ?? { estado: 'nao_encontrada' as const };
@@ -56,9 +71,19 @@ function montar(opcoes: { abrir?: ResultadoDeAbrir | (() => Promise<ResultadoDeA
     recursos: { imagem: async () => new ArrayBuffer(0), fonte: async () => new ArrayBuffer(0) },
     listarFontes: async () => [],
     ...(lotes ? { lotes } : {}),
+    ...(opcoes.arquivos
+      ? {
+          arquivos: {
+            enviarImagem: vi.fn(async () => ({ ok: true as const, arquivo: { sha256: 'b'.repeat(64), largura: 2000, altura: 1000 } })),
+            importarSvg: vi.fn(async () => ({ ok: false as const, codigo: 'svg_invalido' })),
+            ...opcoes.arquivos,
+          },
+        }
+      : {}),
+    ...(opcoes.renomear ? { renomear: opcoes.renomear } : {}),
   };
   const tela = render(<Editor pecaId="a1" fonte={fonte} criarMotor={criarMotor} temWebGL={() => opcoes.webgl ?? true} />);
-  return { motor, criarMotor, abrirPeca, lotes, tela };
+  return { motor, criarMotor, abrirPeca, lotes, tela, fonte };
 }
 
 const aberta: ResultadoDeAbrir = {
@@ -72,7 +97,9 @@ describe('casca do editor: disposição', () => {
     await waitFor(() => expect(criarMotor).toHaveBeenCalled());
 
     const ferramentas = screen.getByRole('toolbar', { name: textos.ferramentas.rotulo });
+    // três ferramentas (Mover, Mão, Zoom) e a ação de inserir arquivo
     expect(within(ferramentas).getAllByRole('button')).toHaveLength(3);
+    expect(within(ferramentas).getByLabelText(textos.ferramentas.inserir)).toBeDefined();
     expect(screen.getByRole('region', { name: textos.paineis.otto.titulo })).toBeDefined();
     expect(screen.getByRole('region', { name: textos.paineis.propriedades.titulo })).toBeDefined();
     expect(screen.getByRole('region', { name: textos.paineis.camadas.titulo })).toBeDefined();
@@ -348,9 +375,125 @@ describe('casca do editor: a sessão ligada à API', () => {
   });
 
   it('o que o canvas não mostrou aparece no topo, com a contagem', async () => {
-    await abrirESelecionar({ motor: { emFalta: { fontes: [{ familia: 'Didot', peso: 700, camadas: ['Feed/Título'] }], imagens: [] } } });
+    await abrirESelecionar();
+    act(() => avisarFalta?.({ fontes: [{ familia: 'Didot', peso: 700, camadas: ['Feed/Título'] }], imagens: [] }));
     const aviso = await screen.findByText(textos.topo.avisosDoRender(1));
     fireEvent.click(aviso);
     expect(screen.getByText(textos.render.fonte('Didot', 700, 'Feed/Título'))).toBeDefined();
+  });
+
+  it('fonte que não carregou: uma faixa diz qual, e "Tentar de novo" pede os recursos outra vez', async () => {
+    const { motor } = await abrirESelecionar();
+    const antes = vi.mocked(motor.prepararRecursos).mock.calls.length;
+    act(() => avisarFalta?.({ fontes: [{ familia: 'Didot', peso: 700, camadas: ['Feed/Título'] }], imagens: [] }));
+
+    expect(screen.getByText(textos.avisos.fonteEmFalta('Didot 700'))).toBeDefined();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: textos.avisos.tentarFonteDeNovo })));
+    expect(vi.mocked(motor.prepararRecursos).mock.calls.length).toBe(antes + 1);
+
+    act(() => avisarFalta?.({ fontes: [], imagens: [] }));
+    expect(screen.queryByText(textos.avisos.fonteEmFalta('Didot 700'))).toBeNull();
+  });
+
+  it('Ctrl+J duplica a camada selecionada e seleciona a cópia', async () => {
+    const { lotes } = await abrirESelecionar();
+    await act(async () => fireEvent.keyDown(window, { key: 'j', ctrlKey: true }));
+
+    expect(enviados(lotes)[0]?.operacoes.map((o) => o.op)).toEqual(['criarNo', 'reordenar']);
+    const copia = textos.camadas.copia(camada.nome, 1);
+    expect(screen.getByRole('treeitem', { name: new RegExp(`^${copia}`) }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('o nome da peça se troca no topo: Enter manda à API e o topo mostra o nome que ela guardou', async () => {
+    const renomear = vi.fn(async (_id: string, nome: string) => ({ ok: true as const, nome }));
+    await abrirESelecionar({ renomear });
+    fireEvent.click(screen.getByRole('button', { name: textos.topo.renomear('Lançamento Crové') }));
+    const campo = screen.getByRole('textbox', { name: textos.topo.nomeDaPeca });
+    fireEvent.change(campo, { target: { value: 'Crové de verão' } });
+    await act(async () => fireEvent.keyDown(campo, { key: 'Enter' }));
+
+    expect(renomear).toHaveBeenCalledWith('a1', 'Crové de verão');
+    expect(screen.getByRole('banner').textContent).toContain('Crové de verão');
+  });
+});
+
+describe('casca do editor: enviar imagem e SVG', () => {
+  const escolher = async (arquivos: File[]) => {
+    await act(async () => fireEvent.change(screen.getByLabelText(textos.ferramentas.inserir), { target: { files: arquivos } }));
+  };
+  const abrir = async (opcoes: Parameters<typeof montar>[0] = {}) => {
+    const m = montar({ abrir: aberta, lotes: {}, arquivos: {}, ...opcoes });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    return m;
+  };
+  const enviados = (lotes: Lotes | undefined) => vi.mocked(lotes?.enviar as Lotes['enviar']).mock.calls.map((c) => c[0]);
+  const png = (nome = 'produto.png', tamanho = 8) => new File([new Uint8Array(tamanho)], nome, { type: 'image/png' });
+
+  it('escolher uma imagem pelo botão envia o arquivo e cria a camada por `criarNo`, já selecionada', async () => {
+    const { lotes, fonte } = await abrir();
+    await escolher([png()]);
+
+    expect(fonte.arquivos?.enviarImagem).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(enviados(lotes)).toHaveLength(1));
+    expect(enviados(lotes)[0]?.operacoes[0]).toMatchObject({ op: 'criarNo', no: { tipo: 'imagem', nome: 'produto', arquivo: 'b'.repeat(64), larguraOriginal: 2000 } });
+    expect(screen.getByRole('treeitem', { name: /^produto/ }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('enquanto envia, a tela diz o que está enviando', async () => {
+    let terminar: (r: { ok: true; arquivo: { sha256: string; largura: number; altura: number } }) => void = () => {};
+    const enviarImagem = vi.fn(() => new Promise<{ ok: true; arquivo: { sha256: string; largura: number; altura: number } }>((ok) => (terminar = ok)));
+    await abrir({ arquivos: { enviarImagem } });
+    await escolher([png('grande.png')]);
+    expect(screen.getByText(textos.envio.enviando('grande.png'))).toBeDefined();
+
+    await act(async () => terminar({ ok: true, arquivo: { sha256: 'c'.repeat(64), largura: 10, altura: 10 } }));
+    expect(screen.queryByText(textos.envio.enviando('grande.png'))).toBeNull();
+  });
+
+  it('arquivo que não é imagem nem SVG é recusado aqui, sem enviar', async () => {
+    const { fonte, lotes } = await abrir();
+    await escolher([new File(['x'], 'briefing.pdf', { type: 'application/pdf' })]);
+
+    expect(fonte.arquivos?.enviarImagem).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain(textos.envio.tipoNaoAceito('briefing.pdf'));
+    expect(enviados(lotes)).toHaveLength(0);
+  });
+
+  it('recusa da API vira a frase da tela, com o nome do arquivo e o limite', async () => {
+    const enviarImagem = vi.fn(async () => ({ ok: false as const, codigo: 'arquivo_grande_demais', detalhe: { limiteEmBytes: 25 * 1024 * 1024 } }));
+    await abrir({ arquivos: { enviarImagem } });
+    await escolher([png('enorme.png')]);
+    expect(screen.getByRole('alert').textContent).toContain(textos.envio.grandeDemais('enorme.png', 25));
+  });
+
+  it('SVG vira camada de vetor, e os avisos do importador aparecem em linguagem de tela', async () => {
+    const no = {
+      tipo: 'vetor' as const,
+      moldura: [200, 100] as [number, number],
+      caminhos: [{ d: 'M0 0C1 1 2 2 3 3Z', preenchimento: '#000000', regra: 'nao-zero' as const }],
+      origem: { arquivo: 'd'.repeat(64), nome: 'logo.svg' },
+    };
+    const importarSvg = vi.fn(async () => ({ ok: true as const, no, avisos: ['texto não convertido em curva (1)'] }));
+    const { lotes } = await abrir({ arquivos: { importarSvg } });
+    await escolher([new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' })]);
+
+    await waitFor(() => expect(enviados(lotes)).toHaveLength(1));
+    expect(enviados(lotes)[0]?.operacoes[0]).toMatchObject({ op: 'criarNo', no: { tipo: 'vetor', nome: 'logo' } });
+    expect(screen.getByRole('status', { name: textos.envio.nota }).textContent).toContain(textos.envio.importadoComAvisos('logo.svg', 'texto não convertido em curva (1)'));
+  });
+
+  it('trocar a imagem de uma camada de foto manda o arquivo e altera só o arquivo da camada', async () => {
+    const { lotes } = await abrir();
+    fireEvent.click(screen.getByRole('treeitem', { name: /^Foto/ }));
+    await act(async () => fireEvent.change(screen.getByLabelText(textos.propriedades.trocarImagem), { target: { files: [png('outra.png')] } }));
+
+    await waitFor(() => expect(enviados(lotes)).toHaveLength(1));
+    expect(enviados(lotes)[0]?.operacoes).toEqual([{ op: 'alterar', alvo: expect.any(String), props: { arquivo: 'b'.repeat(64), larguraOriginal: 2000, alturaOriginal: 1000 } }]);
+  });
+
+  it('peça só para leitura não tem o botão de inserir ligado', async () => {
+    const m = montar({ abrir: aberta, arquivos: {} });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    expect((screen.getByLabelText(textos.ferramentas.inserir) as HTMLInputElement).disabled).toBe(true);
   });
 });

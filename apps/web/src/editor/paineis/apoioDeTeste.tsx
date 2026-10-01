@@ -2,7 +2,9 @@
 // `aplicar` que guarda os lotes pedidos e, se quiser, os aplica de verdade pelo catálogo.
 import { aplicarLote, type Documento, documentoVazio } from '@otto/documento';
 import type { ReactNode } from 'react';
+import { vi } from 'vitest';
 import { type AmbienteDoEditor, ProvedorDoEditor } from '../ambiente';
+import { type FaltasDoRender, SEM_FALTAS } from '../casca/AvisosDoRender';
 import type { LoteParaAplicar } from '../nucleo/acoes';
 import { criarArmazem } from '../nucleo/armazem';
 import { criarInterface } from '../nucleo/interface';
@@ -13,7 +15,7 @@ export function documentoDeTeste(operacoes: unknown[]): Documento {
   return r.doc;
 }
 
-export function ambienteDeTeste(doc: Documento | undefined, opcoes: { somenteLeitura?: boolean } = {}) {
+export function ambienteDeTeste(doc: Documento | undefined, opcoes: { somenteLeitura?: boolean; faltas?: FaltasDoRender } = {}) {
   const documento = criarArmazem<Documento | undefined>(doc);
   const iface = criarInterface();
   const lotes: LoteParaAplicar[] = [];
@@ -31,6 +33,9 @@ export function ambienteDeTeste(doc: Documento | undefined, opcoes: { somenteLei
       if (r.ok) documento.definir(r.doc);
       return r.ok;
     },
+    faltas: criarArmazem<FaltasDoRender>(opcoes.faltas ?? SEM_FALTAS),
+    trocarImagem: vi.fn(async () => undefined),
+    inserirArquivos: vi.fn(async () => undefined),
     listarFontes: async () => [
       { familia: 'Anton', pesos: [400] },
       { familia: 'IBM Plex Sans', pesos: [400, 700] },

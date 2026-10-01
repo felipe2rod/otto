@@ -100,3 +100,29 @@
 .botaoPrincipal:hover:not(:disabled) {
   background: #fff;
 }
+
+.nome {
+  max-width: 320px;
+  padding: 3px 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+
+.nome:hover {
+  border-color: var(--grafite-4);
+}
+
+.campoDoNome {
+  width: 280px;
+  padding: 3px 6px;
+  background: var(--grafite-0);
+  border: 1px solid var(--laranja);
+  border-radius: 4px;
+  font-weight: 600;
+}

@@ -1,6 +1,7 @@
 // Topo do editor: caminho de volta para Peças, nome da peça, estado do salvamento, desfazer e
 // refazer, e o que o canvas deixou de mostrar. Exportar ocupa o lugar dele e fica desligado até a
 // fatia de exportação. Sem nome de modelo, token ou custo.
+import { useRef, useState } from 'react';
 import { editor as textos } from '../../textos/editor';
 import type { EstadoDaPecaAberta } from '../Editor';
 import { type Armazem, useArmazem } from '../nucleo/armazem';
@@ -15,9 +16,12 @@ export interface PropriedadesDoTopo {
   aoAlternarPaineis: () => void;
   aoDesfazer: () => void;
   aoRefazer: () => void;
+  /** Renomear a peça. Ausente: o nome é só texto. */
+  aoRenomear?: (nome: string) => void;
 }
 
-export function BarraDoTopo({ nomeDaPeca, estado, faltas, paineisVisiveis, aoAlternarPaineis, aoDesfazer, aoRefazer }: PropriedadesDoTopo) {
+export function BarraDoTopo({ nomeDaPeca, estado, faltas, paineisVisiveis, aoAlternarPaineis, aoDesfazer, aoRefazer, aoRenomear }: PropriedadesDoTopo) {
+  const [renomeando, setRenomeando] = useState(false);
   const e = useArmazem(estado, (x) => x);
   const f = useArmazem(faltas, (x) => x);
   // com lote por confirmar a versão ainda não é a do servidor: desfazer espera a fila esvaziar
@@ -32,7 +36,17 @@ export function BarraDoTopo({ nomeDaPeca, estado, faltas, paineisVisiveis, aoAlt
           <li>
             <a href="/editor">{textos.topo.pecas}</a>
           </li>
-          <li aria-current="page">{nomeDaPeca ?? textos.topo.pecaSemNome}</li>
+          <li aria-current="page">
+            {nomeDaPeca !== undefined && aoRenomear && renomeando ? (
+              <CampoDoNome nome={nomeDaPeca} aoConfirmar={aoRenomear} aoFechar={() => setRenomeando(false)} />
+            ) : nomeDaPeca !== undefined && aoRenomear ? (
+              <button type="button" className={estilos.nome} aria-label={textos.topo.renomear(nomeDaPeca)} title={textos.topo.renomear(nomeDaPeca)} onClick={() => setRenomeando(true)}>
+                {nomeDaPeca}
+              </button>
+            ) : (
+              (nomeDaPeca ?? textos.topo.pecaSemNome)
+            )}
+          </li>
         </ol>
       </nav>
       {nomeDaPeca !== undefined && (
@@ -57,5 +71,34 @@ export function BarraDoTopo({ nomeDaPeca, estado, faltas, paineisVisiveis, aoAlt
         {textos.topo.exportar}
       </button>
     </header>
+  );
+}
+
+/** O nome da peça em edição: Enter ou sair confirma, Esc desiste. */
+function CampoDoNome({ nome, aoConfirmar, aoFechar }: { nome: string; aoConfirmar: (nome: string) => void; aoFechar: () => void }) {
+  const [rascunho, setRascunho] = useState(nome);
+  const desistiu = useRef(false);
+  const confirmar = () => {
+    if (!desistiu.current && rascunho.trim() !== '' && rascunho.trim() !== nome) aoConfirmar(rascunho.trim());
+    aoFechar();
+  };
+  return (
+    <input
+      className={estilos.campoDoNome}
+      aria-label={textos.topo.nomeDaPeca}
+      value={rascunho}
+      maxLength={120}
+      // biome-ignore lint/a11y/noAutofocus: o campo nasce de um clique no nome; o foco precisa ir para ele
+      autoFocus
+      onChange={(e) => setRascunho(e.target.value)}
+      onBlur={confirmar}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') {
+          desistiu.current = true;
+          aoFechar();
+        }
+      }}
+    />
   );
 }
