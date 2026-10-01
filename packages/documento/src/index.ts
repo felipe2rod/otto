@@ -9,6 +9,7 @@
 /** Nome do pacote. A API o devolve na rota de saúde, como prova de que o núcleo ESM carrega dentro do NestJS. */
 export const NOME_DO_PACOTE = '@otto/documento' as const;
 
+export { type Alvo, acharEm, noContemPonto, noSobOPonto, type OpcoesDoAlvo, type Ponto } from './alvo';
 export * from './esquema';
 export { caixaDasPranchetas, deslocarNo, deslocarNos, disporPranchetas, VAO_ENTRE_PRANCHETAS } from './geometria';
 export { type GeradorDeId, idsDoLote } from './ids';

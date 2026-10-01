@@ -20,6 +20,7 @@ docker compose run --rm teste pnpm --filter @otto/documento typecheck
 | Erro de validação em português | O agente lê o erro e corrige | `descreverErro(erro)` |
 | `OPERACOES_QUE_MEDEM` e `loteDependeDeMedida(operacoes)` | `alinhar` e `distribuir` só dão o mesmo resultado nos dois lados com o mesmo medidor | O editor passa `motor.medidor`; a API, `criarMedidor(sessao)` |
 | `disporPranchetas`, `caixaDasPranchetas`, `deslocarNo`, `deslocarNos` (`geometria.ts`) | Motor, sobreposições e teste de alvo precisam da mesma posição de prancheta; a prévia de arrastar precisa deslocar sem mutar | — |
+| `acharEm`, `noSobOPonto`, `noContemPonto` (`alvo.ts`) | Teste de alvo do editor: que camada está sob o ponto, com a rotação e a forma dela (elipse, canto arredondado). Texto, foto e vetor respondem pela caixa. Camada oculta, bloqueada ou dentro de grupo oculto ou bloqueado não é alvo (`comBloqueadas` muda isso); `folga` aumenta a área, para pegar o que é fino em zoom baixo | `acharEm(doc, pontoNoPlanoDoEditor, { folga: 4 / zoom })` devolve `{ prancheta, no? }` |
 | `definirToken` devolve em `tocados` as camadas que usam o token | A marca de "camada tocada" e o cache precisam saber | — |
 
 ## O que não veio
