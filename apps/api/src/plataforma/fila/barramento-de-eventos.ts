@@ -11,6 +11,8 @@ import { z } from 'zod';
 export const FILAS = {
   /** Renderiza e monta os arquivos de uma exportação. `id` é o da exportação. */
   exportacao: 'exportacao',
+  /** Apaga do armazenamento os arquivos de uma exportação vencida. `id` é o da exportação. Publicado com hora marcada. */
+  limpezaDeExportacao: 'limpeza-de-exportacao',
 } as const;
 export type NomeDaFila = (typeof FILAS)[keyof typeof FILAS];
 
@@ -22,10 +24,15 @@ export interface OpcoesDoConsumidor {
   concorrencia: number;
 }
 
+export interface OpcoesDePublicacao {
+  /** O trabalho só é entregue a partir desta hora. */
+  naoAntesDe?: Date;
+}
+
 export abstract class BarramentoDeEventos {
   abstract iniciar(): Promise<void>;
   /** Lança se o trabalho está fora do formato ou se a fila não aceitou. */
-  abstract publicar(fila: NomeDaFila, trabalho: Trabalho): Promise<void>;
+  abstract publicar(fila: NomeDaFila, trabalho: Trabalho, opcoes?: OpcoesDePublicacao): Promise<void>;
   /** Se `tratar` lançar, o trabalho volta para a fila e é entregue de novo mais tarde. */
   abstract consumir(fila: NomeDaFila, opcoes: OpcoesDoConsumidor, tratar: (trabalho: Trabalho) => Promise<void>): Promise<void>;
   /** Para de pegar trabalho e espera o que está em curso terminar. */

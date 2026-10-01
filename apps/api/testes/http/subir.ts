@@ -103,7 +103,7 @@ export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { 
   const armazenamento = new ArmazenamentoEspiao();
   const fontes = new BibliotecaDeFontesEmMemoria();
   const fila = new BarramentoEmMemoria();
-  await fontes.registrar({ familia: 'Anton', peso: 400, nomePostScript: 'Anton-Regular', licenca: null, conteudo: FONTE_ANTON });
+  await fontes.registrar({ familia: 'Anton', peso: 400, nomePostScript: 'Anton-Regular', licenca: 'SIL Open Font License 1.1', conteudo: FONTE_ANTON });
 
   const modulo = await Test.createTestingModule({ imports: [ModuloRaiz.para('api', config)] })
     .overrideProvider(ResolvedorDeEscopo)

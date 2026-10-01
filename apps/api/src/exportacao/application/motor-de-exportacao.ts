@@ -24,4 +24,13 @@ export abstract class MotorDeExportacao {
     opcoes: { nome: string; pranchetas: readonly string[]; escala: 1 | 2; semFundo: boolean },
     entreEtapas: EntreEtapas,
   ): Promise<ArquivoGerado[]>;
+  /** Um .svg por prancheta. O texto sai como texto; o que não tem equivalente vetorial vira imagem ou fica de fora. */
+  abstract svg(doc: Documento, recursos: RecursosDaExportacao, opcoes: { nome: string; pranchetas: readonly string[] }, entreEtapas: EntreEtapas): Promise<ArquivoGerado[]>;
+  /** 'juntas': um .pdf com uma página por prancheta. 'por-prancheta': um .pdf por prancheta. */
+  abstract pdf(
+    doc: Documento,
+    recursos: RecursosDaExportacao,
+    opcoes: { nome: string; pranchetas: readonly string[]; arquivos: 'por-prancheta' | 'juntas' },
+    entreEtapas: EntreEtapas,
+  ): Promise<ArquivoGerado[]>;
 }

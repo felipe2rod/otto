@@ -4,6 +4,8 @@ export interface FonteRegistrada {
   familia: string;
   peso: number;
   nomePostScript: string | null;
+  /** O texto de licença registrado. Decide se o arquivo pode ir num pacote de exportação (domain/licenca-de-fonte.ts). */
+  licenca: string | null;
   sha256: string;
   bytes: number;
 }

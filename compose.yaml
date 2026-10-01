@@ -81,9 +81,12 @@ services:
     environment:
       <<: *servidor
       PORTA: "3001"
-    # Teto de memória do worker. Uma exportação por vez (EXPORTACOES_AO_MESMO_TEMPO = 1); o pico
-    # medido está em docs/mvp/backend.md, seção 17. Passou do teto: o contêiner é morto, a exportação
-    # fica sem sinal de vida e é dada como interrompida, e a API continua de pé.
+    # Teto de memória do worker. Uma exportação por vez (EXPORTACOES_AO_MESMO_TEMPO = 1). Medido em
+    # 2026-10-01 com PSD, PNG 2x, SVG, PDF e pacote das duas peças mais pesadas, em seguida, no mesmo
+    # processo: pico de 886 MB aqui (com recarga automática) e 896 MB na imagem de produção
+    # (docs/mvp/backend.md, 17.9). 2 GB dá o dobro. Em produção, comece com 1,5 GB: 1 GB não tem folga.
+    # Passou do teto: o contêiner é morto, a exportação fica sem sinal de vida e é dada como
+    # interrompida, e a API continua de pé.
     mem_limit: 2g
     healthcheck: *saude
     depends_on:

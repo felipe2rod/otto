@@ -24,14 +24,18 @@ function montar(servico: 'api' | 'worker', fila: BarramentoEmMemoria) {
   const linhas: Record<string, unknown>[] = [];
   const executadas: string[] = [];
   const ordem: string[] = [];
-  const exportacoes = { executar: async (escopo: { contaId: string }, id: string) => void executadas.push(`${escopo.contaId}:${id}`) } as unknown as CasosDeUsoDeExportacao;
+  const limpas: string[] = [];
+  const exportacoes = {
+    executar: async (escopo: { contaId: string }, id: string) => void executadas.push(`${escopo.contaId}:${id}`),
+    limpar: async (escopo: { contaId: string }, id: string) => void limpas.push(`${escopo.contaId}:${id}`),
+  } as unknown as CasosDeUsoDeExportacao;
   const paradaOriginal = fila.parar.bind(fila);
   fila.parar = async () => {
     ordem.push('fila');
     await paradaOriginal();
   };
   const ciclo = new CicloDeVida(servico, { fechar: async () => void ordem.push('banco') }, fila, exportacoes, { error: (linha) => void linhas.push(linha) }, 5);
-  return { ciclo, linhas, executadas, ordem };
+  return { ciclo, linhas, executadas, limpas, ordem };
 }
 
 const esperar = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
@@ -44,6 +48,20 @@ describe('CicloDeVida', () => {
     await fila.publicar('exportacao', { contaId: CONTA, id: ID });
     await fila.ociosa();
     expect(executadas).toEqual([`${CONTA}:${ID}`]);
+    await ciclo.onApplicationShutdown();
+  });
+
+  it('no worker, liga também o consumidor da limpeza: o trabalho de limpeza apaga com o escopo da conta do trabalho, e não roda exportação', async () => {
+    const fila = new BarramentoEmMemoria();
+    const { ciclo, executadas, limpas } = montar('worker', fila);
+    await ciclo.onApplicationBootstrap();
+    await fila.publicar('limpeza-de-exportacao', { contaId: CONTA, id: ID }, { naoAntesDe: new Date(Date.now() + 7 * 86_400_000) });
+    await fila.ociosa();
+    expect(limpas).toEqual([]);
+    fila.adiantar();
+    await fila.ociosa();
+    expect(limpas).toEqual([`${CONTA}:${ID}`]);
+    expect(executadas).toEqual([]);
     await ciclo.onApplicationShutdown();
   });
 

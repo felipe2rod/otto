@@ -17,40 +17,48 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Nome do índice único parcial que garante uma exportação rodando por conta (migração 20261001180000). */
 const UMA_POR_CONTA = 'exportacoes_uma_rodando_por_conta';
 
+const COM_ARQUIVOS = { arquivos: { orderBy: { indice: 'asc' } } } as const;
+const umaLinha = (tx: TransacaoComEscopo, escopo: EscopoDaConta, id: string) => tx.exportacao.findFirst({ where: { id, contaId: escopo.contaId }, include: COM_ARQUIVOS });
+type Linha = NonNullable<Awaited<ReturnType<typeof umaLinha>>>;
+
+function paraGuardada(l: Linha): ExportacaoGuardada {
+  const relatorio = l.relatorio ? RelatorioDeExportacao.parse(l.relatorio) : undefined;
+  return {
+    id: l.id,
+    documentoId: l.documentoId,
+    versao: l.versao,
+    nome: l.nome,
+    opcoes: l.opcoes as unknown as OpcoesGuardadas,
+    estado: l.estado,
+    pranchetasNoTotal: l.pranchetasNoTotal,
+    pranchetasProntas: l.pranchetasProntas,
+    arquivos: l.arquivos.map((a) => ({
+      indice: a.indice,
+      nome: a.nome,
+      tipoMime: a.tipoMime,
+      bytes: a.bytes,
+      ...(a.pranchetaId ? { pranchetaId: a.pranchetaId } : {}),
+      chaveDoObjeto: a.chaveDoObjeto,
+    })),
+    falhas: Array.isArray(l.falhas) ? (l.falhas as unknown as FalhaDePrancheta[]) : [],
+    ...(relatorio ? { relatorio } : {}),
+    ...(l.erroCodigo ? { erroCodigo: l.erroCodigo } : {}),
+    ...(l.duracaoMs !== null ? { duracaoMs: l.duracaoMs } : {}),
+    criadaEm: l.criadaEm,
+    ...(l.terminadaEm ? { terminadaEm: l.terminadaEm } : {}),
+    ...(l.expiraEm ? { expiraEm: l.expiraEm } : {}),
+    ...(l.arquivosRemovidosEm ? { arquivosRemovidosEm: l.arquivosRemovidosEm } : {}),
+  };
+}
+
 export class RepositorioDeExportacoesNoBanco extends RepositorioDeExportacoes {
   constructor(private readonly prisma: PrismaComEscopo) {
     super();
   }
 
   private async ler(tx: TransacaoComEscopo, escopo: EscopoDaConta, id: string): Promise<ExportacaoGuardada | undefined> {
-    const l = await tx.exportacao.findFirst({ where: { id, contaId: escopo.contaId }, include: { arquivos: { orderBy: { indice: 'asc' } } } });
-    if (!l) return undefined;
-    const relatorio = l.relatorio ? RelatorioDeExportacao.parse(l.relatorio) : undefined;
-    return {
-      id: l.id,
-      documentoId: l.documentoId,
-      versao: l.versao,
-      nome: l.nome,
-      opcoes: l.opcoes as unknown as OpcoesGuardadas,
-      estado: l.estado,
-      pranchetasNoTotal: l.pranchetasNoTotal,
-      pranchetasProntas: l.pranchetasProntas,
-      arquivos: l.arquivos.map((a) => ({
-        indice: a.indice,
-        nome: a.nome,
-        tipoMime: a.tipoMime,
-        bytes: a.bytes,
-        ...(a.pranchetaId ? { pranchetaId: a.pranchetaId } : {}),
-        chaveDoObjeto: a.chaveDoObjeto,
-      })),
-      falhas: Array.isArray(l.falhas) ? (l.falhas as unknown as FalhaDePrancheta[]) : [],
-      ...(relatorio ? { relatorio } : {}),
-      ...(l.erroCodigo ? { erroCodigo: l.erroCodigo } : {}),
-      ...(l.duracaoMs !== null ? { duracaoMs: l.duracaoMs } : {}),
-      criadaEm: l.criadaEm,
-      ...(l.terminadaEm ? { terminadaEm: l.terminadaEm } : {}),
-      ...(l.expiraEm ? { expiraEm: l.expiraEm } : {}),
-    };
+    const l = await umaLinha(tx, escopo, id);
+    return l ? paraGuardada(l) : undefined;
   }
 
   async criar(escopo: EscopoDaConta, nova: NovaExportacao): Promise<ExportacaoGuardada> {
@@ -65,6 +73,7 @@ export class RepositorioDeExportacoesNoBanco extends RepositorioDeExportacoes {
           formato: nova.opcoes.formato,
           opcoes: nova.opcoes as unknown as JsonDoBanco,
           pranchetasNoTotal: nova.opcoes.pranchetas.length,
+          ...(nova.criadaEm ? { criadaEm: nova.criadaEm } : {}),
         },
       });
       return (await this.ler(tx, escopo, nova.id)) as ExportacaoGuardada;
@@ -74,6 +83,38 @@ export class RepositorioDeExportacoesNoBanco extends RepositorioDeExportacoes {
   async buscar(escopo: EscopoDaConta, id: string): Promise<ExportacaoGuardada | undefined> {
     if (!UUID.test(id)) return undefined;
     return this.prisma.executar(escopo, (tx) => this.ler(tx, escopo, id));
+  }
+
+  async listarDoDocumento(escopo: EscopoDaConta, documentoId: string, filtro: { criadasDesde: Date; limite: number }): Promise<ExportacaoGuardada[]> {
+    if (!UUID.test(documentoId)) return [];
+    const linhas = await this.prisma.executar(escopo, (tx) =>
+      tx.exportacao.findMany({
+        where: { contaId: escopo.contaId, documentoId, criadaEm: { gte: filtro.criadasDesde } },
+        orderBy: { criadaEm: 'desc' },
+        take: filtro.limite,
+        include: COM_ARQUIVOS,
+      }),
+    );
+    return linhas.map(paraGuardada);
+  }
+
+  async darBaixaNasParadas(escopo: EscopoDaConta, agora: Date, limites: { naFilaDesde: Date; semSinalDesde: Date }): Promise<number> {
+    return this.prisma.executar(escopo, async (tx) => {
+      const abandonadas = await tx.exportacao.updateMany({
+        where: { contaId: escopo.contaId, estado: 'na_fila', criadaEm: { lt: limites.naFilaDesde } },
+        data: { estado: 'falhou', erroCodigo: 'abandonada', terminadaEm: agora },
+      });
+      const interrompidas = await tx.exportacao.updateMany({
+        where: { contaId: escopo.contaId, estado: 'rodando', OR: [{ batimentoEm: { lt: limites.semSinalDesde } }, { batimentoEm: null }] },
+        data: { estado: 'falhou', erroCodigo: 'interrompida', terminadaEm: agora },
+      });
+      return abandonadas.count + interrompidas.count;
+    });
+  }
+
+  async marcarArquivosRemovidos(escopo: EscopoDaConta, id: string, agora: Date): Promise<void> {
+    if (!UUID.test(id)) return;
+    await this.prisma.executar(escopo, (tx) => tx.exportacao.updateMany({ where: { id, contaId: escopo.contaId }, data: { arquivosRemovidosEm: agora } }));
   }
 
   async contarEmAndamento(escopo: EscopoDaConta): Promise<number> {
@@ -125,6 +166,13 @@ export class RepositorioDeExportacoesNoBanco extends RepositorioDeExportacoes {
       });
       await tx.exportacao.updateMany({ where: { id, contaId: escopo.contaId }, data: { pranchetasProntas: { increment: pranchetas }, batimentoEm: agora } });
     });
+  }
+
+  async registrarProgresso(escopo: EscopoDaConta, id: string, pranchetas: number, agora: Date): Promise<void> {
+    if (!UUID.test(id)) return;
+    await this.prisma.executar(escopo, (tx) =>
+      tx.exportacao.updateMany({ where: { id, contaId: escopo.contaId, estado: 'rodando' }, data: { pranchetasProntas: { increment: pranchetas }, batimentoEm: agora } }),
+    );
   }
 
   async registrarFalha(escopo: EscopoDaConta, id: string, falha: FalhaDePrancheta, agora: Date): Promise<void> {

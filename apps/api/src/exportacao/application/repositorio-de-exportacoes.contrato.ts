@@ -166,4 +166,96 @@ export function contratoDoRepositorioDeExportacoes(nome: string, criar: () => Pr
       expect(await r.contarEmAndamento(escopo)).toBe(antes);
     });
   });
+
+  describe(`contrato de RepositorioDeExportacoes: ${nome} (fechamento da fatia 2)`, () => {
+    let sob: RepositorioDeExportacoesSobTeste;
+    let r: RepositorioDeExportacoes;
+    const concluida = { estado: 'pronta' as const, terminadaEm: AGORA, expiraEm: depois(7 * 86_400), duracaoMs: 10 };
+
+    beforeAll(async () => {
+      sob = await criar();
+      r = sob.repositorio;
+    });
+
+    const criarEm = async (escopo: EscopoDaConta, documentoId: string, criadaEm: Date, opcoes: NovaExportacao['opcoes'] = { formato: 'psd', arquivos: 'por-prancheta', pranchetas: ['p0'] }) => {
+      const id = randomUUID();
+      await r.criar(escopo, { id, documentoId, versao: 1, nome: 'Promoção', opcoes, criadaEm });
+      return id;
+    };
+
+    it('guarda os formatos novos e a opção de pacote, e a data de criação que o caso de uso informa', async () => {
+      const doc = await sob.criarDocumento(sob.contaA);
+      const svg = await criarEm(sob.contaA, doc, AGORA, { formato: 'svg', pranchetas: ['p0'], pacote: true });
+      const pdf = await criarEm(sob.contaA, doc, AGORA, { formato: 'pdf', arquivos: 'juntas', pranchetas: ['p0', 'p1'] });
+      expect(await r.buscar(sob.contaA, svg)).toMatchObject({ opcoes: { formato: 'svg', pranchetas: ['p0'], pacote: true }, pranchetasNoTotal: 1 });
+      expect(await r.buscar(sob.contaA, pdf)).toMatchObject({ opcoes: { formato: 'pdf', arquivos: 'juntas', pranchetas: ['p0', 'p1'] }, pranchetasNoTotal: 2 });
+      expect((await r.buscar(sob.contaA, svg))?.criadaEm.toISOString()).toBe(AGORA.toISOString());
+      for (const id of [svg, pdf]) await r.concluir(sob.contaA, id, { estado: 'falhou', erroCodigo: 'teste', terminadaEm: AGORA, duracaoMs: 1 });
+    });
+
+    it('lista as exportações de UM documento, da mais nova para a mais velha, só as criadas desde a data pedida e até o limite', async () => {
+      const [doc, outroDoc] = [await sob.criarDocumento(sob.contaA), await sob.criarDocumento(sob.contaA)];
+      const velha = await criarEm(sob.contaA, doc, depois(-10 * 86_400));
+      const ontem = await criarEm(sob.contaA, doc, depois(-86_400));
+      const hoje = await criarEm(sob.contaA, doc, depois(-60));
+      const deOutroDoc = await criarEm(sob.contaA, outroDoc, depois(-30));
+      const ids = async (limite: number) => (await r.listarDoDocumento(sob.contaA, doc, { criadasDesde: depois(-7 * 86_400), limite })).map((e) => e.id);
+      expect(await ids(10)).toEqual([hoje, ontem]);
+      expect(await ids(1)).toEqual([hoje]);
+      // de outra conta, o documento não tem exportação nenhuma; id que não é UUID também não
+      expect(await r.listarDoDocumento(sob.contaB, doc, { criadasDesde: depois(-7 * 86_400), limite: 10 })).toEqual([]);
+      expect(await r.listarDoDocumento(sob.contaA, 'não-é-uuid', { criadasDesde: depois(-7 * 86_400), limite: 10 })).toEqual([]);
+      for (const id of [velha, ontem, hoje, deOutroDoc]) await r.concluir(sob.contaA, id, { estado: 'falhou', erroCodigo: 'teste', terminadaEm: AGORA, duracaoMs: 1 });
+    });
+
+    it('dá baixa nas paradas da conta: na fila há tempo demais vira "abandonada"; rodando sem sinal de vida, "interrompida"; as outras ficam', async () => {
+      const doc = await sob.criarDocumento(sob.contaA);
+      const docDeB = await sob.criarDocumento(sob.contaB);
+      const esquecida = await criarEm(sob.contaA, doc, depois(-3600));
+      const recente = await criarEm(sob.contaA, doc, depois(-60));
+      const deB = await criarEm(sob.contaB, docDeB, depois(-3600));
+      const travada = await criarEm(sob.contaA, doc, depois(-3600));
+      await r.iniciar(sob.contaA, travada, depois(-3500), HA_MUITO_TEMPO);
+
+      const baixas = await r.darBaixaNasParadas(sob.contaA, AGORA, { naFilaDesde: depois(-1800), semSinalDesde: depois(-300) });
+      expect(baixas).toBe(2);
+      expect(await r.buscar(sob.contaA, esquecida)).toMatchObject({ estado: 'falhou', erroCodigo: 'abandonada' });
+      expect(await r.buscar(sob.contaA, travada)).toMatchObject({ estado: 'falhou', erroCodigo: 'interrompida' });
+      expect((await r.buscar(sob.contaA, esquecida))?.terminadaEm?.toISOString()).toBe(AGORA.toISOString());
+      expect((await r.buscar(sob.contaA, recente))?.estado).toBe('na_fila');
+      // a baixa é da conta do escopo: a exportação parada da conta B continua como estava
+      expect((await r.buscar(sob.contaB, deB))?.estado).toBe('na_fila');
+      expect(await r.darBaixaNasParadas(sob.contaA, AGORA, { naFilaDesde: depois(-1800), semSinalDesde: depois(-300) })).toBe(0);
+      await r.concluir(sob.contaA, recente, { estado: 'falhou', erroCodigo: 'teste', terminadaEm: AGORA, duracaoMs: 1 });
+      await r.concluir(sob.contaB, deB, { estado: 'falhou', erroCodigo: 'teste', terminadaEm: AGORA, duracaoMs: 1 });
+    });
+
+    it('registra progresso sem arquivo (pacote: os arquivos só são guardados no fim, dentro do .zip)', async () => {
+      const doc = await sob.criarDocumento(sob.contaA);
+      const id = await criarEm(sob.contaA, doc, AGORA, { formato: 'psd', arquivos: 'por-prancheta', pranchetas: ['p0', 'p1'], pacote: true });
+      await r.iniciar(sob.contaA, id, AGORA, HA_MUITO_TEMPO);
+      await r.registrarProgresso(sob.contaB, id, 1, AGORA);
+      expect((await r.buscar(sob.contaA, id))?.pranchetasProntas).toBe(0);
+      await r.registrarProgresso(sob.contaA, id, 1, AGORA);
+      expect(await r.buscar(sob.contaA, id)).toMatchObject({ estado: 'rodando', pranchetasProntas: 1, arquivos: [] });
+      await r.concluir(sob.contaA, id, { estado: 'falhou', erroCodigo: 'teste', terminadaEm: AGORA, duracaoMs: 1 });
+    });
+
+    it('marca os arquivos como removidos sem apagar o registro; outra conta não marca', async () => {
+      const doc = await sob.criarDocumento(sob.contaA);
+      const id = await criarEm(sob.contaA, doc, AGORA);
+      await r.iniciar(sob.contaA, id, AGORA, HA_MUITO_TEMPO);
+      await r.registrarArquivo(sob.contaA, id, arquivo(0), 1, AGORA);
+      await r.concluir(sob.contaA, id, concluida);
+      expect((await r.buscar(sob.contaA, id))?.arquivosRemovidosEm).toBeUndefined();
+
+      await r.marcarArquivosRemovidos(sob.contaB, id, depois(8 * 86_400));
+      expect((await r.buscar(sob.contaA, id))?.arquivosRemovidosEm).toBeUndefined();
+
+      await r.marcarArquivosRemovidos(sob.contaA, id, depois(8 * 86_400));
+      const depoisDaLimpeza = await r.buscar(sob.contaA, id);
+      expect(depoisDaLimpeza?.arquivosRemovidosEm?.toISOString()).toBe(depois(8 * 86_400).toISOString());
+      expect(depoisDaLimpeza).toMatchObject({ estado: 'pronta', arquivos: [arquivo(0)] });
+    });
+  });
 }

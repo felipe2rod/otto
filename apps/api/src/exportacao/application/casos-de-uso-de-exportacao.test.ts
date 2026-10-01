@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { aplicarLote, type Documento, documentoVazio } from '@otto/documento';
 import type { RecursosDaExportacao } from '@otto/psd';
-import { CODIGOS_DE_ERRO, DIAS_DE_RETENCAO_DA_EXPORTACAO, EXPORTACOES_NA_FILA_POR_CONTA, Exportacao, lerContaId, RelatorioDeExportacao } from '@otto/shared';
+import { CODIGOS_DE_ERRO, DIAS_DE_RETENCAO_DA_EXPORTACAO, EXPORTACOES_NA_FILA_POR_CONTA, EXPORTACOES_NA_LISTA, Exportacao, lerContaId, RelatorioDeExportacao } from '@otto/shared';
+import { unzipSync } from 'fflate';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CasosDeUsoDeArquivo } from '../../arquivo/application/casos-de-uso-de-arquivo';
 import { ArmazenamentoEmMemoria } from '../../arquivo/infrastructure/adaptadores/memoria/armazenamento-em-memoria';
@@ -17,7 +18,7 @@ import { BarramentoEmMemoria } from '../../plataforma/fila/adaptadores/memoria/b
 import { FILAS } from '../../plataforma/fila/barramento-de-eventos';
 import { type EventoDeUso, RegistroDeUso } from '../../plataforma/uso/registro-de-uso';
 import { RepositorioDeExportacoesEmMemoria } from '../infrastructure/memoria/repositorio-de-exportacoes-em-memoria';
-import { CasosDeUsoDeExportacao, ContaOcupada } from './casos-de-uso-de-exportacao';
+import { CasosDeUsoDeExportacao, ContaOcupada, NA_FILA_NO_MAXIMO_MS, SEM_SINAL_DEPOIS_DE_MS } from './casos-de-uso-de-exportacao';
 import { type ArquivoGerado, type EntreEtapas, MotorDeExportacao } from './motor-de-exportacao';
 
 const contaA = EscopoDaConta.abrir(lerContaId('01990000-0000-7000-8000-00000000000a'));
@@ -29,7 +30,13 @@ class MotorFalso extends MotorDeExportacao {
   chamadas: { formato: string; nome: string; pranchetas: readonly string[]; opcoes: object; recursos: RecursosDaExportacao; doc: Documento }[] = [];
   falharEm = new Set<string>();
 
-  private gerar(formato: 'psd' | 'png', doc: Documento, recursos: RecursosDaExportacao, opcoes: { nome: string; pranchetas: readonly string[] }, entreEtapas: EntreEtapas): Promise<ArquivoGerado[]> {
+  private gerar(
+    formato: 'psd' | 'png' | 'svg' | 'pdf',
+    doc: Documento,
+    recursos: RecursosDaExportacao,
+    opcoes: { nome: string; pranchetas: readonly string[] },
+    entreEtapas: EntreEtapas,
+  ): Promise<ArquivoGerado[]> {
     return (async () => {
       await entreEtapas();
       this.chamadas.push({ formato, nome: opcoes.nome, pranchetas: opcoes.pranchetas, opcoes, recursos, doc });
@@ -42,6 +49,12 @@ class MotorFalso extends MotorDeExportacao {
   }
   png(doc: Documento, recursos: RecursosDaExportacao, opcoes: { nome: string; pranchetas: readonly string[]; escala: 1 | 2; semFundo: boolean }, e: EntreEtapas) {
     return this.gerar('png', doc, recursos, opcoes, e);
+  }
+  svg(doc: Documento, recursos: RecursosDaExportacao, opcoes: { nome: string; pranchetas: readonly string[] }, e: EntreEtapas) {
+    return this.gerar('svg', doc, recursos, opcoes, e);
+  }
+  pdf(doc: Documento, recursos: RecursosDaExportacao, opcoes: { nome: string; pranchetas: readonly string[]; arquivos: 'por-prancheta' | 'juntas' }, e: EntreEtapas) {
+    return this.gerar('pdf', doc, recursos, opcoes, e);
   }
 }
 
@@ -210,7 +223,8 @@ describe('executar exportação (o worker)', () => {
   it('PNG: repassa escala e fundo, e não tem relatório', async () => {
     const { exportacao: e } = await pedirEExecutar({ formato: 'png', escala: 2, semFundo: true, pranchetas: ['p2'] });
     expect(motor.chamadas[0]).toMatchObject({ formato: 'png', pranchetas: ['p2'], opcoes: { escala: 2, semFundo: true } });
-    expect(e.arquivos[0]).toMatchObject({ nome: 'Promoção.png', tipo: 'image/png' });
+    // a peça tem duas pranchetas: o arquivo leva o nome da prancheta mesmo quando só uma foi pedida
+    expect(e.arquivos[0]).toMatchObject({ nome: 'Promoção - Story.png', tipo: 'image/png' });
     expect(e.relatorio).toBeUndefined();
   });
 
@@ -390,5 +404,297 @@ describe('relatório antes de exportar', () => {
     expect((await casos.relatorio(contaA, doc.id, { formato: 'psd', arquivos: 'por-prancheta', pranchetas: ['p2'] })).camadas.map((c) => c.prancheta)).toEqual(['Story']);
     expect((await erroDe(casos.relatorio(contaA, doc.id, { formato: 'psd', arquivos: 'juntas', pranchetas: ['x'] }))).codigo).toBe(CODIGOS_DE_ERRO.pranchetaDesconhecida);
     expect((await erroDe(casos.relatorio(contaB, doc.id, { formato: 'psd', arquivos: 'juntas' }))).codigo).toBe(CODIGOS_DE_ERRO.naoEncontrado);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Fechamento da fatia 2: SVG e PDF, pacote, nome de arquivo, limpeza, exportação parada e lista.
+// ---------------------------------------------------------------------------------------------
+
+const UM_DIA = 86_400_000;
+const pedirE = async (pedido: Parameters<CasosDeUsoDeExportacao['pedir']>[2], doc?: Awaited<ReturnType<typeof documento>>) => {
+  const d = doc ?? (await documento());
+  const pedida = await casos.pedir(contaA, d.id, pedido);
+  await casos.executar(contaA, pedida.id);
+  return { exportacao: Exportacao.parse(await casos.consultar(contaA, pedida.id)), doc: d };
+};
+const texto = (camadas: object[] = []) => [{ nome: 'Título', tipo: 'texto', x: 0, y: 0, largura: 100, altura: 50, conteudo: 'Oi', fonte: 'Anton', tamanho: 20, cor: '#000000' }, ...camadas];
+
+describe('SVG e PDF', () => {
+  it('SVG: um arquivo por prancheta, com o tipo certo e o relatório vetorial do que saiu', async () => {
+    const { exportacao: e } = await pedirE({ formato: 'svg' });
+    expect(e).toMatchObject({ formato: 'svg', estado: 'pronta', progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 } });
+    expect(e.arquivos.map((a) => [a.nome, a.tipo, a.pranchetaId])).toEqual([
+      ['Promoção - Feed.svg', 'image/svg+xml', 'p1'],
+      ['Promoção - Story.svg', 'image/svg+xml', 'p2'],
+    ]);
+    expect(motor.chamadas.map((c) => [c.formato, c.pranchetas])).toEqual([
+      ['svg', ['p1']],
+      ['svg', ['p2']],
+    ]);
+    expect(RelatorioDeExportacao.parse(e.relatorio).arquivos).toEqual(['Promoção - Feed.svg', 'Promoção - Story.svg']);
+    expect((await exportacoes.buscar(contaA, e.id))?.arquivos[0]?.chaveDoObjeto).toBe(`contas/${contaA.contaId}/exportacoes/${e.id}/0.svg`);
+  });
+
+  it('PDF: por padrão as pranchetas vão juntas, uma página cada, num arquivo com o nome da peça; falhou, falhou tudo', async () => {
+    const { exportacao: e } = await pedirE({ formato: 'pdf', arquivos: 'juntas' });
+    expect(motor.chamadas).toHaveLength(1);
+    expect(motor.chamadas[0]).toMatchObject({ formato: 'pdf', nome: 'Promoção', pranchetas: ['p1', 'p2'], opcoes: { arquivos: 'juntas' } });
+    expect(e.arquivos.map((a) => [a.nome, a.tipo])).toEqual([['Promoção.pdf', 'application/pdf']]);
+    expect(e.arquivos[0]).not.toHaveProperty('pranchetaId');
+    expect(e.progresso).toEqual({ pranchetasProntas: 2, pranchetasNoTotal: 2 });
+
+    motor.falharEm.add('p2');
+    const { exportacao: falha } = await pedirE({ formato: 'pdf', arquivos: 'juntas' });
+    expect(falha).toMatchObject({ estado: 'falhou', arquivos: [], falhas: [] });
+  });
+
+  it('PDF por prancheta: um arquivo cada, e a que falha não derruba a outra', async () => {
+    motor.falharEm.add('p1');
+    const { exportacao: e } = await pedirE({ formato: 'pdf', arquivos: 'por-prancheta' });
+    expect(e.estado).toBe('pronta_em_parte');
+    expect(e.arquivos.map((a) => a.nome)).toEqual(['Promoção - Story.pdf']);
+  });
+
+  it('o relatório prévio do SVG e do PDF é o vetorial: a camada de ajuste fica de fora, com aviso', async () => {
+    const ajuste = { nome: 'Curvas', tipo: 'ajuste', ajuste: { tipo: 'curvas' } };
+    const doc = await documento(contaA, arvoreCom(['Feed'], texto([ajuste])));
+    const svg = RelatorioDeExportacao.parse(await casos.relatorio(contaA, doc.id, { formato: 'svg' }));
+    expect(svg.camadas.find((c) => c.camada === 'Curvas')?.destino).toBe('omitido-com-aviso');
+    const psd = await casos.relatorio(contaA, doc.id, { formato: 'psd', arquivos: 'por-prancheta' });
+    expect(psd.camadas.find((c) => c.camada === 'Curvas')?.destino).not.toBe('omitido-com-aviso');
+    const pdf = RelatorioDeExportacao.parse(await casos.relatorio(contaA, doc.id, { formato: 'pdf', arquivos: 'juntas' }));
+    expect(pdf.camadas.map((c) => c.camada)).toEqual(svg.camadas.map((c) => c.camada));
+  });
+});
+
+describe('nome do arquivo', () => {
+  it('peça com mais de uma prancheta: o arquivo leva o nome da prancheta, mesmo exportando uma só (como ao tentar de novo a que falhou)', async () => {
+    const doc = await documento();
+    motor.falharEm.add('p1');
+    const { exportacao: primeira } = await pedirE({ formato: 'psd', arquivos: 'por-prancheta' }, doc);
+    motor.falharEm.clear();
+    const { exportacao: deNovo } = await pedirE({ formato: 'psd', arquivos: 'por-prancheta', pranchetas: ['p1'] }, doc);
+    expect([...primeira.arquivos, ...deNovo.arquivos].map((a) => a.nome)).toEqual(['Promoção - Story.psd', 'Promoção - Feed.psd']);
+  });
+
+  it('peça de uma prancheta só: o arquivo leva só o nome da peça, em qualquer formato', async () => {
+    const doc = await documento(contaA, arvoreCom(['Feed']));
+    const nomes: string[] = [];
+    for (const pedido of [{ formato: 'psd', arquivos: 'por-prancheta' }, { formato: 'png', escala: 1, semFundo: false }, { formato: 'svg' }, { formato: 'pdf', arquivos: 'por-prancheta' }] as const) {
+      nomes.push(...(await pedirE(pedido, doc)).exportacao.arquivos.map((a) => a.nome));
+    }
+    expect(nomes).toEqual(['Promoção.psd', 'Promoção.png', 'Promoção.svg', 'Promoção.pdf']);
+  });
+});
+
+describe('pacote (.zip)', () => {
+  async function comFontes(camadas: object[]) {
+    await fontes.registrar({ familia: 'Anton', peso: 400, nomePostScript: 'Anton-Regular', licenca: 'SIL Open Font License 1.1', conteudo: Uint8Array.from([0, 1, 0, 0, 7]) });
+    await fontes.registrar({
+      familia: 'Aberta',
+      peso: 400,
+      nomePostScript: 'Aberta-Regular',
+      licenca: 'Google Fonts (licença aberta, a conferir por família)',
+      conteudo: Uint8Array.from([79, 84, 84, 79, 1]),
+    });
+    await fontes.registrar({ familia: 'Fechada', peso: 400, nomePostScript: 'Fechada-Regular', licenca: 'Licença comercial', conteudo: Uint8Array.from([0, 1, 0, 0, 8]) });
+    await fontes.registrar({ familia: 'Sem Registro', peso: 400, nomePostScript: 'SemRegistro-Regular', licenca: null, conteudo: Uint8Array.from([0, 1, 0, 0, 9]) });
+    await fontes.registrar({ familia: 'Não Usada', peso: 400, nomePostScript: 'NaoUsada-Regular', licenca: 'SIL Open Font License 1.1', conteudo: Uint8Array.from([0, 1, 0, 0, 5]) });
+    return documento(contaA, arvoreCom(['Feed', 'Story'], camadas));
+  }
+  const camadaDeTexto = (nome: string, fonte: string) => ({ nome, tipo: 'texto', x: 0, y: 0, largura: 100, altura: 50, conteudo: 'Oi', fonte, tamanho: 20, cor: '#000000' });
+  const quatroTextos = [camadaDeTexto('A', 'Anton'), camadaDeTexto('B', 'Aberta'), camadaDeTexto('C', 'Fechada'), camadaDeTexto('D', 'Sem Registro')];
+  const abrirZip = async (id: string) => unzipSync((await armazenamento.ler(contaA, `contas/${contaA.contaId}/exportacoes/${id}/0.zip`)) as Uint8Array);
+
+  it('entrega UM .zip com os arquivos do formato, a pasta de fontes usadas e o relatório em texto', async () => {
+    const doc = await comFontes(quatroTextos);
+    const { exportacao: e } = await pedirE({ formato: 'psd', arquivos: 'por-prancheta', pacote: true }, doc);
+    expect(e).toMatchObject({ estado: 'pronta', formato: 'psd', pacote: true, progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 } });
+    expect(e.arquivos.map((a) => [a.indice, a.nome, a.tipo, a.pranchetaId])).toEqual([[0, 'Promoção.zip', 'application/zip', undefined]]);
+
+    const zip = await abrirZip(e.id);
+    expect(Object.keys(zip).sort()).toEqual(['Fontes/Aberta-Regular.otf', 'Fontes/Anton-Regular.ttf', 'Promoção - Feed.psd', 'Promoção - Story.psd', 'Relatório de exportação.md'].sort());
+    expect(new TextDecoder().decode(zip['Promoção - Feed.psd'])).toBe('psd:p1');
+    expect(Array.from(zip['Fontes/Anton-Regular.ttf'] as Uint8Array)).toEqual([0, 1, 0, 0, 7]);
+    expect(e.arquivos[0]?.bytes).toBe((await armazenamento.ler(contaA, `contas/${contaA.contaId}/exportacoes/${e.id}/0.zip`))?.byteLength);
+  });
+
+  it('fonte cuja licença não deixa redistribuir, ou sem licença registrada, fica fora do pacote, e o relatório diz qual e por quê', async () => {
+    const doc = await comFontes(quatroTextos);
+    const { exportacao: e } = await pedirE({ formato: 'psd', arquivos: 'por-prancheta', pacote: true }, doc);
+    expect(e.relatorio?.pacote?.fontes.map((f) => [f.familia, f.incluida, f.arquivo ?? f.motivo])).toEqual([
+      ['Aberta', true, 'Fontes/Aberta-Regular.otf'],
+      ['Anton', true, 'Fontes/Anton-Regular.ttf'],
+      ['Fechada', false, 'licenca_nao_permite'],
+      ['Sem Registro', false, 'licenca_desconhecida'],
+    ]);
+    const relatorio = new TextDecoder().decode((await abrirZip(e.id))['Relatório de exportação.md']);
+    expect(relatorio).toContain('# Relatório de exportação: Promoção');
+    expect(relatorio).toContain('Fontes/Anton-Regular.ttf');
+    expect(relatorio).toMatch(/Fechada.*não/i);
+    expect(relatorio).toMatch(/Sem Registro.*não/i);
+    expect(relatorio).not.toContain('Não Usada');
+  });
+
+  it('o relatório prévio de um pacote já diz que fontes vão dentro; sem pacote, o campo não existe', async () => {
+    const doc = await comFontes(quatroTextos);
+    const previo = RelatorioDeExportacao.parse(await casos.relatorio(contaA, doc.id, { formato: 'svg', pacote: true }));
+    expect(previo.pacote?.fontes.map((f) => [f.postScript, f.incluida])).toEqual([
+      ['Aberta-Regular', true],
+      ['Anton-Regular', true],
+      ['Fechada-Regular', false],
+      ['SemRegistro-Regular', false],
+    ]);
+    expect((await casos.relatorio(contaA, doc.id, { formato: 'svg' })).pacote).toBeUndefined();
+  });
+
+  it('pacote com falha em uma prancheta: sai com o que deu certo, em parte, e o progresso anda prancheta a prancheta', async () => {
+    const doc = await comFontes(quatroTextos);
+    motor.falharEm.add('p2');
+    const pedida = await casos.pedir(contaA, doc.id, { formato: 'pdf', arquivos: 'por-prancheta', pacote: true });
+    const andamento: number[] = [];
+    const original = motor.pdf.bind(motor);
+    motor.pdf = async (...a) => {
+      andamento.push((await exportacoes.buscar(contaA, pedida.id))?.pranchetasProntas ?? -1);
+      return original(...a);
+    };
+    await casos.executar(contaA, pedida.id);
+    const e = await casos.consultar(contaA, pedida.id);
+    expect(andamento).toEqual([0, 1]);
+    expect(e).toMatchObject({ estado: 'pronta_em_parte', falhas: [{ pranchetaId: 'p2', codigo: 'falha_na_prancheta' }], progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 } });
+    expect(Object.keys(await abrirZip(e.id)).filter((n) => n.endsWith('.pdf'))).toEqual(['Promoção - Feed.pdf']);
+  });
+
+  it('pacote em que nada saiu: falha, sem .zip', async () => {
+    motor.falharEm.add('p1').add('p2');
+    const { exportacao: e } = await pedirE({ formato: 'svg', pacote: true });
+    expect(e).toMatchObject({ estado: 'falhou', arquivos: [] });
+  });
+
+  it('pacote de PNG: as imagens e o relatório do que falta, sem pasta de fontes (não há texto para editar)', async () => {
+    const doc = await comFontes(quatroTextos);
+    const { exportacao: e } = await pedirE({ formato: 'png', escala: 1, semFundo: false, pacote: true }, doc);
+    expect(Object.keys(await abrirZip(e.id)).sort()).toEqual(['Promoção - Feed.png', 'Promoção - Story.png', 'Relatório de exportação.md'].sort());
+  });
+});
+
+describe('limpeza dos arquivos vencidos', () => {
+  async function prontaComLimpezaAgendada() {
+    const { exportacao: e } = await pedirE({ formato: 'psd', arquivos: 'por-prancheta' });
+    return e;
+  }
+  const chaves = (id: string) => [0, 1].map((i) => `contas/${contaA.contaId}/exportacoes/${id}/${i}.psd`);
+
+  it('ao terminar com arquivo, agenda a limpeza para depois do vencimento, só com identificadores', async () => {
+    const e = await prontaComLimpezaAgendada();
+    expect(fila.agendados).toHaveLength(1);
+    expect(fila.agendados[0]).toMatchObject({ fila: FILAS.limpezaDeExportacao, trabalho: { contaId: contaA.contaId, id: e.id } });
+    expect(fila.agendados[0]?.naoAntesDe.getTime()).toBeGreaterThan(Date.parse(e.expiraEm as string));
+  });
+
+  it('exportação que falhou sem arquivo não agenda limpeza', async () => {
+    motor.falharEm.add('p1').add('p2');
+    await pedirE({ formato: 'psd', arquivos: 'por-prancheta' });
+    expect(fila.agendados).toEqual([]);
+  });
+
+  it('vencida: apaga os objetos do armazenamento, marca a exportação e registra o uso; o registro fica', async () => {
+    const e = await prontaComLimpezaAgendada();
+    relogio = new Date(Date.parse(e.expiraEm as string) + 61_000);
+    expect(await casos.limpar(contaA, e.id)).toBe('limpa');
+    for (const chave of chaves(e.id)) expect(await armazenamento.existe(contaA, chave)).toBe(false);
+    const depois = await exportacoes.buscar(contaA, e.id);
+    expect(depois?.arquivosRemovidosEm?.toISOString()).toBe(relogio.toISOString());
+    expect(depois?.arquivos).toHaveLength(2);
+    expect(uso.eventos.at(-1)).toMatchObject({ evento: 'exportacao_limpa', exportacaoId: e.id, arquivos: 2, bytes: 12 });
+    // entregue de novo: não faz nada
+    expect(await casos.limpar(contaA, e.id)).toBe('ignorada');
+    expect((await erroDe(casos.linkDoArquivo(contaA, e.id, 0))).codigo).toBe(CODIGOS_DE_ERRO.exportacaoExpirada);
+  });
+
+  it('trabalho de limpeza que chega antes do vencimento não apaga nada e lança, para ser entregue de novo', async () => {
+    const e = await prontaComLimpezaAgendada();
+    await expect(casos.limpar(contaA, e.id)).rejects.toThrow();
+    for (const chave of chaves(e.id)) expect(await armazenamento.existe(contaA, chave)).toBe(true);
+  });
+
+  it('trabalho de limpeza com a conta trocada, ou de exportação que não existe, é ignorado: nada é apagado', async () => {
+    const e = await prontaComLimpezaAgendada();
+    relogio = new Date(Date.parse(e.expiraEm as string) + 61_000);
+    expect(await casos.limpar(contaB, e.id)).toBe('ignorada');
+    expect(await casos.limpar(contaA, randomUUID())).toBe('ignorada');
+    for (const chave of chaves(e.id)) expect(await armazenamento.existe(contaA, chave)).toBe(true);
+  });
+});
+
+describe('exportação parada', () => {
+  it('na fila há mais tempo que o limite (o trabalho se perdeu): quem consulta recebe "falhou", e ela para de contar no limite da conta', async () => {
+    const doc = await documento();
+    for (let i = 0; i < EXPORTACOES_NA_FILA_POR_CONTA; i++) await casos.pedir(contaA, doc.id, { formato: 'png', escala: 1, semFundo: false });
+    const esquecida = fila.publicados[0]?.trabalho.id as string;
+    expect((await erroDe(casos.pedir(contaA, doc.id, { formato: 'png', escala: 1, semFundo: false }))).codigo).toBe(CODIGOS_DE_ERRO.limiteDeExportacoes);
+
+    relogio = new Date(AGORA.getTime() + NA_FILA_NO_MAXIMO_MS + 1000);
+    expect(await casos.consultar(contaA, esquecida)).toMatchObject({ estado: 'falhou', erro: { codigo: 'abandonada' } });
+    expect((await casos.pedir(contaA, doc.id, { formato: 'png', escala: 1, semFundo: false })).estado).toBe('na_fila');
+  });
+
+  it('rodando sem sinal de vida (o worker morreu): quem consulta recebe "falhou" depois do limite, não "rodando" para sempre', async () => {
+    const doc = await documento();
+    const pedida = await casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'juntas' });
+    await exportacoes.iniciar(contaA, pedida.id, AGORA, new Date(0));
+    relogio = new Date(AGORA.getTime() + SEM_SINAL_DEPOIS_DE_MS - 1000);
+    expect((await casos.consultar(contaA, pedida.id)).estado).toBe('rodando');
+    relogio = new Date(AGORA.getTime() + SEM_SINAL_DEPOIS_DE_MS + 1000);
+    expect(await casos.consultar(contaA, pedida.id)).toMatchObject({ estado: 'falhou', erro: { codigo: 'interrompida' } });
+  });
+});
+
+describe('lista das exportações de uma peça (para retomar depois de recarregar a página)', () => {
+  it('traz as em curso e as recentes, da mais nova para a mais velha, sem o relatório e sem as de outra peça', async () => {
+    const [doc, outro] = [await documento(), await documento()];
+    const pronta = (await pedirE({ formato: 'psd', arquivos: 'por-prancheta' }, doc)).exportacao;
+    relogio = new Date(AGORA.getTime() + 60_000);
+    const naFila = await casos.pedir(contaA, doc.id, { formato: 'svg', pacote: true });
+    await casos.pedir(contaA, outro.id, { formato: 'png', escala: 1, semFundo: false });
+
+    const lista = await casos.listar(contaA, doc.id);
+    expect(lista.itens.map((e) => [e.id, e.estado, e.formato, e.pacote ?? false])).toEqual([
+      [naFila.id, 'na_fila', 'svg', true],
+      [pronta.id, 'pronta', 'psd', false],
+    ]);
+    expect(lista.itens[1]?.arquivos).toHaveLength(2);
+    expect(lista.itens.every((e) => e.relatorio === undefined)).toBe(true);
+  });
+
+  it('não traz o que foi criado há mais que o tempo de retenção, e respeita o limite', async () => {
+    const doc = await documento();
+    await pedirE({ formato: 'png', escala: 1, semFundo: false }, doc);
+    relogio = new Date(AGORA.getTime() + (DIAS_DE_RETENCAO_DA_EXPORTACAO + 1) * UM_DIA);
+    expect((await casos.listar(contaA, doc.id)).itens).toEqual([]);
+    for (let i = 0; i < EXPORTACOES_NA_LISTA + 3; i++) await pedirE({ formato: 'png', escala: 1, semFundo: false }, doc);
+    expect((await casos.listar(contaA, doc.id)).itens).toHaveLength(EXPORTACOES_NA_LISTA);
+  });
+
+  it('peça de outra conta, ou que não existe, é "não encontrado" (não uma lista vazia)', async () => {
+    const deB = await documento(contaB);
+    expect((await erroDe(casos.listar(contaA, deB.id))).codigo).toBe(CODIGOS_DE_ERRO.naoEncontrado);
+    expect((await erroDe(casos.listar(contaA, randomUUID()))).codigo).toBe(CODIGOS_DE_ERRO.naoEncontrado);
+  });
+
+  it('a lista também dá baixa no que parou: a exportação esquecida aparece como "falhou"', async () => {
+    const doc = await documento();
+    const pedida = await casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'juntas' });
+    relogio = new Date(AGORA.getTime() + NA_FILA_NO_MAXIMO_MS + 1000);
+    expect((await casos.listar(contaA, doc.id)).itens.map((e) => [e.id, e.estado])).toEqual([[pedida.id, 'falhou']]);
+  });
+});
+
+describe('uso: baixar', () => {
+  it('pedir o link de download registra exportacao_baixada, com formato e se é pacote, sem nome de arquivo', async () => {
+    const { exportacao: e } = await pedirE({ formato: 'pdf', arquivos: 'juntas', pacote: true });
+    await casos.linkDoArquivo(contaA, e.id, 0);
+    expect(uso.eventos.at(-1)).toEqual({ evento: 'exportacao_baixada', exportacaoId: e.id, documentoId: e.documentoId, formato: 'pdf', pacote: true });
   });
 });

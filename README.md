@@ -52,7 +52,31 @@ curl -s "$API/exportacoes/$EXP"                       # repita até "estado" ser
 curl -sL -o peca.psd "$API/exportacoes/$EXP/arquivos/0"   # 302 para o link assinado
 ```
 
-Corpo do pedido: `{"formato":"psd","arquivos":"por-prancheta"|"juntas","pranchetas":[ids]}` ou `{"formato":"png","escala":1|2,"semFundo":true|false,"pranchetas":[ids]}`. O contrato inteiro está em `packages/shared/src/exportacao.ts`.
+Os outros formatos e o pacote usam as mesmas rotas, só muda o corpo:
+
+```bash
+exportar() {  # exportar '<corpo>' <arquivo de saída>
+  EXP=$(curl -s -X POST "$API/documentos/$DOC/exportacoes" -H 'X-Otto-Cliente: editor' -H 'Content-Type: application/json' -d "$1" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+  until curl -s "$API/exportacoes/$EXP" | grep -qE '"estado":"(pronta|pronta_em_parte|falhou)"'; do sleep 0.5; done
+  curl -sL -o "$2" "$API/exportacoes/$EXP/arquivos/0"
+}
+exportar '{"formato":"svg"}' peca.svg                  # um .svg por prancheta (este baixa o primeiro)
+exportar '{"formato":"pdf"}' peca.pdf                  # um .pdf, uma página por prancheta
+exportar '{"formato":"psd","pacote":true}' pacote.zip  # os PSDs, a pasta Fontes e o relatório em texto
+unzip -l pacote.zip
+curl -s "$API/documentos/$DOC/exportacoes"             # as exportações recentes e em curso da peça
+```
+
+| Corpo | O que sai |
+|---|---|
+| `{"formato":"psd","arquivos":"por-prancheta"\|"juntas"}` | Um PSD por prancheta (padrão), ou um só com todas |
+| `{"formato":"png","escala":1\|2,"semFundo":true\|false}` | Um PNG por prancheta |
+| `{"formato":"svg"}` | Um SVG por prancheta |
+| `{"formato":"pdf","arquivos":"juntas"\|"por-prancheta"}` | Um PDF com uma página por prancheta (padrão), ou um por prancheta |
+
+Em qualquer um: `"pranchetas":[ids]` exporta só essas, e `"pacote":true` entrega um `.zip` com os arquivos, as fontes usadas (as que a licença deixa redistribuir) e o relatório. O contrato inteiro está em `packages/shared/src/exportacao.ts`.
+
+Os arquivos ficam 7 dias. Cada exportação agenda a própria limpeza na fila; o worker apaga os arquivos no vencimento e o registro fica.
 
 Para derrubar: `docker compose down`. Para apagar também os dados e as dependências instaladas: `docker compose down -v`.
 
@@ -76,7 +100,7 @@ docker compose run --rm teste pnpm format                        # Biome, corrig
 |---|---|
 | http://localhost:8080 | Site público, estático |
 | http://localhost:8080/editor | Peças: a lista da conta, com criar, renomear, duplicar e excluir |
-| http://localhost:8080/editor/p/:id | O editor da peça, ligado à API: mover (arraste e setas), redimensionar pela alça, seleção múltipla (Shift+clique), duplicar (Ctrl+J), inserir imagem ou SVG (botão ou soltar no canvas), trocar imagem, painéis de Camadas (com reordenar por arraste) e Propriedades, renomear a peça, desfazer e refazer, e **Exportar** (relatório antes do botão, PSD ou PNG, escolha de pranchetas, andamento por prancheta e download) |
+| http://localhost:8080/editor/p/:id | O editor da peça, ligado à API: mover (arraste e setas), redimensionar e girar pela alça (uma ou várias camadas, Shift trava a proporção e o giro em 15°), seleção múltipla (Shift+clique), duplicar (Ctrl+J), agrupar e desagrupar (Ctrl+G, Ctrl+Shift+G), editar texto no canvas (dois cliques ou Enter), inserir imagem ou SVG (botão ou soltar no canvas), trocar imagem, painéis de Camadas (arrastar reordena, põe e tira de grupo e leva a outra prancheta) e Propriedades, renomear a peça, desfazer e refazer, e **Exportar** (relatório antes do botão, PSD ou PNG, escolha de pranchetas, andamento por prancheta e download) |
 | http://localhost:8080/editor/bancada | **Só em desenvolvimento.** O editor com um documento de exemplo fixo, sem API: o motor de render desenhando, clicar seleciona, arrastar move. Não existe no build de produção |
 
 ```bash
@@ -120,7 +144,7 @@ Depois: `docker compose build && docker compose run --rm instalar pnpm install`.
 ```
 apps/api          API e worker (NestJS). Mesmo código, dois pontos de entrada: src/main.ts e src/worker.ts
 apps/web          Site e editor (Next.js)
-packages/documento, render, psd   Núcleo: sem NestJS, sem Prisma, sem Next. Documento e operações; motor de render; exportação PSD e PNG com relatório.
+packages/documento, render, psd   Núcleo: sem NestJS, sem Prisma, sem Next. Documento e operações; motor de render; exportação PSD, PNG, SVG e PDF com relatório.
                   Fornecedor só em pasta adaptadores/ (a biblioteca de PSD fica atrás da porta FormatoDeArquivoEmCamadas)
 packages/shared   Contratos que atravessam a rede (zod)
 testes/fronteira  Testes que fazem as regras acima falharem o build

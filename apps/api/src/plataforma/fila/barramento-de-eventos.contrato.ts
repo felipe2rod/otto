@@ -123,6 +123,28 @@ export function contratoDoBarramentoDeEventos(
     });
   });
 
+  describe(`contrato de BarramentoDeEventos: ${nome} (trabalho com hora marcada)`, () => {
+    it('publicado para depois, só é entregue depois da hora; as filas não se misturam', async () => {
+      const { barramento, limpar } = await criar();
+      await barramento.iniciar();
+      const trabalho = { contaId: randomUUID(), id: randomUUID() };
+      const naLimpeza: Trabalho[] = [];
+      const naExportacao: Trabalho[] = [];
+      await barramento.consumir(FILAS.limpezaDeExportacao, { concorrencia: 1 }, async (t) => void (t.contaId === trabalho.contaId && naLimpeza.push(t)));
+      await barramento.consumir(FILAS.exportacao, { concorrencia: 1 }, async (t) => void (t.contaId === trabalho.contaId && naExportacao.push(t)));
+      const hora = new Date(Date.now() + 2500);
+      await barramento.publicar(FILAS.limpezaDeExportacao, trabalho, { naoAntesDe: hora });
+      await esperar(1500);
+      expect(naLimpeza).toEqual([]);
+      await ate(() => naLimpeza.length === 1, 1500 + tempos.entregaMs);
+      expect(Date.now()).toBeGreaterThanOrEqual(hora.getTime() - 50);
+      expect(naLimpeza).toEqual([trabalho]);
+      expect(naExportacao).toEqual([]);
+      await barramento.parar();
+      await limpar();
+    });
+  });
+
   describe(`contrato de BarramentoDeEventos: ${nome} (desligamento)`, () => {
     it('parar espera o trabalho em curso terminar', async () => {
       const { barramento, limpar } = await criar();

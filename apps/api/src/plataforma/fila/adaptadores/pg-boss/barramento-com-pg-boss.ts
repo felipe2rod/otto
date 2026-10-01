@@ -10,7 +10,7 @@
 // - entre processos, pelo banco: índice único parcial em exportacoes, conferido pelo caso de uso
 //   antes de começar. Quem perde a vez lança, e o trabalho é entregue de novo mais tarde.
 import { PgBoss } from 'pg-boss';
-import { BarramentoDeEventos, FILAS, type NomeDaFila, type OpcoesDoConsumidor, Trabalho } from '../../barramento-de-eventos';
+import { BarramentoDeEventos, FILAS, type NomeDaFila, type OpcoesDePublicacao, type OpcoesDoConsumidor, Trabalho } from '../../barramento-de-eventos';
 
 export const ESQUEMA_DA_FILA = 'pgboss';
 
@@ -21,6 +21,8 @@ export const CONFIGURACAO_DAS_FILAS: Record<NomeDaFila, { expiraEmSegundos: numb
   // 10 minutos é o teto antes de o trabalho ser dado como perdido (a peça mais pesada medida leva segundos).
   // 200 tentativas a cada 3 s: quem perde a vez da conta para outro processo espera até 10 minutos por ela.
   [FILAS.exportacao]: { expiraEmSegundos: 600, tentativas: 200, reentregaEmSegundos: 3 },
+  // apagar objetos é rápido; se o armazenamento estiver fora, tenta de novo a cada 10 minutos por um dia
+  [FILAS.limpezaDeExportacao]: { expiraEmSegundos: 300, tentativas: 144, reentregaEmSegundos: 600 },
 };
 
 export interface OpcoesDoPgBoss {
@@ -64,11 +66,11 @@ export class BarramentoComPgBoss extends BarramentoDeEventos {
     this.iniciado = true;
   }
 
-  async publicar(fila: NomeDaFila, trabalho: Trabalho): Promise<void> {
+  async publicar(fila: NomeDaFila, trabalho: Trabalho, opcoes: OpcoesDePublicacao = {}): Promise<void> {
     const valido = Trabalho.parse(trabalho);
     // se a fila não respondeu na subida, tenta de novo agora: a API não precisa reiniciar quando o banco volta
     await this.iniciar();
-    const id = await this.boss.send(fila, valido);
+    const id = await this.boss.send(fila, valido, opcoes.naoAntesDe ? { startAfter: opcoes.naoAntesDe } : {});
     if (!id) throw new Error('a fila não aceitou o trabalho');
   }
 

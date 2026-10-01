@@ -1,7 +1,7 @@
 // As rotas de documento de ponta a ponta: HTTP, guarda, casos de uso, PostgreSQL com RLS.
 // Toda resposta é validada pelo esquema de @otto/shared: é o contrato que o editor consome.
 import { randomUUID } from 'node:crypto';
-import { aplicarLote, documentoVazio } from '@otto/documento';
+import { aplicarLote, documentoVazio, VERSAO_DO_CATALOGO, VERSAO_DO_FORMATO } from '@otto/documento';
 import {
   CABECALHOS,
   CODIGOS_DE_ERRO,
@@ -220,7 +220,9 @@ describe('desfazer, refazer, histórico', () => {
 describe('borda: cabeçalhos, validação e limites', () => {
   it('toda resposta traz a versão do catálogo e um id de correlação', async () => {
     const r = await A.get('/api/documentos');
-    expect(r.headers[CABECALHOS.catalogo.toLowerCase()]).toBe('1');
+    // é a versão do CATÁLOGO de operações, não a do formato da árvore: operação nova muda uma e não a outra
+    expect(VERSAO_DO_CATALOGO).not.toBe(VERSAO_DO_FORMATO);
+    expect(r.headers[CABECALHOS.catalogo.toLowerCase()]).toBe(String(VERSAO_DO_CATALOGO));
     expect(r.headers[CABECALHOS.correlacao.toLowerCase()]).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -237,10 +239,29 @@ describe('borda: cabeçalhos, validação e limites', () => {
     expect((await A.cru.get('/api/documentos').set('Cookie', 'otto_sessao=A')).status).toBe(200);
   });
 
-  it('editor com catálogo mais velho que o do servidor: 409 catalogo_desatualizado na escrita', async () => {
-    const r = await A.post('/api/documentos').set(CABECALHOS.catalogo, '0').send({});
-    expect([r.status, r.body]).toEqual([409, { codigo: CODIGOS_DE_ERRO.catalogoDesatualizado, detalhe: { catalogoDoServidor: 1 } }]);
-    expect((await A.post('/api/documentos').set(CABECALHOS.catalogo, '1').send({})).status).toBe(201);
+  it('editor com catálogo diferente do servidor: 409 catalogo_desatualizado na escrita, com a versão do servidor', async () => {
+    // a versão do formato (1) não serve mais de catálogo: o editor que ainda a manda é recusado
+    for (const velho of [String(VERSAO_DO_FORMATO), String(VERSAO_DO_CATALOGO - 1), String(VERSAO_DO_CATALOGO + 1)]) {
+      const r = await A.post('/api/documentos').set(CABECALHOS.catalogo, velho).send({});
+      expect([r.status, r.body]).toEqual([409, { codigo: CODIGOS_DE_ERRO.catalogoDesatualizado, detalhe: { catalogoDoServidor: VERSAO_DO_CATALOGO } }]);
+    }
+    expect((await A.post('/api/documentos').set(CABECALHOS.catalogo, String(VERSAO_DO_CATALOGO)).send({})).status).toBe(201);
+  });
+
+  it('o servidor aplica as operações do catálogo que anuncia (duplicar e transferir)', async () => {
+    const doc = DocumentoAberto.parse((await A.post('/api/documentos').send({ nome: 'Catálogo 2' })).body);
+    const montar = await A.post(`/api/documentos/${doc.id}/lotes`).send({
+      id: randomUUID(),
+      versaoBase: 0,
+      descricao: 'monta',
+      operacoes: [criarPrancheta(), criarPrancheta('Story'), criarForma('Botão')],
+    });
+    expect(montar.status).toBe(200);
+    const r = await A.post(`/api/documentos/${doc.id}/lotes`)
+      .set(CABECALHOS.catalogo, String(VERSAO_DO_CATALOGO))
+      .send({ id: randomUUID(), versaoBase: 1, descricao: 'duplica', devolver: 'arvore', operacoes: [{ op: 'duplicar', alvo: 'Feed/Botão' }] });
+    expect(r.status).toBe(200);
+    expect(RespostaDeLote.parse(r.body).arvore?.pranchetas[0]?.filhos).toHaveLength(2);
   });
 
   it('corpo fora do esquema: 400 com os campos recusados, sem ecoar o valor', async () => {

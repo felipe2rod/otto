@@ -109,6 +109,8 @@ describe('com a sessão de B, a exportação de A não existe', () => {
   it.each([
     ['POST /api/documentos/:id/exportacoes', () => B.post(`/api/documentos/${docDeA.id}/exportacoes`).send({ formato: 'psd' })],
     ['POST /api/documentos/:id/exportacoes/relatorio', () => B.post(`/api/documentos/${docDeA.id}/exportacoes/relatorio`).send({ formato: 'psd' })],
+    ['GET /api/documentos/:id/exportacoes', () => B.get(`/api/documentos/${docDeA.id}/exportacoes`)],
+    ['POST /api/documentos/:id/exportacoes (pacote)', () => B.post(`/api/documentos/${docDeA.id}/exportacoes`).send({ formato: 'svg', pacote: true })],
     ['GET /api/exportacoes/:id', () => B.get(`/api/exportacoes/${exportacaoDeA.id}`)],
     ['GET /api/exportacoes/:id/arquivos/:indice', () => B.get(`/api/exportacoes/${exportacaoDeA.id}/arquivos/0`)],
   ])('%s responde o mesmo 404 de id inexistente, sem pôr nada na fila e sem chamar o armazenamento', async (_rota, chamar) => {

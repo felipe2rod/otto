@@ -3,7 +3,7 @@
 // Também barra escrita forjada por outro site: toda escrita exige um cabeçalho que um formulário
 // ou um fetch simples de outra origem não consegue mandar (docs/mvp/backend.md, 7.1).
 import { type CanActivate, type ExecutionContext, Inject } from '@nestjs/common';
-import { VERSAO_DO_FORMATO } from '@otto/documento';
+import { VERSAO_DO_CATALOGO } from '@otto/documento';
 import { CABECALHOS, CODIGOS_DE_ERRO } from '@otto/shared';
 import { ErroDaAplicacao } from '../erros/erro-da-aplicacao';
 import { ResolvedorDeEscopo } from '../escopo/resolvedor-de-escopo';
@@ -33,7 +33,8 @@ export class GuardaDeEscopo implements CanActivate {
     if (ESCRITA.has(req.method)) {
       if (req.get(CABECALHOS.cliente.nome) !== CABECALHOS.cliente.valor) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.clienteNaoIdentificado);
       const catalogoDoEditor = req.get(CABECALHOS.catalogo);
-      if (catalogoDoEditor !== undefined && Number(catalogoDoEditor) !== VERSAO_DO_FORMATO) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.catalogoDesatualizado, { catalogoDoServidor: VERSAO_DO_FORMATO });
+      if (catalogoDoEditor !== undefined && Number(catalogoDoEditor) !== VERSAO_DO_CATALOGO)
+        throw new ErroDaAplicacao(CODIGOS_DE_ERRO.catalogoDesatualizado, { catalogoDoServidor: VERSAO_DO_CATALOGO });
     }
     // Sem login no MVP, o adaptador em uso ignora a credencial e devolve a conta fixa (suposição a confirmar).
     req.escopo = await this.resolvedor.resolverDaRequisicao(cookie(req.get('cookie'), COOKIE_DE_SESSAO));

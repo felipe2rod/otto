@@ -1,7 +1,18 @@
 // O contrato HTTP da exportação (docs/mvp/backend.md, seção 7.6) e os acréscimos da fatia 2 ao de documento.
 import { documentoVazio } from '@otto/documento';
 import { describe, expect, it } from 'vitest';
-import { CODIGOS_DE_ERRO, DocumentoAberto, Exportacao, PedidoDeExportacao, pesoMaisProximo, RelatorioDeExportacao, RespostaDeDesfazer, RespostaDeLote, VALIDADE_DO_LINK_EM_SEGUNDOS } from './index';
+import {
+  CODIGOS_DE_ERRO,
+  DocumentoAberto,
+  Exportacao,
+  ListaDeExportacoes,
+  PedidoDeExportacao,
+  pesoMaisProximo,
+  RelatorioDeExportacao,
+  RespostaDeDesfazer,
+  RespostaDeLote,
+  VALIDADE_DO_LINK_EM_SEGUNDOS,
+} from './index';
 
 const ID = '0199a3f0-0000-7000-8000-000000000001';
 const QUANDO = '2026-10-01T12:00:00.000Z';
@@ -29,8 +40,24 @@ describe('PedidoDeExportacao', () => {
     expect(PedidoDeExportacao.safeParse({ formato: 'png', escala: 8 }).success).toBe(false);
   });
 
+  it('SVG: um arquivo por prancheta, sem opção de juntar', () => {
+    expect(PedidoDeExportacao.parse({ formato: 'svg' })).toEqual({ formato: 'svg' });
+    expect(PedidoDeExportacao.safeParse({ formato: 'svg', arquivos: 'juntas' }).success).toBe(false);
+  });
+
+  it('PDF: uma página por prancheta num arquivo só por padrão, ou um arquivo por prancheta', () => {
+    expect(PedidoDeExportacao.parse({ formato: 'pdf' })).toEqual({ formato: 'pdf', arquivos: 'juntas' });
+    expect(PedidoDeExportacao.parse({ formato: 'pdf', arquivos: 'por-prancheta', pranchetas: ['p1'] })).toEqual({ formato: 'pdf', arquivos: 'por-prancheta', pranchetas: ['p1'] });
+  });
+
+  it('pacote: qualquer formato pode sair como um .zip; sem o campo, não é pacote', () => {
+    for (const formato of ['psd', 'png', 'svg', 'pdf']) expect(PedidoDeExportacao.parse({ formato, pacote: true })).toMatchObject({ formato, pacote: true });
+    expect(PedidoDeExportacao.parse({ formato: 'psd' })).not.toHaveProperty('pacote');
+    expect(PedidoDeExportacao.safeParse({ formato: 'psd', pacote: 'sim' }).success).toBe(false);
+  });
+
   it('recusa formato desconhecido, opção de outro formato, lista vazia de pranchetas e campo desconhecido', () => {
-    expect(PedidoDeExportacao.safeParse({ formato: 'pdf' }).success).toBe(false);
+    expect(PedidoDeExportacao.safeParse({ formato: 'ai' }).success).toBe(false);
     expect(PedidoDeExportacao.safeParse({ formato: 'png', arquivos: 'juntas' }).success).toBe(false);
     expect(PedidoDeExportacao.safeParse({ formato: 'psd', escala: 2 }).success).toBe(false);
     expect(PedidoDeExportacao.safeParse({ formato: 'psd', pranchetas: [] }).success).toBe(false);
@@ -132,5 +159,33 @@ describe('constantes', () => {
     expect(CODIGOS_DE_ERRO.limiteDeExportacoes).toBe('limite_de_exportacoes');
     expect(CODIGOS_DE_ERRO.pranchetaDesconhecida).toBe('prancheta_desconhecida');
     expect(VALIDADE_DO_LINK_EM_SEGUNDOS).toBe(300);
+  });
+});
+
+describe('acréscimos da rodada de fechamento', () => {
+  it('o relatório vetorial tem o destino "omitido-com-aviso"', () => {
+    const vetorial = {
+      ...relatorio,
+      camadas: [{ prancheta: 'Feed', camada: 'Curvas', tipo: 'ajuste', destino: 'omitido-com-aviso', mapeamento: 'ajuste:curvas', observacao: 'camada de ajuste: não vai para o arquivo vetorial' }],
+    };
+    expect(RelatorioDeExportacao.parse(vetorial).camadas[0]?.destino).toBe('omitido-com-aviso');
+  });
+
+  it('o relatório de um pacote diz, fonte a fonte, se o arquivo vai dentro e, se não vai, por quê', () => {
+    const fontes = [
+      { familia: 'Anton', peso: 400, postScript: 'Anton-Regular', licenca: 'SIL Open Font License 1.1', incluida: true, arquivo: 'Fontes/Anton-Regular.ttf' },
+      { familia: 'Fechada', peso: 400, postScript: 'Fechada-Regular', licenca: null, incluida: false, motivo: 'licenca_desconhecida' },
+    ];
+    expect(RelatorioDeExportacao.parse({ ...relatorio, pacote: { fontes } }).pacote?.fontes).toEqual(fontes);
+    expect(RelatorioDeExportacao.parse(relatorio).pacote).toBeUndefined();
+    expect(RelatorioDeExportacao.safeParse({ ...relatorio, pacote: { fontes: [{ ...fontes[1], motivo: 'porque sim' }] } }).success).toBe(false);
+  });
+
+  it('a exportação aceita os formatos novos e diz se é pacote; a lista é um envelope de exportações', () => {
+    const base = { id: ID, documentoId: ID, versao: 3, estado: 'pronta', progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 }, arquivos: [], falhas: [], criadaEm: QUANDO };
+    expect(Exportacao.parse({ ...base, formato: 'svg' }).formato).toBe('svg');
+    expect(Exportacao.parse({ ...base, formato: 'pdf', pacote: true }).pacote).toBe(true);
+    expect(ListaDeExportacoes.parse({ itens: [{ ...base, formato: 'psd' }] }).itens).toHaveLength(1);
+    expect(ListaDeExportacoes.safeParse({ itens: [{ ...base, formato: 'ai' }] }).success).toBe(false);
   });
 });

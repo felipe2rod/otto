@@ -1,9 +1,10 @@
 // Exportação de ponta a ponta (docs/mvp/backend.md, 7.6): rota, fila, o consumidor do worker, o motor
 // de render e o PSD de verdade, download por link assinado. Só o armazenamento e a fila são os falsos.
 import { randomUUID } from 'node:crypto';
-import { ArquivoEnviado, CODIGOS_DE_ERRO, DocumentoAberto, ErroDaApi, EXPORTACOES_NA_FILA_POR_CONTA, Exportacao, RelatorioDeExportacao } from '@otto/shared';
+import { ArquivoEnviado, CODIGOS_DE_ERRO, DocumentoAberto, ErroDaApi, EXPORTACOES_NA_FILA_POR_CONTA, Exportacao, ListaDeExportacoes, RelatorioDeExportacao } from '@otto/shared';
+import { unzipSync } from 'fflate';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type ApiDeTeste, type ClienteDeTeste, criarForma, criarPrancheta, PNG, subirApi } from './subir';
+import { type ApiDeTeste, type ClienteDeTeste, criarForma, criarPrancheta, FONTE_ANTON, PNG, subirApi } from './subir';
 
 let api: ApiDeTeste;
 let A: ClienteDeTeste;
@@ -138,7 +139,7 @@ describe('pedir, acompanhar e baixar', () => {
     expect(j).toMatchObject({ estado: 'pronta', progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 } });
     expect(j.arquivos.map((a) => a.nome)).toEqual(['Promoção de verão (todas as pranchetas).psd']);
     expect(p).toMatchObject({ estado: 'pronta', formato: 'png' });
-    expect(p.arquivos.map((a) => [a.nome, a.tipo, a.pranchetaId])).toEqual([['Promoção de verão.png', 'image/png', story]]);
+    expect(p.arquivos.map((a) => [a.nome, a.tipo, a.pranchetaId])).toEqual([['Promoção de verão - Story.png', 'image/png', story]]);
     expect(p.relatorio).toBeUndefined();
   });
 
@@ -148,9 +149,121 @@ describe('pedir, acompanhar e baixar', () => {
   });
 });
 
+describe('SVG, PDF e pacote, com o motor de verdade', () => {
+  const baixar = async (caminho: string): Promise<Buffer> => {
+    const link = (await A.get(caminho)).headers.location as string;
+    const r = await api
+      .como('A')
+      .cru.get(link)
+      .buffer(true)
+      .parse((res, fim) => {
+        const partes: Buffer[] = [];
+        res.on('data', (p: Buffer) => partes.push(p));
+        res.on('end', () => fim(null, Buffer.concat(partes)));
+      });
+    expect(r.status).toBe(200);
+    return r.body as Buffer;
+  };
+  const exportar = async (pedido: object): Promise<Exportacao> => {
+    const r = await A.post(`/api/documentos/${doc.id}/exportacoes`).send(pedido);
+    expect(r.status).toBe(202);
+    await api.fila.ociosa();
+    return Exportacao.parse((await A.get(`/api/exportacoes/${Exportacao.parse(r.body).id}`)).body);
+  };
+
+  it('o relatório prévio do SVG e do PDF sai na hora, no formato do contrato', async () => {
+    for (const formato of ['svg', 'pdf']) {
+      const r = await A.post(`/api/documentos/${doc.id}/exportacoes/relatorio`).send({ formato });
+      expect(r.status).toBe(200);
+      expect(RelatorioDeExportacao.parse(r.body).camadas.map((c) => `${c.prancheta}/${c.camada}`)).toEqual(expect.arrayContaining(['Feed/Título', 'Story/Faixa']));
+    }
+  });
+
+  it('SVG: um arquivo por prancheta, com o texto como texto, entregue como anexo', async () => {
+    const e = await exportar({ formato: 'svg' });
+    expect(e).toMatchObject({ estado: 'pronta', formato: 'svg' });
+    expect(e.arquivos.map((a) => [a.nome, a.tipo])).toEqual([
+      ['Promoção de verão - Feed.svg', 'image/svg+xml'],
+      ['Promoção de verão - Story.svg', 'image/svg+xml'],
+    ]);
+    const svg = (await baixar(e.arquivos[0]?.baixar as string)).toString('utf8');
+    expect(svg).toContain('<text');
+    expect(svg).toContain('Verão');
+    expect(e.relatorio?.arquivos).toEqual(['Promoção de verão - Feed.svg', 'Promoção de verão - Story.svg']);
+  });
+
+  it('PDF: as pranchetas juntas, uma página cada', async () => {
+    const e = await exportar({ formato: 'pdf' });
+    expect(e).toMatchObject({ estado: 'pronta', formato: 'pdf', progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 } });
+    expect(e.arquivos.map((a) => [a.nome, a.tipo])).toEqual([['Promoção de verão.pdf', 'application/pdf']]);
+    const pdf = await baixar(e.arquivos[0]?.baixar as string);
+    expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g)?.length).toBe(2);
+  });
+
+  it('pacote: um .zip com os PSDs, a fonte usada e o relatório em texto', async () => {
+    const previo = RelatorioDeExportacao.parse((await A.post(`/api/documentos/${doc.id}/exportacoes/relatorio`).send({ formato: 'psd', pacote: true })).body);
+    expect(previo.pacote?.fontes).toEqual([{ familia: 'Anton', peso: 400, postScript: 'Anton-Regular', licenca: 'SIL Open Font License 1.1', incluida: true, arquivo: 'Fontes/Anton-Regular.ttf' }]);
+
+    const e = await exportar({ formato: 'psd', pacote: true });
+    expect(e).toMatchObject({ estado: 'pronta', formato: 'psd', pacote: true });
+    expect(e.arquivos.map((a) => [a.nome, a.tipo])).toEqual([['Promoção de verão.zip', 'application/zip']]);
+    expect(e.relatorio?.pacote?.fontes).toEqual(previo.pacote?.fontes);
+
+    const zip = unzipSync(await baixar(e.arquivos[0]?.baixar as string));
+    expect(Object.keys(zip).sort()).toEqual(['Fontes/Anton-Regular.ttf', 'Promoção de verão - Feed.psd', 'Promoção de verão - Story.psd', 'Relatório de exportação.md'].sort());
+    expect(
+      Buffer.from(zip['Promoção de verão - Feed.psd'] as Uint8Array)
+        .subarray(0, 4)
+        .toString('latin1'),
+    ).toBe('8BPS');
+    expect(Buffer.from(zip['Fontes/Anton-Regular.ttf'] as Uint8Array).equals(FONTE_ANTON)).toBe(true);
+    const relatorio = Buffer.from(zip['Relatório de exportação.md'] as Uint8Array).toString('utf8');
+    expect(relatorio).toContain('# Relatório de exportação: Promoção de verão');
+    expect(relatorio).toContain('Fontes/Anton-Regular.ttf');
+  });
+
+  it('pacote de SVG e de PDF', async () => {
+    const svg = unzipSync(await baixar((await exportar({ formato: 'svg', pacote: true })).arquivos[0]?.baixar as string));
+    expect(Object.keys(svg).filter((n) => n.endsWith('.svg'))).toHaveLength(2);
+    const pdf = unzipSync(await baixar((await exportar({ formato: 'pdf', pacote: true })).arquivos[0]?.baixar as string));
+    expect(Object.keys(pdf).sort()).toEqual(['Fontes/Anton-Regular.ttf', 'Promoção de verão.pdf', 'Relatório de exportação.md'].sort());
+  });
+
+  it('terminou com arquivo: a limpeza fica agendada para depois do vencimento', async () => {
+    const e = await exportar({ formato: 'png', pranchetas: [story] });
+    const agendada = api.fila.agendados.find((a) => a.trabalho.id === e.id);
+    expect(agendada).toMatchObject({ fila: 'limpeza-de-exportacao', trabalho: { contaId: api.contaA.contaId, id: e.id } });
+    expect(agendada?.naoAntesDe.getTime()).toBeGreaterThan(Date.parse(e.expiraEm as string));
+  });
+});
+
+describe('retomar depois de recarregar a página', () => {
+  it('GET /api/documentos/:id/exportacoes lista as exportações da peça, da mais nova para a mais velha, sem relatório e sem cache', async () => {
+    const r = await A.get(`/api/documentos/${doc.id}/exportacoes`);
+    expect(r.status).toBe(200);
+    expect(r.headers['cache-control']).toBe('no-store');
+    const lista = ListaDeExportacoes.parse(r.body).itens;
+    expect(lista.length).toBeGreaterThanOrEqual(5);
+    expect(lista.every((e) => e.documentoId === doc.id && e.relatorio === undefined)).toBe(true);
+    const datas = lista.map((e) => Date.parse(e.criadaEm));
+    expect(datas).toEqual([...datas].sort((a, b) => b - a));
+    expect(JSON.stringify(r.body)).not.toContain('contas/');
+    // cada item traz o endereço de download estável
+    const pronta = lista.find((e) => e.estado === 'pronta');
+    expect((await A.get(pronta?.arquivos[0]?.baixar as string)).status).toBe(302);
+  });
+
+  it('peça sem exportação: lista vazia; peça que não existe: 404', async () => {
+    const nova = DocumentoAberto.parse((await A.post('/api/documentos').send({ nome: 'Sem exportação' })).body);
+    expect((await A.get(`/api/documentos/${nova.id}/exportacoes`)).body).toEqual({ itens: [] });
+    expect((await A.get(`/api/documentos/${randomUUID()}/exportacoes`)).status).toBe(404);
+  });
+});
+
 describe('recusas', () => {
   it.each([
-    ['formato desconhecido', { formato: 'pdf' }],
+    ['formato desconhecido', { formato: 'ai' }],
     ['campo a mais', { formato: 'psd', chave: 'contas/outra/arquivos/x' }],
     ['escala fora do aceito', { formato: 'png', escala: 3 }],
     ['corpo vazio', {}],

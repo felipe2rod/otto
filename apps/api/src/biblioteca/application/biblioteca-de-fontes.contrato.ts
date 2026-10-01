@@ -18,9 +18,9 @@ export function contratoDaBibliotecaDeFontes(nome: string, criar: () => Promise<
 
     it('registra e devolve os pesos da família, do mais leve para o mais pesado', async () => {
       const pesos = await b.pesosDa(familia);
-      expect(pesos.map((f) => [f.familia, f.peso, f.nomePostScript, f.bytes])).toEqual([
-        [familia, 400, null, 64],
-        [familia, 700, 'Teste-Bold', 64],
+      expect(pesos.map((f) => [f.familia, f.peso, f.nomePostScript, f.licenca, f.bytes])).toEqual([
+        [familia, 400, null, null, 64],
+        [familia, 700, 'Teste-Bold', 'de teste', 64],
       ]);
       expect(pesos[0]?.sha256).toMatch(/^[0-9a-f]{64}$/);
     });

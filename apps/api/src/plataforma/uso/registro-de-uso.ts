@@ -4,15 +4,20 @@
 // os que o código consegue emitir hoje. Na fatia de produção o adaptador grava em tabela.
 import type { EscopoDaConta } from '../escopo/escopo-da-conta';
 
+type FormatoExportado = 'psd' | 'png' | 'svg' | 'pdf';
+
 export type EventoDeUso =
   | { evento: 'lote_aplicado'; documentoId: string; autoria: 'designer' | 'agente'; operacoesPorTipo: Record<string, number>; nosTocados: number; mediuTexto: boolean; versao: number }
   | { evento: 'arquivo_enviado'; tipo: string; bytes: number; largura: number; altura: number }
-  | { evento: 'exportacao_pedida'; exportacaoId: string; documentoId: string; formato: 'psd' | 'png'; pranchetas: number; juntas: boolean }
+  | { evento: 'exportacao_pedida'; exportacaoId: string; documentoId: string; formato: FormatoExportado; pacote: boolean; pranchetas: number; juntas: boolean }
+  | { evento: 'exportacao_baixada'; exportacaoId: string; documentoId: string; formato: FormatoExportado; pacote: boolean }
+  | { evento: 'exportacao_limpa'; exportacaoId: string; arquivos: number; bytes: number }
   | {
       evento: 'exportacao_terminada';
       exportacaoId: string;
       documentoId: string;
-      formato: 'psd' | 'png';
+      formato: FormatoExportado;
+      pacote: boolean;
       resultado: 'pronta' | 'pronta_em_parte' | 'falhou';
       pranchetas: number;
       falhas: number;

@@ -40,7 +40,7 @@ export class RepositorioDeExportacoesEmMemoria extends RepositorioDeExportacoes 
       pranchetasProntas: 0,
       arquivos: [],
       falhas: [],
-      criadaEm: new Date(1_790_000_000_000 + this.relogio),
+      criadaEm: nova.criadaEm ?? new Date(1_790_000_000_000 + this.relogio),
     };
     this.todas.set(nova.id, { contaId: escopo.contaId, exportacao });
     return copia(exportacao);
@@ -49,6 +49,32 @@ export class RepositorioDeExportacoesEmMemoria extends RepositorioDeExportacoes 
   async buscar(escopo: EscopoDaConta, id: string): Promise<ExportacaoGuardada | undefined> {
     const g = this.achar(escopo, id);
     return g ? copia(g.exportacao) : undefined;
+  }
+
+  async listarDoDocumento(escopo: EscopoDaConta, documentoId: string, filtro: { criadasDesde: Date; limite: number }): Promise<ExportacaoGuardada[]> {
+    return [...this.todas.values()]
+      .filter((g) => g.contaId === escopo.contaId && g.exportacao.documentoId === documentoId && g.exportacao.criadaEm >= filtro.criadasDesde)
+      .sort((a, b) => b.exportacao.criadaEm.getTime() - a.exportacao.criadaEm.getTime())
+      .slice(0, filtro.limite)
+      .map((g) => copia(g.exportacao));
+  }
+
+  async darBaixaNasParadas(escopo: EscopoDaConta, agora: Date, limites: { naFilaDesde: Date; semSinalDesde: Date }): Promise<number> {
+    let baixas = 0;
+    for (const g of this.todas.values()) {
+      if (g.contaId !== escopo.contaId) continue;
+      const abandonada = g.exportacao.estado === 'na_fila' && g.exportacao.criadaEm < limites.naFilaDesde;
+      const interrompida = g.exportacao.estado === 'rodando' && (g.batimentoEm ?? new Date(0)) < limites.semSinalDesde;
+      if (!abandonada && !interrompida) continue;
+      g.exportacao = { ...g.exportacao, estado: 'falhou', erroCodigo: abandonada ? 'abandonada' : 'interrompida', terminadaEm: agora };
+      baixas++;
+    }
+    return baixas;
+  }
+
+  async marcarArquivosRemovidos(escopo: EscopoDaConta, id: string, agora: Date): Promise<void> {
+    const g = this.achar(escopo, id);
+    if (g) g.exportacao = { ...g.exportacao, arquivosRemovidosEm: agora };
   }
 
   async contarEmAndamento(escopo: EscopoDaConta): Promise<number> {
@@ -78,6 +104,13 @@ export class RepositorioDeExportacoesEmMemoria extends RepositorioDeExportacoes 
     const g = this.achar(escopo, id);
     if (!g) return;
     g.exportacao.arquivos.push({ ...arquivo });
+    g.exportacao.pranchetasProntas += pranchetas;
+    g.batimentoEm = agora;
+  }
+
+  async registrarProgresso(escopo: EscopoDaConta, id: string, pranchetas: number, agora: Date): Promise<void> {
+    const g = this.achar(escopo, id);
+    if (!g) return;
     g.exportacao.pranchetasProntas += pranchetas;
     g.batimentoEm = agora;
   }

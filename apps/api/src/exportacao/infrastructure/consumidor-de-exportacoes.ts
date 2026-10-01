@@ -1,4 +1,4 @@
-// O consumidor da fila de exportação: é o que o worker liga na subida (e o que os testes de HTTP
+// Os consumidores das filas de exportação (exportar e limpar o que venceu): é o que o worker liga na subida (e o que os testes de HTTP
 // ligam no próprio processo). O que vem na fila é hipótese (ADR 023, item 5b): o escopo é aberto a
 // partir da conta do trabalho e o caso de uso relê a exportação sob esse escopo. Se ela não existe
 // nessa conta, nada roda.
@@ -16,5 +16,9 @@ export async function consumirExportacoes(fila: BarramentoDeEventos, exportacoes
   await fila.consumir(FILAS.exportacao, { concorrencia: EXPORTACOES_AO_MESMO_TEMPO }, async (trabalho) => {
     // ContaOcupada (outra exportação da conta rodando) sobe daqui: a fila entrega de novo mais tarde
     await exportacoes.executar(escopoDoTrabalho(trabalho), trabalho.id);
+  });
+  await fila.consumir(FILAS.limpezaDeExportacao, { concorrencia: 1 }, async (trabalho) => {
+    // se ainda não venceu ou o armazenamento falhou, o erro sobe e a fila entrega de novo mais tarde
+    await exportacoes.limpar(escopoDoTrabalho(trabalho), trabalho.id);
   });
 }

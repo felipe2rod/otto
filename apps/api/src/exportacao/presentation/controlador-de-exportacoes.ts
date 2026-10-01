@@ -2,7 +2,7 @@
 // contrato e repassa o escopo. Nenhuma rota renderiza: o trabalho pesado é do worker.
 // Nenhuma rota recebe nem devolve chave de objeto.
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, Res } from '@nestjs/common';
-import { type Exportacao, PedidoDeExportacao, type RelatorioDeExportacao } from '@otto/shared';
+import { type Exportacao, type ListaDeExportacoes, PedidoDeExportacao, type RelatorioDeExportacao } from '@otto/shared';
 import type { Response } from 'express';
 import { NaoEncontrado } from '../../plataforma/erros/erro-da-aplicacao';
 import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
@@ -26,6 +26,13 @@ export class ControladorDeExportacoes {
   @HttpCode(202)
   pedir(@Escopo() escopo: EscopoDaConta, @Param('id') id: string, @Body() corpo: unknown): Promise<Exportacao> {
     return this.exportacoes.pedir(escopo, id, validar(PedidoDeExportacao, corpo));
+  }
+
+  /** As exportações em curso e as recentes da peça: é como o editor retoma depois de recarregar a página. */
+  @Get('documentos/:id/exportacoes')
+  listar(@Escopo() escopo: EscopoDaConta, @Param('id') id: string, @Res({ passthrough: true }) res: Response): Promise<ListaDeExportacoes> {
+    res.setHeader('Cache-Control', 'no-store');
+    return this.exportacoes.listar(escopo, id);
   }
 
   @Get('exportacoes/:id')

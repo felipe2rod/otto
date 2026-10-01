@@ -902,7 +902,7 @@ Limites em vigor: 500 operações por lote, 6 MB por corpo de lote, 4 MB por ár
 | 64 exportações de uma peça leve em 150 s | Mediana 1,3 s, p95 2,6 s, pior 4,2 s |
 | Pico de memória do worker | 422 MB em desenvolvimento (com recarga automática); 241 MB na imagem de produção |
 
-O teto de memória está no `compose.yaml`: 2 GB no worker e 1 GB na API em desenvolvimento. Com 241 MB medidos na imagem de produção, 1 GB por worker é o ponto de partida para produção.
+O teto de memória está no `compose.yaml`: 2 GB no worker e 1 GB na API em desenvolvimento. (Os 241 MB desta primeira medida eram só de PSD de uma peça; com SVG, PDF e pacote o pico chega a 896 MB, e o ponto de partida para produção passou a 1,5 GB: ver 17.9.)
 
 **A política "singleton" do pg-boss foi descartada pela medição.** A primeira versão deixava a fila garantir "uma por conta" (um trabalho ativo por chave). Numa das medições, a exportação seguinte da mesma conta ficou **123 s parada**: o pg-boss decide quem está ativo por uma estatística da fila refeita a cada 60 s, e um consumidor que carrega essa estatística velha ignora os trabalhos da conta até a próxima leitura. O contrato da porta ganhou um teste que reproduz isso ("a vez da conta"). A fila agora é comum, e a vez da conta é garantida pelo banco e pelo caso de uso (`ContaOcupada` devolve o trabalho para a fila).
 
@@ -912,10 +912,79 @@ O teto de memória está no `compose.yaml`: 2 GB no worker e 1 GB na API em dese
 
 **Pedidos do react atendidos.** `podeDesfazer` e `podeRefazer` em `DocumentoAberto` e nas respostas de lote, desfazer e refazer. `DocumentoAberto.fontes` lista, para cada família que o documento usa, os pesos que existem; com `pesoMaisProximo` (exportada de `@otto/shared`, a mesma função do servidor) o editor sabe qual peso vai receber sem ler o cabeçalho `X-Otto-Peso`.
 
-**Em aberto desta fatia.**
+**Em aberto desta fatia** (o que foi resolvido depois está em 17.9).
 
-- Exportação que esgota as 200 tentativas (10 minutos esperando a vez da conta) fica `na_fila` para sempre e conta no limite de 5. Só acontece com mais de um worker e uma exportação muito longa. A varredura entra com a fila `manutencao`.
 - A conta de "5 na fila" não é atômica: dois pedidos simultâneos podem passar em um.
 - `/api/saude/pronto` não inclui a fila.
 - O texto dos avisos do relatório (`avisos[].texto`, `camadas[].observacao`) vem de `@otto/psd` em português, sem o guardião da marca. O editor deve escolher a frase pelo `codigo`.
-- SVG e PDF (ADR 034) não entraram.
+
+### 17.9 Fechamento da fatia 2: SVG, PDF, pacote, limpeza e retomada
+
+**Catálogo.** `X-Otto-Catalogo` anuncia `VERSAO_DO_CATALOGO` (2, com `duplicar` e `transferir`), não mais `VERSAO_DO_FORMATO`. Editor que manda outro valor na escrita recebe `409 catalogo_desatualizado` com `catalogoDoServidor`.
+
+**Contrato** (`packages/shared/src/exportacao.ts`). Tudo é acréscimo ao da 17.8:
+
+| O que | Como |
+|---|---|
+| `{ formato: "svg", pranchetas? }` | Um `.svg` por prancheta |
+| `{ formato: "pdf", arquivos: "juntas" \| "por-prancheta", pranchetas? }` | Padrão `juntas`: um `.pdf` com uma página por prancheta. Como no PSD com as pranchetas juntas, falhou, falhou tudo |
+| `pacote: true`, em qualquer formato | A exportação entrega **um `.zip`** (`arquivos` tem um item, `application/zip`, sem `pranchetaId`): os arquivos do formato, a pasta `Fontes/` e `Relatório de exportação.md`. `Exportacao.pacote` vem `true` |
+| `RelatorioDeExportacao.camadas[].destino` | Ganhou `omitido-com-aviso` (só SVG e PDF: a camada não foi para o arquivo) |
+| `RelatorioDeExportacao.pacote.fontes[]` | Só em pedido de pacote, no relatório prévio e no final: `{ familia, peso, postScript, licenca, incluida, arquivo?, motivo? }`. `motivo` é `licenca_desconhecida` ou `licenca_nao_permite` |
+| `GET /api/documentos/:id/exportacoes` | `ListaDeExportacoes`: até 20 exportações da peça criadas nos últimos 7 dias (em curso ou não), da mais nova para a mais velha, **sem** `relatorio`. Peça de outra conta: 404. É como o editor retoma depois de recarregar a página |
+
+O relatório prévio de SVG e PDF vem de `relatorioDeExportacaoVetorial`, sem renderizar. PNG fora de pacote continua sem relatório final.
+
+**Nome do arquivo.** O nome da prancheta entra sempre que **a peça** tem mais de uma prancheta, mesmo exportando uma só: `Peça - Feed.psd`. Só peça de uma prancheta dá `Peça.psd`. Antes a regra olhava quantas pranchetas tinham sido pedidas, e tentar de novo a que falhou dava `Peça.psd` ao lado de `Peça - Story.psd`. Juntas: `Peça (todas as pranchetas).psd` e `Peça.pdf` (nomes de `@otto/psd`).
+
+**Pacote.** O `.zip` é escrito em `exportacao/application/zip.ts`, com o `deflate` e o CRC-32 da plataforma, sem biblioteca: nomes em UTF-8, sem a extensão de 64 bits (4 GB por arquivo e no total). O teste lê o resultado com um leitor independente (`fflate`, só de teste). Uma medida mudou o desenho: dizendo-se "feito no DOS", o `unzip` do Linux trocava os acentos do nome mesmo com o bit de UTF-8; o arquivo agora se diz feito no Unix, com permissão 0644. No pacote os arquivos ficam em memória até o `.zip` fechar, e só o `.zip` vai para o armazenamento.
+
+**Fontes no pacote e licença.** Vão as fontes que o relatório diz que o arquivo usa. A regra (`biblioteca/domain/licenca-de-fonte.ts`) lê o texto de licença registrado na biblioteca:
+
+| Licença registrada | No pacote? |
+|---|---|
+| SIL Open Font License, Apache License, Ubuntu Font Licence | Sim |
+| "licença aberta, a conferir" (23 das 38 fontes de desenvolvimento, que vieram da POC como "Google Fonts (licença aberta, a conferir por família)") | Sim, **com pendência para o jurídico** |
+| Outra licença com nome | Não: `licenca_nao_permite`, e o relatório do pacote diz qual fonte e por quê |
+| Nenhuma registrada | Não: `licenca_desconhecida`, idem |
+
+Pendências para o jurídico, sem bloquear: (1) conferir a licença de cada uma das 23 famílias e registrar o nome certo; (2) confirmar que levar só o arquivo original da fonte basta para a SIL OFL, que pede que o aviso de direitos e a licença acompanhem cada cópia (o arquivo os traz nos metadados; o pacote não leva o texto da licença à parte); (3) o PDF embute as fontes, o que é do especialista-grafico e cai na mesma conferência.
+
+O texto da seção de fontes do relatório do pacote está em `exportacao/textos.ts`, provisório, sem o guardião da marca. O desenho pede "Baixe em {origem}" para a fonte que ficou de fora: a biblioteca não guarda a origem da fonte, então a frase ainda não diz onde baixar.
+
+**Limpeza dos arquivos vencidos.** Ao terminar com arquivo guardado, a exportação publica um trabalho na fila `limpeza-de-exportacao` com hora marcada (o vencimento mais 1 minuto). O worker abre o escopo da conta do trabalho, relê a exportação sob RLS, apaga os objetos do armazenamento e grava `arquivos_removidos_em`. A linha fica (nome, tamanho e relatório são o registro do que foi exportado), e baixar responde 410. Chegou antes do vencimento ou o armazenamento falhou: o trabalho volta para a fila (a cada 10 minutos, por um dia).
+
+Por que um trabalho por exportação, e não uma varredura agendada: a varredura precisaria ler exportações de todas as contas, e com `FORCE ROW LEVEL SECURITY` nenhum papel faz isso sem abrir uma exceção ao isolamento. Um trabalho por exportação é igual a qualquer outro: conta e id, relidos sob a política. A porta `BarramentoDeEventos` ganhou `publicar(fila, trabalho, { naoAntesDe })`.
+
+O que essa escolha não cobre: exportação terminada **antes** desta rodada não tem trabalho agendado (em desenvolvimento há algumas centenas; em produção não haverá nenhuma), e trabalho perdido com a fila (fila recriada, base restaurada) deixa o arquivo além do prazo. O pg-boss guarda trabalho agendado por 14 dias, o dobro da retenção.
+
+**Exportação parada.** `darBaixaNasParadas`, sempre na conta do escopo, fecha como `falhou`: a que está `na_fila` há mais de 30 minutos (`abandonada`: o trabalho se perdeu ou esgotou as tentativas) e a que está `rodando` sem sinal de vida há mais de 5 minutos (`interrompida`). Roda ao pedir exportação (antes de contar o limite), ao listar, e ao consultar uma exportação em curso há mais de 5 minutos. Quem acompanha deixa de ver `na_fila` ou `rodando` para sempre, e a parada deixa de contar no limite da conta. O limite de sinal de vida subiu de 2 para 5 minutos: o sinal só é gravado entre as etapas do motor, e uma prancheta com desfoque de movimento levou 41 s.
+
+**Banco** (migração `20261002090000_exportacao_vetorial_e_limpeza`, com `down.sql`): `svg` e `pdf` na enumeração de formato, coluna `arquivos_removidos_em`. Nenhum índice novo: a lista usa o que já existia (`conta_id, documento_id, criada_em DESC`) e a limpeza chega por id. `otto_app` continua sem `DELETE`.
+
+**Tempo e memória, medidos** (2026-10-01; "trabalho" é `duracaoMs`, do começo no worker ao último arquivo guardado; somar perto de 1 s de fila para o tempo que o cliente vê):
+
+| Peça | PSD | PNG 2x | SVG | PDF | Pacote PSD | Pacote PDF |
+|---|---|---|---|---|---|---|
+| "Jazz na Praça (teto da ferramenta)", 2 pranchetas, 38 camadas | 1,7 a 2,6 s | 1,8 a 2,4 s (1x) | 0,3 a 1,7 s | 0,6 a 2,0 s | 1,8 a 2,4 s | — |
+| 5 pranchetas, 46 camadas | 6,8 s | 17,7 s | 20,7 s | 21,5 s | 8,6 s | 31,2 s |
+| 2 pranchetas com desfoque de movimento | 18,3 s | 39,2 s | 36,7 s | 43,3 s | 17,1 s | 35,7 s |
+
+Tamanhos: de 0,8 MB (SVG ou PDF da primeira peça) a 26,8 MB (PDF das 5 pranchetas). O pacote de PSD da primeira peça tem 4,7 MB com seis fontes dentro.
+
+| Memória do worker (pico do contêiner) | Desenvolvimento | Imagem de produção |
+|---|---|---|
+| Um formato só, primeira peça, worker recém-subido | 391 a 491 MB | — |
+| Todos os formatos das duas peças pesadas, em seguida, no mesmo processo | 886 MB | 896 MB |
+
+O pico é o da maior exportação, não a soma: sobe até um patamar e fica (a memória do WebAssembly não volta ao sistema, mas é reusada). O especialista-grafico viu passar de 1 GB num processo só; aqui ficou em 0,9 GB. O teto no `compose.yaml` continua em 2 GB; para produção o ponto de partida passa de 1 GB para **1,5 GB**. Peça maior que as medidas (mais pranchetas, 4K) pode passar disso: quem passa do teto é morto, e a exportação vira `interrompida`.
+
+**Dado de uso novo:** `pacote` em `exportacao_pedida` e `exportacao_terminada`; `exportacao_baixada` (formato e pacote, no pedido do link); `exportacao_limpa` (arquivos e bytes).
+
+**Em aberto.**
+
+- Um worker faz uma exportação por vez, de todas as contas: uma exportação de 40 s segura a fila inteira por 40 s. Mais vazão é mais processo de worker.
+- O pacote e os arquivos ficam inteiros em memória antes de ir para o armazenamento.
+- Exportações terminadas antes desta rodada não têm limpeza agendada.
+- As três pendências do jurídico sobre fontes, acima.
+- SVG e PDF não foram abertos no Illustrator por ninguém (`packages/psd/README.md`).

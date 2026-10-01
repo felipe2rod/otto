@@ -33,6 +33,7 @@ export class BibliotecaDeFontesEmMemoria extends BibliotecaDeFontes {
       familia: nova.familia,
       peso: nova.peso,
       nomePostScript: nova.nomePostScript,
+      licenca: nova.licenca,
       sha256: createHash('sha256').update(nova.conteudo).digest('hex'),
       bytes: nova.conteudo.byteLength,
     };

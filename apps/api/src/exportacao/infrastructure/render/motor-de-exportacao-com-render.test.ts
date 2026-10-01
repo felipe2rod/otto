@@ -58,6 +58,25 @@ describe('MotorDeExportacaoComRender', () => {
     expect([largura(um?.bytes as Uint8Array), largura(dois?.bytes as Uint8Array)]).toEqual([360, 720]);
   });
 
+  it('SVG: um arquivo de texto por prancheta, com o nome pedido e o texto como texto', async () => {
+    const [arquivo, ...resto] = await motor.svg(doc, recursos, { nome: 'Promoção - Feed', pranchetas: ['n0'] }, async () => {});
+    expect(resto).toEqual([]);
+    expect(arquivo?.nome).toBe('Promoção - Feed.svg');
+    const svg = new TextDecoder().decode(arquivo?.bytes);
+    expect(svg).toMatch(/^<\?xml|^<svg/);
+    expect(svg).toContain('<text');
+    expect(svg).toContain('Otto');
+  });
+
+  it('PDF: as pranchetas juntas num arquivo, ou uma por arquivo', async () => {
+    const juntas = await motor.pdf(doc, recursos, { nome: 'Promoção', pranchetas: ['n0', 'n1'], arquivos: 'juntas' }, async () => {});
+    expect(juntas.map((a) => a.nome)).toEqual(['Promoção.pdf']);
+    expect(assinatura(juntas[0]?.bytes as Uint8Array, 5)).toBe('%PDF-');
+    const uma = await motor.pdf(doc, recursos, { nome: 'Promoção - Story', pranchetas: ['n1'], arquivos: 'por-prancheta' }, async () => {});
+    expect(uma.map((a) => a.nome)).toEqual(['Promoção - Story.pdf']);
+    expect(assinatura(uma[0]?.bytes as Uint8Array, 5)).toBe('%PDF-');
+  });
+
   it('carrega o WebAssembly uma vez só por processo', () => {
     expect(motor.cargasDoMotor).toBe(1);
   });

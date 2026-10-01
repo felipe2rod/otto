@@ -5,7 +5,16 @@ import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
 export type EstadoDaExportacao = 'na_fila' | 'rodando' | 'pronta' | 'pronta_em_parte' | 'falhou';
 
 /** O pedido, com as pranchetas já resolvidas em ids (nunca "todas"). */
-export type OpcoesGuardadas = { formato: 'psd'; arquivos: 'por-prancheta' | 'juntas'; pranchetas: string[] } | { formato: 'png'; escala: 1 | 2; semFundo: boolean; pranchetas: string[] };
+export type OpcoesGuardadas = (
+  | { formato: 'psd'; arquivos: 'por-prancheta' | 'juntas' }
+  | { formato: 'png'; escala: 1 | 2; semFundo: boolean }
+  | { formato: 'svg' }
+  | { formato: 'pdf'; arquivos: 'por-prancheta' | 'juntas' }
+) & {
+  pranchetas: string[];
+  /** Um .zip só, com os arquivos, as fontes e o relatório. */
+  pacote?: boolean;
+};
 
 export interface ArquivoGuardado {
   indice: number;
@@ -40,6 +49,8 @@ export interface ExportacaoGuardada {
   criadaEm: Date;
   terminadaEm?: Date;
   expiraEm?: Date;
+  /** Quando os arquivos foram apagados do armazenamento. O registro fica. */
+  arquivosRemovidosEm?: Date;
 }
 
 export interface NovaExportacao {
@@ -48,6 +59,8 @@ export interface NovaExportacao {
   versao: number;
   nome: string;
   opcoes: OpcoesGuardadas;
+  /** Sem isto, a hora do banco. */
+  criadaEm?: Date;
 }
 
 export type InicioDeExportacao =
@@ -72,6 +85,16 @@ export abstract class RepositorioDeExportacoes {
   abstract criar(escopo: EscopoDaConta, nova: NovaExportacao): Promise<ExportacaoGuardada>;
   /** undefined se não existe ou é de outra conta. */
   abstract buscar(escopo: EscopoDaConta, id: string): Promise<ExportacaoGuardada | undefined>;
+  /** As exportações de um documento criadas desde a data, da mais nova para a mais velha. Lista vazia se o documento não é da conta. */
+  abstract listarDoDocumento(escopo: EscopoDaConta, documentoId: string, filtro: { criadasDesde: Date; limite: number }): Promise<ExportacaoGuardada[]>;
+  /**
+   * Fecha como `falhou` o que parou, NESTA conta: na fila desde antes de `naFilaDesde` (o trabalho da fila se
+   * perdeu ou esgotou as tentativas: `abandonada`) e rodando sem sinal de vida desde `semSinalDesde` (`interrompida`).
+   * Devolve quantas fechou.
+   */
+  abstract darBaixaNasParadas(escopo: EscopoDaConta, agora: Date, limites: { naFilaDesde: Date; semSinalDesde: Date }): Promise<number>;
+  /** Os arquivos foram apagados do armazenamento. O registro (nomes, tamanhos, relatório) fica. */
+  abstract marcarArquivosRemovidos(escopo: EscopoDaConta, id: string, agora: Date): Promise<void>;
   /** Quantas a conta tem esperando ou rodando. */
   abstract contarEmAndamento(escopo: EscopoDaConta): Promise<number>;
   /**
@@ -84,6 +107,8 @@ export abstract class RepositorioDeExportacoes {
   abstract bater(escopo: EscopoDaConta, id: string, agora: Date): Promise<void>;
   /** Um arquivo saiu. `pranchetas` é quantas pranchetas ele cobre (1, ou todas no PSD com as pranchetas juntas). */
   abstract registrarArquivo(escopo: EscopoDaConta, id: string, arquivo: ArquivoGuardado, pranchetas: number, agora: Date): Promise<void>;
+  /** Pranchetas terminaram sem arquivo guardado ainda (pacote: tudo vai num .zip no fim). Também é sinal de vida. */
+  abstract registrarProgresso(escopo: EscopoDaConta, id: string, pranchetas: number, agora: Date): Promise<void>;
   /** Uma prancheta não saiu. Conta no progresso. */
   abstract registrarFalha(escopo: EscopoDaConta, id: string, falha: FalhaDePrancheta, agora: Date): Promise<void>;
   /** rodando (ou na_fila, se a fila recusou o pedido) → estado final. */

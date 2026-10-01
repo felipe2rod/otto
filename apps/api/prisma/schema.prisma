@@ -171,6 +171,8 @@ model FonteDaBiblioteca {
 enum FormatoDeExportacao {
   psd
   png
+  svg
+  pdf
 
   @@map("formato_de_exportacao")
 }
@@ -212,6 +214,8 @@ model Exportacao {
   terminadaEm       DateTime?           @map("terminada_em") @db.Timestamptz(3)
   /// quando os arquivos podem ser apagados (7 dias depois de prontos)
   expiraEm          DateTime?           @map("expira_em") @db.Timestamptz(3)
+  /// quando os arquivos foram apagados do armazenamento (a linha fica)
+  arquivosRemovidosEm DateTime?         @map("arquivos_removidos_em") @db.Timestamptz(3)
 
   documento Documento             @relation(fields: [documentoId, contaId], references: [id, contaId])
   arquivos  ArquivoDeExportacao[]

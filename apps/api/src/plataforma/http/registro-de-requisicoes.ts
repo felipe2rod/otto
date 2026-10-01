@@ -3,7 +3,7 @@
 // Nunca: corpo, query string, cookie, cabeçalho de autorização.
 // Também põe em toda resposta a versão do catálogo e o id de correlação.
 import { randomUUID } from 'node:crypto';
-import { VERSAO_DO_FORMATO } from '@otto/documento';
+import { VERSAO_DO_CATALOGO } from '@otto/documento';
 import { CABECALHOS } from '@otto/shared';
 import type { NextFunction, Response } from 'express';
 import type { Registro } from '../log/registro';
@@ -14,7 +14,7 @@ export function registroDeRequisicoes(registro: Registro) {
     const inicio = process.hrtime.bigint();
     req.correlacaoId = randomUUID();
     res.setHeader(CABECALHOS.correlacao, req.correlacaoId);
-    res.setHeader(CABECALHOS.catalogo, String(VERSAO_DO_FORMATO));
+    res.setHeader(CABECALHOS.catalogo, String(VERSAO_DO_CATALOGO));
     res.on('finish', () => {
       // req.route só existe quando uma rota casou; o caminho dela é o modelo, sem os valores
       const modelo = (req.route as { path?: unknown } | undefined)?.path;

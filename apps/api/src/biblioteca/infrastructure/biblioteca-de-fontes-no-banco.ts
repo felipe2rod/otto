@@ -8,7 +8,7 @@ import { uuidV7 } from '../../plataforma/identidade/uuid-v7';
 import type { PrismaComEscopo } from '../../plataforma/persistencia/prisma-com-escopo';
 import { BibliotecaDeFontes, type FonteRegistrada, type NovaFonte } from '../application/biblioteca-de-fontes';
 
-const CAMPOS = { familia: true, peso: true, nomePostScript: true, sha256: true, bytes: true } as const;
+const CAMPOS = { familia: true, peso: true, nomePostScript: true, licenca: true, sha256: true, bytes: true } as const;
 const FONTES_EM_MEMORIA = 96;
 
 export class BibliotecaDeFontesNoBanco extends BibliotecaDeFontes {
