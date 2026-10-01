@@ -1,0 +1,23 @@
+# Spike de render do ADR 030. Autocontido: não depende do monorepo nem altera a POC.
+# O disco do repositório (exFAT) recusa link simbólico, por isso node_modules é volume nomeado.
+name: otto-spike-render
+services:
+  spike:
+    build: .
+    user: node
+    working_dir: /spike
+    init: true
+    environment:
+      PORTA: "8137"
+      PASTA_FONTES: /fontes
+    volumes:
+      - .:/spike
+      - node_modules:/spike/node_modules
+      # fontes da POC, só leitura: são os mesmos arquivos que o editor e o servidor usam
+      - ../../poc/fontes:/fontes:ro
+    ports:
+      # só na máquina local; 80, 3030, 3306, 5433 e 7070 estão ocupadas no host
+      - "127.0.0.1:8137:8137"
+    command: ["node", "src/servidor.ts"]
+volumes:
+  node_modules:

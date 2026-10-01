@@ -1,0 +1,353 @@
+{
+  "motor": {
+    "nome": "canvaskit-wasm",
+    "versao": "0.42.0",
+    "raster": "cpu"
+  },
+  "node": "v24.21.0",
+  "plataforma": "linux x64",
+  "limiteDePixels": 64000000,
+  "tamanhos": {
+    "wasm padrão": {
+      "bytes": 7317345,
+      "gzip": 2960611,
+      "brotli": 2275862
+    },
+    "cola JavaScript padrão": {
+      "bytes": 120877,
+      "gzip": 37516,
+      "brotli": 32993
+    },
+    "wasm completo": {
+      "bytes": 8242911,
+      "gzip": 3314247,
+      "brotli": 2541442
+    },
+    "cola JavaScript completa": {
+      "bytes": 123707,
+      "gzip": 38218,
+      "brotli": 33484
+    },
+    "pacote da página de bancada (motor em TypeScript, sem o CanvasKit)": {
+      "bytes": 78455
+    }
+  },
+  "cargaMs": {
+    "primeira": 81.2,
+    "seguintes": [
+      54.6,
+      52.8,
+      52.2
+    ]
+  },
+  "sessaoSoComFontesMs": 17.5,
+  "medidorDeTexto": {
+    "nosMedidos": 840,
+    "msPorNo": 0.305
+  },
+  "exportacaoDoFeed": {
+    "camadasComPixel": 46,
+    "pixelDeCadaCamadaMs": 4871.3,
+    "compostaMs": 1817.5
+  },
+  "renderDoAgente": {
+    "regiao512Ms": 332,
+    "pranchetaComLado768Ms": 577.1
+  },
+  "varianteCompletaIgualAPadrao": {
+    "texto": true,
+    "mesclagem": true,
+    "mascaras": true,
+    "efeitos": true,
+    "ajustes": true,
+    "peca": true
+  },
+  "codificarAComposta1080x1350": {
+    "png": {
+      "ms": 387.2,
+      "bytes": 912859
+    },
+    "jpeg82": {
+      "ms": 41.4,
+      "bytes": 155968
+    },
+    "webp82": {
+      "ms": 400.7,
+      "bytes": 77906
+    }
+  },
+  "worker": {
+    "mesmosPixelsQueALinhaPrincipal": true,
+    "totalMs": 1590.4,
+    "preparoMs": 134,
+    "renderMs": 1251.6,
+    "batidasDaLinhaPrincipalDurante": 30
+  },
+  "ladrilhosContraSuperficieUnica": {
+    "tamanho": "2160 × 2700",
+    "ladrilho": 1024,
+    "diferencaMaxima": 8,
+    "pixelsDiferentes": 1398
+  },
+  "luzSuaveW3cContraPhotoshop": {
+    "diferencaMaximaEmNiveis": 17,
+    "paresDiferentes": 4579,
+    "deTotal": 65536
+  },
+  "modosPorShader": [
+    "subexposicao-linear",
+    "superexposicao-linear",
+    "luz-intensa",
+    "luz-linear",
+    "luz-do-ponto",
+    "mistura-solida",
+    "cor-mais-escura",
+    "cor-mais-clara",
+    "subtrair",
+    "dividir"
+  ],
+  "memoria": [
+    {
+      "caso": "base",
+      "rssInicialMB": 85.1,
+      "cargaMs": 59.4,
+      "depoisDoMotor": {
+        "rssMB": 106.9,
+        "motorMB": 128
+      },
+      "sessaoMs": 97.2,
+      "depoisDaSessao": {
+        "rssMB": 132.7,
+        "motorMB": 128
+      },
+      "pico": {
+        "rssMB": 133,
+        "motorMB": 128
+      }
+    },
+    {
+      "caso": "duzentas",
+      "rssInicialMB": 85.1,
+      "cargaMs": 60.6,
+      "depoisDoMotor": {
+        "rssMB": 106.5,
+        "motorMB": 128
+      },
+      "sessaoMs": 98.7,
+      "depoisDaSessao": {
+        "rssMB": 132.2,
+        "motorMB": 128
+      },
+      "renderMs": {
+        "Feed 1080×1350": 1905.1,
+        "Story 1080×1920": 2380.7,
+        "Quadrado 1080×1080": 1416.9,
+        "Banner 1200×628": 1080.5
+      },
+      "pico": {
+        "rssMB": 176.7,
+        "motorMB": 128
+      }
+    },
+    {
+      "caso": "escala-2",
+      "rssInicialMB": 85.3,
+      "cargaMs": 59.3,
+      "depoisDoMotor": {
+        "rssMB": 106.8,
+        "motorMB": 128
+      },
+      "sessaoMs": 96.7,
+      "depoisDaSessao": {
+        "rssMB": 150.4,
+        "motorMB": 128
+      },
+      "pixels": "2160 × 2700",
+      "megapixels": 5.8,
+      "renderMs": 4991.7,
+      "pico": {
+        "rssMB": 272.1,
+        "motorMB": 128
+      }
+    },
+    {
+      "caso": "escala-4",
+      "rssInicialMB": 85,
+      "cargaMs": 58.9,
+      "depoisDoMotor": {
+        "rssMB": 106.4,
+        "motorMB": 128
+      },
+      "sessaoMs": 98,
+      "depoisDaSessao": {
+        "rssMB": 152,
+        "motorMB": 128
+      },
+      "pixels": "4320 × 5400",
+      "megapixels": 23.3,
+      "renderMs": 19706.9,
+      "pico": {
+        "rssMB": 594.1,
+        "motorMB": 391.5
+      }
+    },
+    {
+      "caso": "escala-6",
+      "rssInicialMB": 84.9,
+      "cargaMs": 62.1,
+      "depoisDoMotor": {
+        "rssMB": 106.6,
+        "motorMB": 128
+      },
+      "sessaoMs": 95.8,
+      "depoisDaSessao": {
+        "rssMB": 151.2,
+        "motorMB": 128
+      },
+      "pixels": "6480 × 8100",
+      "megapixels": 52.5,
+      "renderMs": 44367.4,
+      "pico": {
+        "rssMB": 1181.4,
+        "motorMB": 852.9
+      }
+    },
+    {
+      "caso": "escala-7",
+      "rssInicialMB": 85,
+      "cargaMs": 60.3,
+      "depoisDoMotor": {
+        "rssMB": 106.5,
+        "motorMB": 128
+      },
+      "sessaoMs": 97.1,
+      "depoisDaSessao": {
+        "rssMB": 129,
+        "motorMB": 128
+      },
+      "erro": "ErroDeAreaDoRender: Render de 7560 × 9450 px (71 megapixels) passa do limite de 64 megapixels por superfície. Renderize por região ou reduza a escala.",
+      "renderMs": 0.3,
+      "pico": {
+        "rssMB": 129.2,
+        "motorMB": 128
+      }
+    },
+    {
+      "caso": "ladrilhos-8x4096",
+      "rssInicialMB": 85,
+      "cargaMs": 58.4,
+      "depoisDoMotor": {
+        "rssMB": 106.8,
+        "motorMB": 128
+      },
+      "sessaoMs": 97.4,
+      "depoisDaSessao": {
+        "rssMB": 134.3,
+        "motorMB": 128
+      },
+      "pixels": "8640 × 10800",
+      "megapixels": 93.3,
+      "ladrilhos": 9,
+      "renderMs": 85150,
+      "pico": {
+        "rssMB": 467.4,
+        "motorMB": 301.8
+      }
+    },
+    {
+      "caso": "superficie-8000",
+      "rssInicialMB": 85.3,
+      "cargaMs": 64,
+      "depoisDoMotor": {
+        "rssMB": 106.6,
+        "motorMB": 128
+      },
+      "sessaoMs": 97.3,
+      "depoisDaSessao": {
+        "rssMB": 132,
+        "motorMB": 128
+      },
+      "alocou": true,
+      "pico": {
+        "rssMB": 376.5,
+        "motorMB": 266.4
+      }
+    },
+    {
+      "caso": "superficie-12000",
+      "rssInicialMB": 85.5,
+      "cargaMs": 65.4,
+      "depoisDoMotor": {
+        "rssMB": 106.7,
+        "motorMB": 128
+      },
+      "sessaoMs": 95.4,
+      "depoisDaSessao": {
+        "rssMB": 152.5,
+        "motorMB": 128
+      },
+      "alocou": true,
+      "pico": {
+        "rssMB": 695.6,
+        "motorMB": 571.6
+      }
+    },
+    {
+      "caso": "superficie-16000",
+      "rssInicialMB": 84.9,
+      "cargaMs": 62.8,
+      "depoisDoMotor": {
+        "rssMB": 106.4,
+        "motorMB": 128
+      },
+      "sessaoMs": 111.6,
+      "depoisDaSessao": {
+        "rssMB": 150.9,
+        "motorMB": 128
+      },
+      "alocou": true,
+      "pico": {
+        "rssMB": 1121.4,
+        "motorMB": 998.9
+      }
+    },
+    {
+      "caso": "superficie-20000",
+      "rssInicialMB": 85.1,
+      "cargaMs": 59.6,
+      "depoisDoMotor": {
+        "rssMB": 106.8,
+        "motorMB": 128
+      },
+      "sessaoMs": 113.2,
+      "depoisDaSessao": {
+        "rssMB": 135.6,
+        "motorMB": 128
+      },
+      "alocou": true,
+      "pico": {
+        "rssMB": 1662.2,
+        "motorMB": 1548.2
+      }
+    },
+    {
+      "caso": "superficie-23000",
+      "rssInicialMB": 85.2,
+      "cargaMs": 58.4,
+      "depoisDoMotor": {
+        "rssMB": 106.8,
+        "motorMB": 128
+      },
+      "sessaoMs": 97.6,
+      "depoisDaSessao": {
+        "rssMB": 135.2,
+        "motorMB": 128
+      },
+      "alocou": true,
+      "pico": {
+        "rssMB": 2153.5,
+        "motorMB": 2040.3
+      }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Bancada de render: 200 camadas</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #1c1917; color: #e7e5e4; font: 13px/1.45 ui-monospace, monospace; overflow: hidden; }
+    #tela { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+    #caixa { position: fixed; top: 12px; left: 12px; max-width: min(1100px, 94vw); background: #0c0a09e6; border: 1px solid #44403c; border-radius: 8px; padding: 12px 14px; }
+    #painel { white-space: pre; font-size: 14px; }
+    #painel::first-line { font-size: 26px; font-weight: 700; color: #fdba74; }
+    #resultado { white-space: pre; overflow: auto; max-height: 46vh; margin: 8px 0 0; font-size: 11.5px; color: #d6d3d1; }
+    select, button, a { font: inherit; color: #e7e5e4; background: #292524; border: 1px solid #57534e; border-radius: 6px; padding: 5px 8px; margin: 8px 6px 0 0; text-decoration: none; }
+    button { cursor: pointer; background: #9a3412; border-color: #c2410c; }
+  </style>
+</head>
+<body>
+  <canvas id="tela"></canvas>
+  <div id="caixa">
+    <div id="painel">carregando o motor…</div>
+    <select id="cenario" aria-label="Cenário"></select>
+    <button id="rodar" type="button">Rodar a bateria de medição</button>
+    <a href="?motor=gpu">GPU</a><a href="?motor=hibrido">Híbrido</a><a href="?motor=cpu">CPU</a><a href="/">início</a>
+    <pre id="resultado"></pre>
+  </div>
+  <script type="module" src="/pacote/bancada.js"></script>
+</body>
+</html>

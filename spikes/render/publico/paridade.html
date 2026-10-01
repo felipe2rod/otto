@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Paridade de render</title>
+  <style>
+    body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; background: #1c1917; color: #e7e5e4; }
+    pre { background: #0c0a09; padding: 12px; overflow: auto; }
+    canvas { max-width: 320px; height: auto; margin: 0 8px 8px 0; background: repeating-conic-gradient(#333 0 25%, #444 0 50%) 0 0 / 16px 16px; }
+    a { color: #fdba74; }
+  </style>
+</head>
+<body>
+  <h1>Paridade de render: navegador contra Node</h1>
+  <p><a href="?motor=cpu">Raster de CPU</a> · <a href="?motor=gpu">WebGL</a> · <a href="?motor=causas">Causa de cada diferença (GPU contra CPU)</a> · <a href="/">início</a></p>
+  <pre id="registro"></pre>
+  <div id="galeria"></div>
+  <script type="module" src="/pacote/paridade.js"></script>
+</body>
+</html>

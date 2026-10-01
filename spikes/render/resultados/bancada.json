@@ -1,0 +1,2507 @@
+{
+  "bancada-cpu": {
+    "regiaoSuja": false,
+    "motor": {
+      "nome": "canvaskit-wasm",
+      "versao": "0.42.0",
+      "raster": "cpu"
+    },
+    "navegador": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "gpu": {
+      "fornecedor": "Google Inc. (Google)",
+      "renderizador": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "versao": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    "nucleos": 8,
+    "canvas": {
+      "largura": 1600,
+      "altura": 813,
+      "densidade": 1
+    },
+    "escalaDoCache": 1,
+    "documento": {
+      "total": 200,
+      "porTipo": {
+        "imagem": 32,
+        "forma": 64,
+        "grupo": 8,
+        "texto": 84,
+        "ajuste": 8,
+        "vetor": 4
+      },
+      "comSombra": 32,
+      "comModo": 16,
+      "comMascara": 8,
+      "comDesfoque": 4,
+      "recortadas": 4
+    },
+    "carga": {
+      "scriptMs": 15,
+      "wasmMs": 64,
+      "recursosMs": 27,
+      "sessaoMs": 106
+    },
+    "composicao": [
+      {
+        "prancheta": "Feed 1080×1350",
+        "ms": 1710.7
+      },
+      {
+        "prancheta": "Story 1080×1920",
+        "ms": 2089.6
+      },
+      {
+        "prancheta": "Quadrado 1080×1080",
+        "ms": 1227.7
+      },
+      {
+        "prancheta": "Banner 1200×628",
+        "ms": 927.5
+      }
+    ],
+    "composicaoTotalMs": 5621,
+    "memoria": {
+      "wasmMB": 128,
+      "javascriptMB": 6
+    },
+    "recomporAoSoltarMs": 1524.2,
+    "medicoes": [
+      {
+        "cenario": "camera-mover",
+        "nome": "Mover a câmera (4 pranchetas, zoom fixo)",
+        "preparoMs": 0,
+        "itens": 0,
+        "intervalo": {
+          "n": 40,
+          "media": 33.33,
+          "p50": 33.3,
+          "p95": 50.1,
+          "p99": 66.7,
+          "maxima": 66.7
+        },
+        "quadrosPorSegundo": 30,
+        "quadrosPerdidos": 29,
+        "javascript": {
+          "n": 40,
+          "media": 32.28,
+          "p50": 29.1,
+          "p95": 55,
+          "p99": 55.9,
+          "maxima": 55.9
+        },
+        "sincronizado": {
+          "n": 40,
+          "media": 76.41,
+          "p50": 76.1,
+          "p95": 98.9,
+          "p99": 100.9,
+          "maxima": 100.9
+        }
+      },
+      {
+        "cenario": "camera-zoom",
+        "nome": "Zoom da câmera (de 15% a 150%)",
+        "preparoMs": 0,
+        "itens": 0,
+        "intervalo": {
+          "n": 40,
+          "media": 132.91,
+          "p50": 133.3,
+          "p95": 150,
+          "p99": 166.7,
+          "maxima": 166.7
+        },
+        "quadrosPorSegundo": 7.5,
+        "quadrosPerdidos": 40,
+        "javascript": {
+          "n": 40,
+          "media": 131.82,
+          "p50": 132.8,
+          "p95": 152.2,
+          "p99": 153,
+          "maxima": 153
+        },
+        "sincronizado": {
+          "n": 40,
+          "media": 82.97,
+          "p50": 90.1,
+          "p95": 111.5,
+          "p99": 126,
+          "maxima": 126
+        }
+      },
+      {
+        "cenario": "arrastar-topo",
+        "nome": "Arrastar a camada do topo (logo; nada acima)",
+        "preparoMs": 1538.1,
+        "itens": 2,
+        "intervalo": {
+          "n": 40,
+          "media": 82.5,
+          "p50": 83.3,
+          "p95": 100,
+          "p99": 100.1,
+          "maxima": 100.1
+        },
+        "quadrosPorSegundo": 12.1,
+        "quadrosPerdidos": 40,
+        "javascript": {
+          "n": 40,
+          "media": 81.35,
+          "p50": 80.4,
+          "p95": 89,
+          "p99": 94.6,
+          "maxima": 94.6
+        },
+        "sincronizado": {
+          "n": 40,
+          "media": 82,
+          "p50": 80.5,
+          "p95": 91.5,
+          "p99": 101.4,
+          "maxima": 101.4
+        }
+      }
+    ]
+  },
+  "bancada-gpu-integrada-regiao-suja": {
+    "regiaoSuja": true,
+    "motor": {
+      "nome": "canvaskit-wasm",
+      "versao": "0.42.0",
+      "raster": "gpu"
+    },
+    "navegador": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "gpu": {
+      "fornecedor": "Google Inc. (Intel)",
+      "renderizador": "ANGLE (Intel, Mesa Intel(R) HD Graphics 2000 (SNB GT1), OpenGL 3.3)",
+      "versao": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    "nucleos": 8,
+    "canvas": {
+      "largura": 1600,
+      "altura": 813,
+      "densidade": 1
+    },
+    "escalaDoCache": 1,
+    "documento": {
+      "total": 200,
+      "porTipo": {
+        "imagem": 32,
+        "forma": 64,
+        "grupo": 8,
+        "texto": 84,
+        "ajuste": 8,
+        "vetor": 4
+      },
+      "comSombra": 32,
+      "comModo": 16,
+      "comMascara": 8,
+      "comDesfoque": 4,
+      "recortadas": 4
+    },
+    "carga": {
+      "scriptMs": 15,
+      "wasmMs": 120,
+      "recursosMs": 24,
+      "sessaoMs": 113
+    },
+    "composicao": [
+      {
+        "prancheta": "Feed 1080×1350",
+        "ms": 186.9
+      },
+      {
+        "prancheta": "Story 1080×1920",
+        "ms": 16.2
+      },
+      {
+        "prancheta": "Quadrado 1080×1080",
+        "ms": 17.5
+      },
+      {
+        "prancheta": "Banner 1200×628",
+        "ms": 30.5
+      }
+    ],
+    "composicaoTotalMs": 55,
+    "memoria": {
+      "wasmMB": 128,
+      "javascriptMB": 7
+    },
+    "recomporAoSoltarMs": 7.4,
+    "medicoes": [
+      {
+        "cenario": "camera-mover",
+        "nome": "Mover a câmera (4 pranchetas, zoom fixo)",
+        "preparoMs": 0.4,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.56,
+          "p50": 0.6,
+          "p95": 0.7,
+          "p99": 1.2,
+          "maxima": 1.4
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 12.56,
+          "p50": 12.6,
+          "p95": 13.5,
+          "p99": 14.2,
+          "maxima": 14.2
+        }
+      },
+      {
+        "cenario": "camera-zoom",
+        "nome": "Zoom da câmera (de 15% a 150%)",
+        "preparoMs": 0.4,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.58,
+          "p50": 0.6,
+          "p95": 0.8,
+          "p99": 0.9,
+          "maxima": 1.2
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 3.21,
+          "p50": 3.2,
+          "p95": 3.7,
+          "p99": 3.8,
+          "maxima": 3.8
+        }
+      },
+      {
+        "cenario": "arrastar-topo",
+        "nome": "Arrastar a camada do topo (logo; nada acima)",
+        "preparoMs": 30.6,
+        "itens": 2,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.53,
+          "p50": 0.5,
+          "p95": 0.7,
+          "p99": 0.8,
+          "maxima": 1.1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 10.3,
+          "p50": 10.3,
+          "p95": 11,
+          "p99": 11.6,
+          "maxima": 11.6
+        }
+      },
+      {
+        "cenario": "arrastar-meio",
+        "nome": "Arrastar o título (sombra; acima: textos, botão, recorte, selo, 2 ajustes)",
+        "preparoMs": 13.5,
+        "itens": 6,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 1.26,
+          "p50": 1.3,
+          "p95": 1.4,
+          "p99": 1.5,
+          "maxima": 1.5
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 3.64,
+          "p50": 3.7,
+          "p95": 4,
+          "p99": 4.1,
+          "maxima": 4.1
+        }
+      },
+      {
+        "cenario": "arrastar-fundo",
+        "nome": "Arrastar o disco em multiplicação, perto do fundo (acima: quase tudo, com 3 modos e 2 ajustes)",
+        "preparoMs": 18.5,
+        "itens": 8,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 1.15,
+          "p50": 1.1,
+          "p95": 1.3,
+          "p99": 1.6,
+          "maxima": 1.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 12.52,
+          "p50": 12.3,
+          "p95": 13.9,
+          "p99": 15.2,
+          "maxima": 15.2
+        }
+      },
+      {
+        "cenario": "ingenuo-prancheta",
+        "nome": "Sem cache de partes: recompor a prancheta tocada a cada quadro",
+        "preparoMs": 0.7,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 36.73,
+          "p50": 33.3,
+          "p95": 50,
+          "p99": 50.1,
+          "maxima": 50.1
+        },
+        "quadrosPorSegundo": 27.2,
+        "quadrosPerdidos": 240,
+        "javascript": {
+          "n": 240,
+          "media": 11.77,
+          "p50": 11.5,
+          "p95": 13.8,
+          "p99": 15.9,
+          "maxima": 19.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 37.89,
+          "p50": 37.5,
+          "p95": 39.1,
+          "p99": 64.2,
+          "maxima": 64.2
+        }
+      },
+      {
+        "cenario": "ingenuo-documento",
+        "nome": "Sem cache nenhum: recompor as 4 pranchetas (200 camadas) a cada quadro",
+        "preparoMs": 0.4,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 42.22,
+          "p50": 49.9,
+          "p95": 50.1,
+          "p99": 50.1,
+          "maxima": 50.1
+        },
+        "quadrosPorSegundo": 23.7,
+        "quadrosPerdidos": 240,
+        "javascript": {
+          "n": 240,
+          "media": 29.62,
+          "p50": 28.9,
+          "p95": 34.6,
+          "p99": 38.6,
+          "maxima": 45
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 59.99,
+          "p50": 59.7,
+          "p95": 62.8,
+          "p99": 74.5,
+          "maxima": 74.5
+        }
+      }
+    ]
+  },
+  "bancada-gpu-integrada": {
+    "motor": {
+      "nome": "canvaskit-wasm",
+      "versao": "0.42.0",
+      "raster": "gpu"
+    },
+    "navegador": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "gpu": {
+      "fornecedor": "Google Inc. (Intel)",
+      "renderizador": "ANGLE (Intel, Mesa Intel(R) HD Graphics 2000 (SNB GT1), OpenGL 3.3)",
+      "versao": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    "nucleos": 8,
+    "canvas": {
+      "largura": 1600,
+      "altura": 813,
+      "densidade": 1
+    },
+    "escalaDoCache": 1,
+    "documento": {
+      "total": 200,
+      "porTipo": {
+        "imagem": 32,
+        "forma": 64,
+        "grupo": 8,
+        "texto": 84,
+        "ajuste": 8,
+        "vetor": 4
+      },
+      "comSombra": 32,
+      "comModo": 16,
+      "comMascara": 8,
+      "comDesfoque": 4,
+      "recortadas": 4
+    },
+    "carga": {
+      "scriptMs": 16,
+      "wasmMs": 119,
+      "recursosMs": 22,
+      "sessaoMs": 124
+    },
+    "composicao": [
+      {
+        "prancheta": "Feed 1080×1350",
+        "ms": 204.7
+      },
+      {
+        "prancheta": "Story 1080×1920",
+        "ms": 16.5
+      },
+      {
+        "prancheta": "Quadrado 1080×1080",
+        "ms": 17.5
+      },
+      {
+        "prancheta": "Banner 1200×628",
+        "ms": 21.8
+      }
+    ],
+    "composicaoTotalMs": 52,
+    "memoria": {
+      "wasmMB": 128,
+      "javascriptMB": 7
+    },
+    "recomporAoSoltarMs": 6.8,
+    "medicoes": [
+      {
+        "cenario": "camera-mover",
+        "nome": "Mover a câmera (4 pranchetas, zoom fixo)",
+        "preparoMs": 0.3,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.53,
+          "p50": 0.5,
+          "p95": 0.7,
+          "p99": 1,
+          "maxima": 1.1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 15.05,
+          "p50": 15.1,
+          "p95": 15.5,
+          "p99": 15.8,
+          "maxima": 15.8
+        }
+      },
+      {
+        "cenario": "camera-zoom",
+        "nome": "Zoom da câmera (de 15% a 150%)",
+        "preparoMs": 0.3,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.58,
+          "p50": 0.6,
+          "p95": 0.8,
+          "p99": 0.9,
+          "maxima": 1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 5.86,
+          "p50": 5.8,
+          "p95": 6.2,
+          "p99": 6.4,
+          "maxima": 6.4
+        }
+      },
+      {
+        "cenario": "arrastar-topo",
+        "nome": "Arrastar a camada do topo (logo; nada acima)",
+        "preparoMs": 14.9,
+        "itens": 2,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.54,
+          "p50": 0.5,
+          "p95": 0.7,
+          "p99": 0.8,
+          "maxima": 1.2
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 11.07,
+          "p50": 13.4,
+          "p95": 17.2,
+          "p99": 19.4,
+          "maxima": 19.4
+        }
+      },
+      {
+        "cenario": "arrastar-meio",
+        "nome": "Arrastar o título (sombra; acima: textos, botão, recorte, selo, 2 ajustes)",
+        "preparoMs": 15.8,
+        "itens": 6,
+        "intervalo": {
+          "n": 240,
+          "media": 17.36,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 33.4,
+          "maxima": 33.4
+        },
+        "quadrosPorSegundo": 57.6,
+        "quadrosPerdidos": 10,
+        "javascript": {
+          "n": 240,
+          "media": 1.17,
+          "p50": 1.2,
+          "p95": 1.6,
+          "p99": 1.7,
+          "maxima": 1.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 22.66,
+          "p50": 22.7,
+          "p95": 24.2,
+          "p99": 28.8,
+          "maxima": 28.8
+        }
+      },
+      {
+        "cenario": "arrastar-fundo",
+        "nome": "Arrastar o disco em multiplicação, perto do fundo (acima: quase tudo, com 3 modos e 2 ajustes)",
+        "preparoMs": 19.8,
+        "itens": 8,
+        "intervalo": {
+          "n": 240,
+          "media": 20.28,
+          "p50": 16.7,
+          "p95": 33.3,
+          "p99": 33.4,
+          "maxima": 33.4
+        },
+        "quadrosPorSegundo": 49.3,
+        "quadrosPerdidos": 52,
+        "javascript": {
+          "n": 240,
+          "media": 1.41,
+          "p50": 1.5,
+          "p95": 1.7,
+          "p99": 2,
+          "maxima": 2.3
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 26.57,
+          "p50": 26.8,
+          "p95": 27.7,
+          "p99": 34,
+          "maxima": 34
+        }
+      },
+      {
+        "cenario": "ingenuo-prancheta",
+        "nome": "Sem cache de partes: recompor a prancheta tocada a cada quadro",
+        "preparoMs": 0.7,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 36.67,
+          "p50": 33.3,
+          "p95": 50,
+          "p99": 50.1,
+          "maxima": 50.1
+        },
+        "quadrosPorSegundo": 27.3,
+        "quadrosPerdidos": 240,
+        "javascript": {
+          "n": 240,
+          "media": 11.72,
+          "p50": 11.6,
+          "p95": 13.5,
+          "p99": 16.6,
+          "maxima": 17.6
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 40.41,
+          "p50": 40,
+          "p95": 42,
+          "p99": 64.4,
+          "maxima": 64.4
+        }
+      },
+      {
+        "cenario": "ingenuo-documento",
+        "nome": "Sem cache nenhum: recompor as 4 pranchetas (200 camadas) a cada quadro",
+        "preparoMs": 0.4,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 42.15,
+          "p50": 49.9,
+          "p95": 50.1,
+          "p99": 50.1,
+          "maxima": 50.1
+        },
+        "quadrosPorSegundo": 23.7,
+        "quadrosPerdidos": 240,
+        "javascript": {
+          "n": 240,
+          "media": 29.61,
+          "p50": 28.6,
+          "p95": 35,
+          "p99": 43.2,
+          "maxima": 49.2
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 62.9,
+          "p50": 62.5,
+          "p95": 66.9,
+          "p99": 78.8,
+          "maxima": 78.8
+        }
+      }
+    ]
+  },
+  "bancada-gpu-placa-densidade2": {
+    "motor": {
+      "nome": "canvaskit-wasm",
+      "versao": "0.42.0",
+      "raster": "gpu"
+    },
+    "navegador": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "gpu": {
+      "fornecedor": "Google Inc. (AMD)",
+      "renderizador": "ANGLE (AMD, AMD Radeon RX 5500 XT (radeonsi navi14 LLVM 20.1.2), OpenGL 4.6)",
+      "versao": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    "nucleos": 8,
+    "canvas": {
+      "largura": 3200,
+      "altura": 1626,
+      "densidade": 2
+    },
+    "escalaDoCache": 1,
+    "documento": {
+      "total": 200,
+      "porTipo": {
+        "imagem": 32,
+        "forma": 64,
+        "grupo": 8,
+        "texto": 84,
+        "ajuste": 8,
+        "vetor": 4
+      },
+      "comSombra": 32,
+      "comModo": 16,
+      "comMascara": 8,
+      "comDesfoque": 4,
+      "recortadas": 4
+    },
+    "carga": {
+      "scriptMs": 16,
+      "wasmMs": 108,
+      "recursosMs": 26,
+      "sessaoMs": 156
+    },
+    "composicao": [
+      {
+        "prancheta": "Feed 1080×1350",
+        "ms": 182.2
+      },
+      {
+        "prancheta": "Story 1080×1920",
+        "ms": 17.7
+      },
+      {
+        "prancheta": "Quadrado 1080×1080",
+        "ms": 20.7
+      },
+      {
+        "prancheta": "Banner 1200×628",
+        "ms": 24.5
+      }
+    ],
+    "composicaoTotalMs": 57,
+    "memoria": {
+      "wasmMB": 128,
+      "javascriptMB": 8
+    },
+    "recomporAoSoltarMs": 7.8,
+    "medicoes": [
+      {
+        "cenario": "camera-mover",
+        "nome": "Mover a câmera (4 pranchetas, zoom fixo)",
+        "preparoMs": 0.7,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.67,
+          "p50": 0.6,
+          "p95": 0.9,
+          "p99": 1.5,
+          "maxima": 1.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 2.97,
+          "p50": 3.3,
+          "p95": 3.8,
+          "p99": 4.3,
+          "maxima": 4.3
+        }
+      },
+      {
+        "cenario": "camera-zoom",
+        "nome": "Zoom da câmera (de 15% a 150%)",
+        "preparoMs": 0.9,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.53,
+          "p50": 0.5,
+          "p95": 0.7,
+          "p99": 0.9,
+          "maxima": 1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 2.88,
+          "p50": 3,
+          "p95": 3.9,
+          "p99": 4.1,
+          "maxima": 4.1
+        }
+      },
+      {
+        "cenario": "arrastar-topo",
+        "nome": "Arrastar a camada do topo (logo; nada acima)",
+        "preparoMs": 27.5,
+        "itens": 2,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.57,
+          "p50": 0.6,
+          "p95": 0.8,
+          "p99": 0.9,
+          "maxima": 0.9
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 3,
+          "p50": 3.3,
+          "p95": 3.9,
+          "p99": 4.5,
+          "maxima": 4.5
+        }
+      },
+      {
+        "cenario": "arrastar-meio",
+        "nome": "Arrastar o título (sombra; acima: textos, botão, recorte, selo, 2 ajustes)",
+        "preparoMs": 13.4,
+        "itens": 6,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 1.29,
+          "p50": 1.3,
+          "p95": 1.6,
+          "p99": 1.7,
+          "maxima": 1.7
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 4.29,
+          "p50": 4.2,
+          "p95": 5.4,
+          "p99": 6.3,
+          "maxima": 6.3
+        }
+      },
+      {
+        "cenario": "arrastar-fundo",
+        "nome": "Arrastar o disco em multiplicação, perto do fundo (acima: quase tudo, com 3 modos e 2 ajustes)",
+        "preparoMs": 24.2,
+        "itens": 8,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 1.5,
+          "p50": 1.5,
+          "p95": 1.8,
+          "p99": 2.2,
+          "maxima": 2.5
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 8.09,
+          "p50": 8.1,
+          "p95": 8.4,
+          "p99": 10.1,
+          "maxima": 10.1
+        }
+      },
+      {
+        "cenario": "ingenuo-prancheta",
+        "nome": "Sem cache de partes: recompor a prancheta tocada a cada quadro",
+        "preparoMs": 1.4,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 11.16,
+          "p50": 10.9,
+          "p95": 13.6,
+          "p99": 17.1,
+          "maxima": 22.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 17.28,
+          "p50": 17.3,
+          "p95": 19.1,
+          "p99": 22,
+          "maxima": 22
+        }
+      },
+      {
+        "cenario": "ingenuo-documento",
+        "nome": "Sem cache nenhum: recompor as 4 pranchetas (200 camadas) a cada quadro",
+        "preparoMs": 0.7,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 31.73,
+          "p50": 33.3,
+          "p95": 33.4,
+          "p99": 50,
+          "maxima": 50.1
+        },
+        "quadrosPorSegundo": 31.5,
+        "quadrosPerdidos": 211,
+        "javascript": {
+          "n": 240,
+          "media": 31.41,
+          "p50": 30.8,
+          "p95": 34.6,
+          "p99": 41.6,
+          "maxima": 44.9
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 37.16,
+          "p50": 36.9,
+          "p95": 41.1,
+          "p99": 45,
+          "maxima": 45
+        }
+      }
+    ]
+  },
+  "bancada-gpu-placa-regiao-suja": {
+    "regiaoSuja": true,
+    "motor": {
+      "nome": "canvaskit-wasm",
+      "versao": "0.42.0",
+      "raster": "gpu"
+    },
+    "navegador": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "gpu": {
+      "fornecedor": "Google Inc. (AMD)",
+      "renderizador": "ANGLE (AMD, AMD Radeon RX 5500 XT (radeonsi navi14 LLVM 20.1.2), OpenGL 4.6)",
+      "versao": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    "nucleos": 8,
+    "canvas": {
+      "largura": 1600,
+      "altura": 813,
+      "densidade": 1
+    },
+    "escalaDoCache": 1,
+    "documento": {
+      "total": 200,
+      "porTipo": {
+        "imagem": 32,
+        "forma": 64,
+        "grupo": 8,
+        "texto": 84,
+        "ajuste": 8,
+        "vetor": 4
+      },
+      "comSombra": 32,
+      "comModo": 16,
+      "comMascara": 8,
+      "comDesfoque": 4,
+      "recortadas": 4
+    },
+    "carga": {
+      "scriptMs": 20,
+      "wasmMs": 98,
+      "recursosMs": 26,
+      "sessaoMs": 127
+    },
+    "composicao": [
+      {
+        "prancheta": "Feed 1080×1350",
+        "ms": 190.1
+      },
+      {
+        "prancheta": "Story 1080×1920",
+        "ms": 18.1
+      },
+      {
+        "prancheta": "Quadrado 1080×1080",
+        "ms": 36.1
+      },
+      {
+        "prancheta": "Banner 1200×628",
+        "ms": 58.8
+      }
+    ],
+    "composicaoTotalMs": 67,
+    "memoria": {
+      "wasmMB": 128,
+      "javascriptMB": 8
+    },
+    "recomporAoSoltarMs": 7.8,
+    "medicoes": [
+      {
+        "cenario": "camera-mover",
+        "nome": "Mover a câmera (4 pranchetas, zoom fixo)",
+        "preparoMs": 0.6,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.66,
+          "p50": 0.6,
+          "p95": 0.9,
+          "p99": 1.2,
+          "maxima": 1.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 2.68,
+          "p50": 2.8,
+          "p95": 3.5,
+          "p99": 3.7,
+          "maxima": 3.7
+        }
+      },
+      {
+        "cenario": "camera-zoom",
+        "nome": "Zoom da câmera (de 15% a 150%)",
+        "preparoMs": 1.1,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.57,
+          "p50": 0.6,
+          "p95": 0.7,
+          "p99": 1,
+          "maxima": 1.1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 2.64,
+          "p50": 2.8,
+          "p95": 3.6,
+          "p99": 3.9,
+          "maxima": 3.9
+        }
+      },
+      {
+        "cenario": "arrastar-topo",
+        "nome": "Arrastar a camada do topo (logo; nada acima)",
+        "preparoMs": 28.3,
+        "itens": 2,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.57,
+          "p50": 0.6,
+          "p95": 0.7,
+          "p99": 0.8,
+          "maxima": 1.4
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 2.57,
+          "p50": 2.8,
+          "p95": 3.6,
+          "p99": 4.1,
+          "maxima": 4.1
+        }
+      },
+      {
+        "cenario": "arrastar-meio",
+        "nome": "Arrastar o título (sombra; acima: textos, botão, recorte, selo, 2 ajustes)",
+        "preparoMs": 32,
+        "itens": 6,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 1.33,
+          "p50": 1.3,
+          "p95": 1.6,
+          "p99": 1.7,
+          "maxima": 1.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 3.56,
+          "p50": 3.5,
+          "p95": 4.5,
+          "p99": 4.7,
+          "maxima": 4.7
+        }
+      },
+      {
+        "cenario": "arrastar-fundo",
+        "nome": "Arrastar o disco em multiplicação, perto do fundo (acima: quase tudo, com 3 modos e 2 ajustes)",
+        "preparoMs": 20.6,
+        "itens": 8,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 1.51,
+          "p50": 1.5,
+          "p95": 1.8,
+          "p99": 2.2,
+          "maxima": 2.5
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 3.89,
+          "p50": 3.7,
+          "p95": 5,
+          "p99": 7.8,
+          "maxima": 7.8
+        }
+      },
+      {
+        "cenario": "ingenuo-prancheta",
+        "nome": "Sem cache de partes: recompor a prancheta tocada a cada quadro",
+        "preparoMs": 1.4,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 11.1,
+          "p50": 10.9,
+          "p95": 12.9,
+          "p99": 14.3,
+          "maxima": 14.7
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 14.58,
+          "p50": 14.4,
+          "p95": 18.2,
+          "p99": 19.7,
+          "maxima": 19.7
+        }
+      },
+      {
+        "cenario": "ingenuo-documento",
+        "nome": "Sem cache nenhum: recompor as 4 pranchetas (200 camadas) a cada quadro",
+        "preparoMs": 0.5,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 29.58,
+          "p50": 33.3,
+          "p95": 33.4,
+          "p99": 33.5,
+          "maxima": 50
+        },
+        "quadrosPorSegundo": 33.8,
+        "quadrosPerdidos": 184,
+        "javascript": {
+          "n": 240,
+          "media": 29.27,
+          "p50": 28.9,
+          "p95": 31.9,
+          "p99": 35.9,
+          "maxima": 38.3
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 32.77,
+          "p50": 32.2,
+          "p95": 35.3,
+          "p99": 47,
+          "maxima": 47
+        }
+      }
+    ]
+  },
+  "bancada-gpu-placa": {
+    "motor": {
+      "nome": "canvaskit-wasm",
+      "versao": "0.42.0",
+      "raster": "gpu"
+    },
+    "navegador": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "gpu": {
+      "fornecedor": "Google Inc. (AMD)",
+      "renderizador": "ANGLE (AMD, AMD Radeon RX 5500 XT (radeonsi navi14 LLVM 20.1.2), OpenGL 4.6)",
+      "versao": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    "nucleos": 8,
+    "canvas": {
+      "largura": 1600,
+      "altura": 813,
+      "densidade": 1
+    },
+    "escalaDoCache": 1,
+    "documento": {
+      "total": 200,
+      "porTipo": {
+        "imagem": 32,
+        "forma": 64,
+        "grupo": 8,
+        "texto": 84,
+        "ajuste": 8,
+        "vetor": 4
+      },
+      "comSombra": 32,
+      "comModo": 16,
+      "comMascara": 8,
+      "comDesfoque": 4,
+      "recortadas": 4
+    },
+    "carga": {
+      "scriptMs": 15,
+      "wasmMs": 119,
+      "recursosMs": 24,
+      "sessaoMs": 107
+    },
+    "composicao": [
+      {
+        "prancheta": "Feed 1080×1350",
+        "ms": 192.3
+      },
+      {
+        "prancheta": "Story 1080×1920",
+        "ms": 20.6
+      },
+      {
+        "prancheta": "Quadrado 1080×1080",
+        "ms": 22.5
+      },
+      {
+        "prancheta": "Banner 1200×628",
+        "ms": 23.6
+      }
+    ],
+    "composicaoTotalMs": 55,
+    "memoria": {
+      "wasmMB": 128,
+      "javascriptMB": 8
+    },
+    "recomporAoSoltarMs": 7.8,
+    "medicoes": [
+      {
+        "cenario": "camera-mover",
+        "nome": "Mover a câmera (4 pranchetas, zoom fixo)",
+        "preparoMs": 0.7,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.66,
+          "p50": 0.6,
+          "p95": 0.9,
+          "p99": 1.3,
+          "maxima": 1.6
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 2.87,
+          "p50": 3.2,
+          "p95": 4.1,
+          "p99": 4.3,
+          "maxima": 4.3
+        }
+      },
+      {
+        "cenario": "camera-zoom",
+        "nome": "Zoom da câmera (de 15% a 150%)",
+        "preparoMs": 0.8,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.57,
+          "p50": 0.6,
+          "p95": 0.7,
+          "p99": 1,
+          "maxima": 1.2
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 2.71,
+          "p50": 2.9,
+          "p95": 3.8,
+          "p99": 4.2,
+          "maxima": 4.2
+        }
+      },
+      {
+        "cenario": "arrastar-topo",
+        "nome": "Arrastar a camada do topo (logo; nada acima)",
+        "preparoMs": 27.7,
+        "itens": 2,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.55,
+          "p50": 0.6,
+          "p95": 0.7,
+          "p99": 0.7,
+          "maxima": 1.5
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 2.81,
+          "p50": 3.1,
+          "p95": 4,
+          "p99": 4.3,
+          "maxima": 4.3
+        }
+      },
+      {
+        "cenario": "arrastar-meio",
+        "nome": "Arrastar o título (sombra; acima: textos, botão, recorte, selo, 2 ajustes)",
+        "preparoMs": 25,
+        "itens": 6,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 1.32,
+          "p50": 1.3,
+          "p95": 1.6,
+          "p99": 1.7,
+          "maxima": 1.9
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 3.91,
+          "p50": 3.4,
+          "p95": 5,
+          "p99": 5.4,
+          "maxima": 5.4
+        }
+      },
+      {
+        "cenario": "arrastar-fundo",
+        "nome": "Arrastar o disco em multiplicação, perto do fundo (acima: quase tudo, com 3 modos e 2 ajustes)",
+        "preparoMs": 23.6,
+        "itens": 8,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 1.47,
+          "p50": 1.5,
+          "p95": 1.8,
+          "p99": 2.2,
+          "maxima": 2.5
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 4.25,
+          "p50": 3.8,
+          "p95": 5.5,
+          "p99": 5.7,
+          "maxima": 5.7
+        }
+      },
+      {
+        "cenario": "ingenuo-prancheta",
+        "nome": "Sem cache de partes: recompor a prancheta tocada a cada quadro",
+        "preparoMs": 1.4,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 11.04,
+          "p50": 10.8,
+          "p95": 13.1,
+          "p99": 14.5,
+          "maxima": 17.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 14.49,
+          "p50": 14.4,
+          "p95": 15.7,
+          "p99": 19.3,
+          "maxima": 19.3
+        }
+      },
+      {
+        "cenario": "ingenuo-documento",
+        "nome": "Sem cache nenhum: recompor as 4 pranchetas (200 camadas) a cada quadro",
+        "preparoMs": 0.6,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 29.37,
+          "p50": 33.3,
+          "p95": 33.4,
+          "p99": 33.4,
+          "maxima": 33.5
+        },
+        "quadrosPorSegundo": 34,
+        "quadrosPerdidos": 183,
+        "javascript": {
+          "n": 240,
+          "media": 29.04,
+          "p50": 28.7,
+          "p95": 32.3,
+          "p99": 34.7,
+          "maxima": 39
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 32.11,
+          "p50": 31.8,
+          "p95": 34.5,
+          "p99": 39.7,
+          "maxima": 39.7
+        }
+      }
+    ]
+  },
+  "bancada-gpu-swiftshader-regiao-suja": {
+    "regiaoSuja": true,
+    "motor": {
+      "nome": "canvaskit-wasm",
+      "versao": "0.42.0",
+      "raster": "gpu"
+    },
+    "navegador": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "gpu": {
+      "fornecedor": "Google Inc. (Google)",
+      "renderizador": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "versao": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    "nucleos": 8,
+    "canvas": {
+      "largura": 1600,
+      "altura": 813,
+      "densidade": 1
+    },
+    "escalaDoCache": 1,
+    "documento": {
+      "total": 200,
+      "porTipo": {
+        "imagem": 32,
+        "forma": 64,
+        "grupo": 8,
+        "texto": 84,
+        "ajuste": 8,
+        "vetor": 4
+      },
+      "comSombra": 32,
+      "comModo": 16,
+      "comMascara": 8,
+      "comDesfoque": 4,
+      "recortadas": 4
+    },
+    "carga": {
+      "scriptMs": 14,
+      "wasmMs": 104,
+      "recursosMs": 26,
+      "sessaoMs": 127
+    },
+    "composicao": [
+      {
+        "prancheta": "Feed 1080×1350",
+        "ms": 175.2
+      },
+      {
+        "prancheta": "Story 1080×1920",
+        "ms": 17.8
+      },
+      {
+        "prancheta": "Quadrado 1080×1080",
+        "ms": 17.2
+      },
+      {
+        "prancheta": "Banner 1200×628",
+        "ms": 23.7
+      }
+    ],
+    "composicaoTotalMs": 58,
+    "memoria": {
+      "wasmMB": 128,
+      "javascriptMB": 7
+    },
+    "recomporAoSoltarMs": 7.1,
+    "medicoes": [
+      {
+        "cenario": "camera-mover",
+        "nome": "Mover a câmera (4 pranchetas, zoom fixo)",
+        "preparoMs": 0.5,
+        "itens": 0,
+        "intervalo": {
+          "n": 90,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 90,
+          "media": 0.58,
+          "p50": 0.6,
+          "p95": 0.7,
+          "p99": 1.1,
+          "maxima": 1.1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 9.22,
+          "p50": 9.1,
+          "p95": 11.2,
+          "p99": 11.8,
+          "maxima": 11.8
+        }
+      },
+      {
+        "cenario": "camera-zoom",
+        "nome": "Zoom da câmera (de 15% a 150%)",
+        "preparoMs": 0.4,
+        "itens": 0,
+        "intervalo": {
+          "n": 90,
+          "media": 17.78,
+          "p50": 16.7,
+          "p95": 33.3,
+          "p99": 33.4,
+          "maxima": 33.4
+        },
+        "quadrosPorSegundo": 56.2,
+        "quadrosPerdidos": 6,
+        "javascript": {
+          "n": 90,
+          "media": 0.46,
+          "p50": 0.4,
+          "p95": 0.6,
+          "p99": 1.1,
+          "maxima": 1.1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 10.59,
+          "p50": 11.4,
+          "p95": 15,
+          "p99": 16.7,
+          "maxima": 16.7
+        }
+      },
+      {
+        "cenario": "arrastar-topo",
+        "nome": "Arrastar a camada do topo (logo; nada acima)",
+        "preparoMs": 13,
+        "itens": 2,
+        "intervalo": {
+          "n": 90,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 90,
+          "media": 0.51,
+          "p50": 0.5,
+          "p95": 0.7,
+          "p99": 1,
+          "maxima": 1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 1.38,
+          "p50": 1.4,
+          "p95": 1.7,
+          "p99": 2.2,
+          "maxima": 2.2
+        }
+      },
+      {
+        "cenario": "arrastar-meio",
+        "nome": "Arrastar o título (sombra; acima: textos, botão, recorte, selo, 2 ajustes)",
+        "preparoMs": 15.6,
+        "itens": 6,
+        "intervalo": {
+          "n": 90,
+          "media": 18.15,
+          "p50": 16.7,
+          "p95": 33.3,
+          "p99": 33.4,
+          "maxima": 33.4
+        },
+        "quadrosPorSegundo": 55.1,
+        "quadrosPerdidos": 8,
+        "javascript": {
+          "n": 90,
+          "media": 1.1,
+          "p50": 1.1,
+          "p95": 1.2,
+          "p99": 1.4,
+          "maxima": 1.4
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 13.51,
+          "p50": 13.5,
+          "p95": 15.8,
+          "p99": 18.3,
+          "maxima": 18.3
+        }
+      },
+      {
+        "cenario": "arrastar-fundo",
+        "nome": "Arrastar o disco em multiplicação, perto do fundo (acima: quase tudo, com 3 modos e 2 ajustes)",
+        "preparoMs": 11.5,
+        "itens": 8,
+        "intervalo": {
+          "n": 90,
+          "media": 19.07,
+          "p50": 16.7,
+          "p95": 33.4,
+          "p99": 33.4,
+          "maxima": 33.4
+        },
+        "quadrosPorSegundo": 52.4,
+        "quadrosPerdidos": 13,
+        "javascript": {
+          "n": 90,
+          "media": 1.21,
+          "p50": 1.2,
+          "p95": 1.5,
+          "p99": 1.6,
+          "maxima": 1.6
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 14.7,
+          "p50": 15.2,
+          "p95": 18,
+          "p99": 20.4,
+          "maxima": 20.4
+        }
+      },
+      {
+        "cenario": "ingenuo-prancheta",
+        "nome": "Sem cache de partes: recompor a prancheta tocada a cada quadro",
+        "preparoMs": 0.9,
+        "itens": 0,
+        "intervalo": {
+          "n": 90,
+          "media": 225.55,
+          "p50": 216.7,
+          "p95": 233.4,
+          "p99": 266.6,
+          "maxima": 266.6
+        },
+        "quadrosPorSegundo": 4.4,
+        "quadrosPerdidos": 90,
+        "javascript": {
+          "n": 90,
+          "media": 12.06,
+          "p50": 12.1,
+          "p95": 13.9,
+          "p99": 15.3,
+          "maxima": 15.3
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 223.42,
+          "p50": 219.2,
+          "p95": 253.7,
+          "p99": 270.4,
+          "maxima": 270.4
+        }
+      },
+      {
+        "cenario": "ingenuo-documento",
+        "nome": "Sem cache nenhum: recompor as 4 pranchetas (200 camadas) a cada quadro",
+        "preparoMs": 0.5,
+        "itens": 0,
+        "intervalo": {
+          "n": 90,
+          "media": 334.43,
+          "p50": 333.3,
+          "p95": 350.1,
+          "p99": 366.7,
+          "maxima": 366.7
+        },
+        "quadrosPorSegundo": 3,
+        "quadrosPerdidos": 90,
+        "javascript": {
+          "n": 90,
+          "media": 30.64,
+          "p50": 29.2,
+          "p95": 38.8,
+          "p99": 41.6,
+          "maxima": 41.6
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 329.19,
+          "p50": 327.4,
+          "p95": 341.5,
+          "p99": 351,
+          "maxima": 351
+        }
+      }
+    ]
+  },
+  "bancada-gpu-swiftshader": {
+    "regiaoSuja": false,
+    "motor": {
+      "nome": "canvaskit-wasm",
+      "versao": "0.42.0",
+      "raster": "gpu"
+    },
+    "navegador": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "gpu": {
+      "fornecedor": "Google Inc. (Google)",
+      "renderizador": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "versao": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    "nucleos": 8,
+    "canvas": {
+      "largura": 1600,
+      "altura": 813,
+      "densidade": 1
+    },
+    "escalaDoCache": 1,
+    "documento": {
+      "total": 200,
+      "porTipo": {
+        "imagem": 32,
+        "forma": 64,
+        "grupo": 8,
+        "texto": 84,
+        "ajuste": 8,
+        "vetor": 4
+      },
+      "comSombra": 32,
+      "comModo": 16,
+      "comMascara": 8,
+      "comDesfoque": 4,
+      "recortadas": 4
+    },
+    "carga": {
+      "scriptMs": 17,
+      "wasmMs": 99,
+      "recursosMs": 29,
+      "sessaoMs": 108
+    },
+    "composicao": [
+      {
+        "prancheta": "Feed 1080×1350",
+        "ms": 198.4
+      },
+      {
+        "prancheta": "Story 1080×1920",
+        "ms": 16.9
+      },
+      {
+        "prancheta": "Quadrado 1080×1080",
+        "ms": 18.5
+      },
+      {
+        "prancheta": "Banner 1200×628",
+        "ms": 23.2
+      }
+    ],
+    "composicaoTotalMs": 68,
+    "memoria": {
+      "wasmMB": 128,
+      "javascriptMB": 7
+    },
+    "recomporAoSoltarMs": 6.8,
+    "medicoes": [
+      {
+        "cenario": "camera-mover",
+        "nome": "Mover a câmera (4 pranchetas, zoom fixo)",
+        "preparoMs": 0.5,
+        "itens": 0,
+        "intervalo": {
+          "n": 90,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 90,
+          "media": 0.58,
+          "p50": 0.6,
+          "p95": 0.7,
+          "p99": 1,
+          "maxima": 1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 9.47,
+          "p50": 9.3,
+          "p95": 11.3,
+          "p99": 11.8,
+          "maxima": 11.8
+        }
+      },
+      {
+        "cenario": "camera-zoom",
+        "nome": "Zoom da câmera (de 15% a 150%)",
+        "preparoMs": 0.3,
+        "itens": 0,
+        "intervalo": {
+          "n": 90,
+          "media": 17.96,
+          "p50": 16.7,
+          "p95": 33.3,
+          "p99": 33.4,
+          "maxima": 33.4
+        },
+        "quadrosPorSegundo": 55.7,
+        "quadrosPerdidos": 7,
+        "javascript": {
+          "n": 90,
+          "media": 0.48,
+          "p50": 0.5,
+          "p95": 0.7,
+          "p99": 1.2,
+          "maxima": 1.2
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 10.62,
+          "p50": 11.4,
+          "p95": 15.2,
+          "p99": 16.5,
+          "maxima": 16.5
+        }
+      },
+      {
+        "cenario": "arrastar-topo",
+        "nome": "Arrastar a camada do topo (logo; nada acima)",
+        "preparoMs": 15.1,
+        "itens": 2,
+        "intervalo": {
+          "n": 90,
+          "media": 16.85,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 33.2,
+          "maxima": 33.2
+        },
+        "quadrosPorSegundo": 59.3,
+        "quadrosPerdidos": 1,
+        "javascript": {
+          "n": 90,
+          "media": 0.52,
+          "p50": 0.5,
+          "p95": 0.7,
+          "p99": 0.8,
+          "maxima": 0.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 10.9,
+          "p50": 10.5,
+          "p95": 13.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        }
+      },
+      {
+        "cenario": "arrastar-meio",
+        "nome": "Arrastar o título (sombra; acima: textos, botão, recorte, selo, 2 ajustes)",
+        "preparoMs": 13.4,
+        "itens": 6,
+        "intervalo": {
+          "n": 90,
+          "media": 57.59,
+          "p50": 50.1,
+          "p95": 66.7,
+          "p99": 66.7,
+          "maxima": 66.7
+        },
+        "quadrosPorSegundo": 17.4,
+        "quadrosPerdidos": 90,
+        "javascript": {
+          "n": 90,
+          "media": 1.17,
+          "p50": 1.1,
+          "p95": 1.7,
+          "p99": 2.1,
+          "maxima": 2.1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 45.14,
+          "p50": 44.5,
+          "p95": 49.6,
+          "p99": 54.9,
+          "maxima": 54.9
+        }
+      },
+      {
+        "cenario": "arrastar-fundo",
+        "nome": "Arrastar o disco em multiplicação, perto do fundo (acima: quase tudo, com 3 modos e 2 ajustes)",
+        "preparoMs": 10.6,
+        "itens": 8,
+        "intervalo": {
+          "n": 90,
+          "media": 61.48,
+          "p50": 66.6,
+          "p95": 66.8,
+          "p99": 83.4,
+          "maxima": 83.4
+        },
+        "quadrosPorSegundo": 16.3,
+        "quadrosPerdidos": 90,
+        "javascript": {
+          "n": 90,
+          "media": 1.26,
+          "p50": 1.2,
+          "p95": 1.6,
+          "p99": 1.8,
+          "maxima": 1.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 56.9,
+          "p50": 56.1,
+          "p95": 64.8,
+          "p99": 68.3,
+          "maxima": 68.3
+        }
+      },
+      {
+        "cenario": "ingenuo-prancheta",
+        "nome": "Sem cache de partes: recompor a prancheta tocada a cada quadro",
+        "preparoMs": 0.7,
+        "itens": 0,
+        "intervalo": {
+          "n": 90,
+          "media": 228.14,
+          "p50": 233.3,
+          "p95": 250,
+          "p99": 266.7,
+          "maxima": 266.7
+        },
+        "quadrosPorSegundo": 4.4,
+        "quadrosPerdidos": 90,
+        "javascript": {
+          "n": 90,
+          "media": 12.13,
+          "p50": 11.8,
+          "p95": 15.3,
+          "p99": 15.8,
+          "maxima": 15.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 234.8,
+          "p50": 223.3,
+          "p95": 290.3,
+          "p99": 304.6,
+          "maxima": 304.6
+        }
+      },
+      {
+        "cenario": "ingenuo-documento",
+        "nome": "Sem cache nenhum: recompor as 4 pranchetas (200 camadas) a cada quadro",
+        "preparoMs": 0.6,
+        "itens": 0,
+        "intervalo": {
+          "n": 90,
+          "media": 340.91,
+          "p50": 333.3,
+          "p95": 399.9,
+          "p99": 416.6,
+          "maxima": 416.6
+        },
+        "quadrosPorSegundo": 2.9,
+        "quadrosPerdidos": 90,
+        "javascript": {
+          "n": 90,
+          "media": 31,
+          "p50": 29.4,
+          "p95": 39.6,
+          "p99": 45.7,
+          "maxima": 45.7
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 327.73,
+          "p50": 325.1,
+          "p95": 348.4,
+          "p99": 360.5,
+          "maxima": 360.5
+        }
+      }
+    ]
+  },
+  "bancada-hibrido-placa": {
+    "motor": {
+      "nome": "canvaskit-wasm",
+      "versao": "0.42.0",
+      "raster": "hibrido"
+    },
+    "navegador": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "gpu": {
+      "fornecedor": "Google Inc. (AMD)",
+      "renderizador": "ANGLE (AMD, AMD Radeon RX 5500 XT (radeonsi navi14 LLVM 20.1.2), OpenGL 4.6)",
+      "versao": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    "nucleos": 8,
+    "canvas": {
+      "largura": 1600,
+      "altura": 813,
+      "densidade": 1
+    },
+    "escalaDoCache": 1,
+    "documento": {
+      "total": 200,
+      "porTipo": {
+        "imagem": 32,
+        "forma": 64,
+        "grupo": 8,
+        "texto": 84,
+        "ajuste": 8,
+        "vetor": 4
+      },
+      "comSombra": 32,
+      "comModo": 16,
+      "comMascara": 8,
+      "comDesfoque": 4,
+      "recortadas": 4
+    },
+    "carga": {
+      "scriptMs": 13,
+      "wasmMs": 140,
+      "recursosMs": 21,
+      "sessaoMs": 123
+    },
+    "composicao": [
+      {
+        "prancheta": "Feed 1080×1350",
+        "ms": 1674.7
+      },
+      {
+        "prancheta": "Story 1080×1920",
+        "ms": 2079.9
+      },
+      {
+        "prancheta": "Quadrado 1080×1080",
+        "ms": 1217.9
+      },
+      {
+        "prancheta": "Banner 1200×628",
+        "ms": 919.1
+      }
+    ],
+    "composicaoTotalMs": 5662,
+    "memoria": {
+      "wasmMB": 128,
+      "javascriptMB": 9
+    },
+    "recomporAoSoltarMs": 1507.3,
+    "medicoes": [
+      {
+        "cenario": "camera-mover",
+        "nome": "Mover a câmera (4 pranchetas, zoom fixo)",
+        "preparoMs": 0.9,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.7,
+          "p50": 0.7,
+          "p95": 0.9,
+          "p99": 1.4,
+          "maxima": 1.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 2.94,
+          "p50": 3.2,
+          "p95": 4.3,
+          "p99": 4.8,
+          "maxima": 4.8
+        }
+      },
+      {
+        "cenario": "camera-zoom",
+        "nome": "Zoom da câmera (de 15% a 150%)",
+        "preparoMs": 0.9,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.57,
+          "p50": 0.6,
+          "p95": 0.8,
+          "p99": 0.9,
+          "maxima": 1
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 2.79,
+          "p50": 3.1,
+          "p95": 3.7,
+          "p99": 4.2,
+          "maxima": 4.2
+        }
+      },
+      {
+        "cenario": "arrastar-topo",
+        "nome": "Arrastar a camada do topo (logo; nada acima)",
+        "preparoMs": 1543.7,
+        "itens": 2,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.7,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 0.67,
+          "p50": 0.7,
+          "p95": 0.8,
+          "p99": 0.9,
+          "maxima": 0.9
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 6.28,
+          "p50": 6.4,
+          "p95": 7.5,
+          "p99": 8.3,
+          "maxima": 8.3
+        }
+      },
+      {
+        "cenario": "arrastar-meio",
+        "nome": "Arrastar o título (sombra; acima: textos, botão, recorte, selo, 2 ajustes)",
+        "preparoMs": 1395,
+        "itens": 6,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 1.3,
+          "p50": 1.3,
+          "p95": 1.7,
+          "p99": 1.8,
+          "maxima": 2.4
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 3.92,
+          "p50": 3.6,
+          "p95": 5,
+          "p99": 5.5,
+          "maxima": 5.5
+        }
+      },
+      {
+        "cenario": "arrastar-fundo",
+        "nome": "Arrastar o disco em multiplicação, perto do fundo (acima: quase tudo, com 3 modos e 2 ajustes)",
+        "preparoMs": 1170.9,
+        "itens": 8,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 1.64,
+          "p50": 1.6,
+          "p95": 1.9,
+          "p99": 2.2,
+          "maxima": 3.2
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 4.43,
+          "p50": 3.9,
+          "p95": 5.7,
+          "p99": 5.8,
+          "maxima": 5.8
+        }
+      },
+      {
+        "cenario": "ingenuo-prancheta",
+        "nome": "Sem cache de partes: recompor a prancheta tocada a cada quadro",
+        "preparoMs": 1.3,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 16.67,
+          "p50": 16.7,
+          "p95": 16.8,
+          "p99": 16.8,
+          "maxima": 16.8
+        },
+        "quadrosPorSegundo": 60,
+        "quadrosPerdidos": 0,
+        "javascript": {
+          "n": 240,
+          "media": 11.34,
+          "p50": 11.1,
+          "p95": 13.1,
+          "p99": 16,
+          "maxima": 16.4
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 14.45,
+          "p50": 14.4,
+          "p95": 16,
+          "p99": 18.8,
+          "maxima": 18.8
+        }
+      },
+      {
+        "cenario": "ingenuo-documento",
+        "nome": "Sem cache nenhum: recompor as 4 pranchetas (200 camadas) a cada quadro",
+        "preparoMs": 0.5,
+        "itens": 0,
+        "intervalo": {
+          "n": 240,
+          "media": 30.07,
+          "p50": 33.3,
+          "p95": 33.4,
+          "p99": 33.5,
+          "maxima": 50
+        },
+        "quadrosPorSegundo": 33.3,
+        "quadrosPerdidos": 191,
+        "javascript": {
+          "n": 240,
+          "media": 29.8,
+          "p50": 29.7,
+          "p95": 32.9,
+          "p99": 37.2,
+          "maxima": 39.8
+        },
+        "sincronizado": {
+          "n": 90,
+          "media": 34.23,
+          "p50": 33.4,
+          "p95": 40.1,
+          "p99": 45.4,
+          "maxima": 45.4
+        }
+      }
+    ]
+  }
+}

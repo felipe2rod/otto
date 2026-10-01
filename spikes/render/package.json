@@ -1,0 +1,25 @@
+{
+  "name": "otto-spike-render",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Spike do ADR 030: CanvasKit no navegador e no Node, paridade e desempenho",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "empacotar": "node scripts/empacotar.ts",
+    "servir": "node src/servidor.ts",
+    "render-node": "node src/node/renderizar-cenas.ts",
+    "comparar": "node src/node/comparar.ts",
+    "medir-node": "node --expose-gc src/node/medir.ts"
+  },
+  "dependencies": {
+    "canvaskit-wasm": "0.42.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}
