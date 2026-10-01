@@ -39,5 +39,6 @@ Gatilho de revisão é sempre em **incidência observável**, nunca em atribuiç
 | [032](032-bancos-de-imagens-com-chave-da-conta.md) | Bancos de imagens: Pixabay de fábrica, chave própria da conta | aceita / proposta em partes |
 | [033](033-criar-a-partir-de-pedido-ou-briefing-salvo.md) | Criar a partir de pedido ou de briefing salvo (pelo designer) | aceita / proposta em partes |
 | [034](034-exportacao-vetorial-para-illustrator.md) | Exportação vetorial para o Illustrator (SVG e PDF) | aceita / proposta em partes |
+| [035](035-da-poc-ao-mvp-com-docker.md) | Da POC ao MVP, com Docker | aceita / proposta em partes |
 
 Os ADRs 001–007, 010–018, 021, 022, 024 e 025 eram do Otto Atendente (WhatsApp) e estão em [`docs/arquivo/whatsapp/decisoes/`](../arquivo/whatsapp/decisoes/), marcados `substituída por 026`. A numeração continua de onde parou e não se reaproveita número.
