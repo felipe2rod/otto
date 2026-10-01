@@ -238,6 +238,30 @@ describe('MotorDeRender', () => {
     motor.destruir();
   });
 
+  it('prévia de redimensionar e de girar: nenhuma prancheta é recomposta durante o gesto, e a camada aparece com a caixa nova', async () => {
+    const { motor, rodar, em } = montar(200, 200);
+    const { doc } = peca([forma('fundo', 0, 0, 200, 200, '#ffffff'), forma('caixa', 20, 20, 40, 40, '#ff0000'), forma('outra', 150, 150, 30, 30, '#0000ff')]);
+    await motor.prepararRecursos(doc);
+    motor.redimensionar(200, 200, 1);
+    motor.definirDocumento(doc);
+    motor.definirCamera({ x: 0, y: 0, zoom: 1 });
+    rodar();
+    const compostas = motor.contadores.composicoesDePrancheta;
+    const id = idDe(doc, 'caixa');
+    for (let i = 1; i <= 10; i++) {
+      motor.definirPrevia({ ids: [id], dx: 0, dy: 0, caixas: { [id]: { x: 20, y: 20, largura: 40 + i * 10, altura: 40 + i * 5 } } });
+      expect(rodar()).toBe(1);
+    }
+    expect(motor.contadores.composicoesDePrancheta).toBe(compostas);
+    // a caixa cresceu até 140 × 90: o ponto (150, 100) agora é vermelho, e a outra camada continua no lugar
+    expect(em(150, 100)).toEqual([255, 0, 0, 255]);
+    expect(em(165, 165)).toEqual([0, 0, 255, 255]);
+    motor.definirPrevia(null);
+    rodar();
+    expect(em(150, 100)).toEqual([255, 255, 255, 255]);
+    motor.destruir();
+  });
+
   describe('aviso quando o que está em falta muda', () => {
     it('avisa ao receber um documento com recurso em falta, e de novo quando o recurso chega; não repete sem mudança', async () => {
       const { motor } = montar();

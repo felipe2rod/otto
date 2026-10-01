@@ -46,6 +46,7 @@ motor.redimensionar(larguraCss, alturaCss, devicePixelRatio);
 motor.definirDocumento(doc);
 motor.definirCamera({ x, y, zoom });          // x, y: pixels de tela da origem do plano; zoom: pixels de tela por unidade
 motor.definirPrevia({ ids, dx, dy });         // arrastar; null encerra
+motor.definirPrevia({ ids, dx: 0, dy: 0, caixas: { [id]: { x, y, largura, altura, rotacao? } } });   // redimensionar e girar
 const cancelar = motor.aoMudarEmFalta((emFalta) => { /* fonte ou imagem que faltava chegou, ou passou a faltar */ });
 ```
 
@@ -99,9 +100,32 @@ Em foto, os filtros são aplicados na resolução do documento (a POC aplicava n
 
 Do motor da POC, não vieram: `tracarCaminho` (SVG, de outra fatia) e as texturas geradas.
 
+## Prévia de gesto: mover, redimensionar e girar
+
+`definirPrevia` mostra as camadas de `ids` deslocadas por `dx` e `dy`, ou, as que têm entrada em `caixas`, com a caixa nova. Nenhuma prancheta é recomposta durante o gesto, com uma camada ou com várias.
+
+- **Mover camadas soltas:** cada uma vira uma imagem em cache, e o quadro só troca a posição delas. Nada é redesenhado.
+- **Redimensionar, girar, ou mexer em camada de dentro de grupo isolado ou de um conjunto de recorte:** a unidade tocada (a camada; o grupo; a base com as presas) é redesenhada a cada quadro, já com a caixa nova, e todo o resto fica em cache. **A prévia é exata, não aproximada:** o texto requebra, a foto reenquadra, o canto arredondado mantém o raio e o efeito com desfoque é recalculado, porque é o mesmo desenho que a prancheta terá ao soltar. A caixa da prévia troca `x`, `y`, `largura`, `altura` e `rotacao`, como a operação `alterar` (a máscara de forma fica onde está); o deslocamento age como `mover` (a máscara vai junto). `aplicarPrevia(no, previa)` é essa conta, para quem desenha as alças.
+- **Ao soltar:** aplique o lote e chame `definirDocumento` antes de `definirPrevia(null)`. A prancheta é recomposta uma vez e fica idêntica ao render de referência.
+- A diferença entre a prévia e o que fica ao soltar é a de sempre entre imagens em cache e render direto: até 8 níveis, só em borda (e mais em borda de camada que cruza a margem da prancheta).
+
+Medido no Chrome com placa de vídeo, 240 quadros por gesto, prancheta de 1080 × 1350, em 2026-10-01 (quadros por segundo; zero composições de prancheta em todos):
+
+| Gesto | Radeon RX 5500 XT, 200 camadas | Intel HD 2000, 200 camadas | Intel HD 2000, 16 camadas |
+|---|---|---|---|
+| Mover um texto | 60 | 57 | 60 |
+| Redimensionar um texto (requebra) | 60 | 60 | 60 |
+| Girar um texto | 60 | 60 | 60 |
+| Redimensionar forma com sombra, brilho externo e sombra interna | 54 a 56 | 44 a 49 | 60 |
+| Redimensionar a foto de fundo, com ruído | 60 | 48 | 60 |
+| Redimensionar 10 camadas selecionadas | 60 | 53 | 58 |
+| Mover 10 camadas selecionadas | 60 | 60 | 60 |
+
+O primeiro quadro de um gesto com efeito de desfoque engasga uma vez (280 a 500 ms nas duas placas: é a primeira compilação dos shaders do efeito); os números da linha já incluem esse quadro. Mexer na camada de baixo de uma pilha de 200 é o caso caro: tudo o que está acima vira imagens que são desenhadas a cada quadro, e camada de ajuste acima é recalculada a cada quadro.
+
 ## O que o editor ainda não tem no motor
 
-- Prévia de redimensionar, girar e editar texto: só "mover" tem prévia. Fora das três partes (camada dentro de grupo isolado, várias camadas), a prancheta é redesenhada ao vivo a cada quadro.
+- Prévia de edição de texto (digitar): hoje é um lote por alteração.
 - Zoom acima de 100% recompondo a região visível na escala nova (hoje a imagem em cache é ampliada).
 - Recuperação de contexto WebGL perdido: o motor avisa (`aoPerderContexto`); recriar é do editor.
 - Motor dentro de Web Worker.

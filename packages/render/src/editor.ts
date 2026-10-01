@@ -7,9 +7,13 @@
 //   acima   — o que está sobre ela. Trechos que não dependem do fundo viram uma imagem cada;
 //             camada com modo de mesclagem vira imagem desenhada com o modo; camada de ajuste é redesenhada.
 // O quadro é: abaixo, camada deslocada, e os itens de acima em ordem. Nada é recomposto durante o gesto.
-// Quando o gesto não cabe nas três partes (camada dentro de grupo isolado, várias camadas), a prancheta é
-// redesenhada ao vivo a cada quadro: mais lento, e certo.
-import { type Caixa, type Documento, deslocarNos, disporPranchetas, ehVisual, type ModoDeMesclagem, type No, type NoAjuste, type NoVisual, type Prancheta } from '@otto/documento';
+// Várias camadas arrastadas: a mesma coisa, com uma imagem para cada uma e o que fica entre elas em cache.
+//
+// Redimensionar e girar (prévia com caixa nova), ou mexer em camada que não é uma unidade sozinha (dentro de grupo
+// isolado, base de um recorte): a UNIDADE tocada é redesenhada ao vivo a cada quadro, já com a caixa nova, e todo
+// o resto continua em cache. A prévia é exata, não aproximada: o texto requebra, a foto reenquadra, o canto
+// arredondado mantém o raio e o efeito é recalculado, porque é o mesmo desenho que a prancheta terá ao soltar.
+import { type Caixa, type Documento, deslocarNo, disporPranchetas, ehVisual, type ModoDeMesclagem, type No, type NoAjuste, type NoVisual, type Prancheta } from '@otto/documento';
 import type { Canvas, Image, Paint, Surface } from 'canvaskit-wasm';
 import { criarSuperficieDeCpu, desenharNos, desenharNosEmCpu, limitesDoNo, modoDe } from './compositor';
 import type { Sessao } from './sessao';
@@ -23,11 +27,46 @@ export interface CameraEmPixels {
   zoom: number;
 }
 
-/** Gesto em andamento: desloca nós sem criar documento novo. */
+/** A caixa de uma camada durante o gesto de redimensionar ou girar: os mesmos campos que a operação "alterar" vai gravar ao soltar. */
+export interface CaixaDePrevia {
+  x: number;
+  y: number;
+  largura: number;
+  altura: number;
+  /** graus; sem ela, a rotação da camada não muda */
+  rotacao?: number;
+}
+
+/**
+ * Gesto em andamento: mostra as camadas deslocadas, ou com outra caixa, sem criar documento novo.
+ * Camada de `ids` com entrada em `caixas` aparece com aquela caixa (redimensionar, girar); as outras, deslocadas por dx e dy (mover).
+ */
 export interface PreviaDeGesto {
   ids: readonly string[];
   dx: number;
   dy: number;
+  /** caixa nova por id de camada visual */
+  caixas?: Readonly<Record<string, CaixaDePrevia>>;
+}
+
+/** O nó como a prévia o mostra. O que não muda continua sendo o mesmo objeto. */
+export function aplicarPrevia(no: No, previa: PreviaDeGesto, ids: ReadonlySet<string> = new Set(previa.ids)): No {
+  const caixa = previa.caixas?.[no.id];
+  if (caixa && ehVisual(no)) {
+    if (!ids.has(no.id)) return no;
+    // troca de propriedade, como a operação "alterar": a máscara de forma fica onde está
+    return { ...no, x: caixa.x, y: caixa.y, largura: caixa.largura, altura: caixa.altura, ...(caixa.rotacao !== undefined ? { rotacao: caixa.rotacao } : {}) };
+  }
+  // deslocamento, como a operação "mover": grupo leva tudo dentro, e a máscara de forma vai junto
+  if (ids.has(no.id)) return deslocarNo(no, previa.dx, previa.dy);
+  if (no.tipo !== 'grupo') return no;
+  let mudou = false;
+  const filhos = no.filhos.map((f) => {
+    const novo = aplicarPrevia(f, previa, ids);
+    if (novo !== f) mudou = true;
+    return novo;
+  });
+  return mudou ? { ...no, filhos } : no;
 }
 
 /** Um nó do nível de cima, ou um conjunto de recorte (base e presas), com grupos em "atravessar" já achatados. */
@@ -113,18 +152,18 @@ export function fabricaNaGpu(sessao: Sessao, tela: () => Surface): FabricaDeImag
   };
 }
 
-type Item = { tipo: 'imagem'; imagem: Image; x: number; y: number; modo: ModoDeMesclagem; opacidade: number; movel: boolean } | { tipo: 'ajuste'; no: NoAjuste };
+type Item =
+  | { tipo: 'imagem'; imagem: Image; x: number; y: number; modo: ModoDeMesclagem; opacidade: number; movel: boolean }
+  | { tipo: 'ajuste'; no: NoAjuste }
+  /** unidade tocada pelo gesto, redesenhada a cada quadro com a prévia aplicada */
+  | { tipo: 'ao-vivo'; nos: readonly No[]; desenhados: { previa: PreviaDeGesto; nos: readonly No[] } | undefined };
 
 interface Arraste {
   prancheta: Prancheta;
-  ids: readonly string[];
-  dx: number;
-  dy: number;
-  /** três partes em cache; sem elas, a prancheta é redesenhada ao vivo */
-  itens: Item[] | undefined;
-  /** a prancheta com os nós deslocados, para o desenho ao vivo; refeita quando o deslocamento muda */
-  movida: { dx: number; dy: number; prancheta: Prancheta } | undefined;
-  /** onde a camada foi desenhada no último quadro, em pixel do canvas, e com que câmera */
+  previa: PreviaDeGesto;
+  /** o que é fixo e o que se mexe, de baixo para cima, montado uma vez no começo do gesto */
+  itens: Item[];
+  /** onde as camadas foram desenhadas no último quadro, em pixel do canvas, e com que câmera */
   ultimo: { retangulo: [number, number, number, number]; camera: CameraEmPixels } | undefined;
 }
 
@@ -141,9 +180,11 @@ export interface OpcoesDoQuadro {
 export interface ContadoresDoCache {
   /** pranchetas compostas por inteiro */
   composicoesDePrancheta: number;
-  /** imagens parciais montadas no começo de um arraste */
+  /** imagens parciais montadas no começo de um gesto */
   partes: number;
   quadros: number;
+  /** unidades redesenhadas ao vivo durante gestos (uma por unidade tocada, por quadro) */
+  desenhosAoVivo: number;
 }
 
 function contem(filhos: readonly No[], id: string): boolean {
@@ -151,7 +192,7 @@ function contem(filhos: readonly No[], id: string): boolean {
 }
 
 export class CenaDoEditor {
-  readonly contadores: ContadoresDoCache = { composicoesDePrancheta: 0, partes: 0, quadros: 0 };
+  readonly contadores: ContadoresDoCache = { composicoesDePrancheta: 0, partes: 0, quadros: 0, desenhosAoVivo: 0 };
   private readonly sessao: Sessao;
   private readonly fabrica: FabricaDeImagens;
   private readonly escala: number;
@@ -206,48 +247,66 @@ export class CenaDoEditor {
     return feitas;
   }
 
-  /** Como a prévia corrente é desenhada. */
+  /**
+   * Como a prévia corrente é desenhada: 'partes' quando tudo o que se mexe é imagem em cache (nada é redesenhado),
+   * 'ao-vivo' quando alguma unidade é redesenhada a cada quadro. Nos dois casos o resto da prancheta fica em cache.
+   */
   get modoDaPrevia(): 'partes' | 'ao-vivo' | undefined {
-    return this.arraste ? (this.arraste.itens ? 'partes' : 'ao-vivo') : undefined;
+    if (!this.arraste) return undefined;
+    return this.arraste.itens.some((i) => i.tipo === 'ao-vivo') ? 'ao-vivo' : 'partes';
   }
 
-  /** Gesto em andamento. Não cria documento nem recompõe prancheta: só muda o deslocamento. null encerra. */
+  /** Gesto em andamento. Não cria documento nem recompõe prancheta. null encerra. */
   definirPrevia(previa: PreviaDeGesto | null): void {
     if (!previa || previa.ids.length === 0 || !this.doc) {
       this.soltarArraste();
       return;
     }
-    const mesma = this.arraste && this.arraste.ids.length === previa.ids.length && this.arraste.ids.every((id, i) => id === previa.ids[i]);
-    if (!mesma) this.iniciarArraste(this.doc, previa.ids);
-    if (this.arraste) {
-      this.arraste.dx = previa.dx;
-      this.arraste.dy = previa.dy;
-    }
+    const antes = this.arraste?.previa;
+    const comCaixa = (p: PreviaDeGesto): string => p.ids.filter((id) => p.caixas?.[id]).join(' ');
+    // as partes valem enquanto forem as mesmas camadas, cada uma no mesmo tipo de gesto (mover ou caixa nova)
+    const mesma = antes && antes.ids.length === previa.ids.length && antes.ids.every((id, i) => id === previa.ids[i]) && comCaixa(antes) === comCaixa(previa);
+    if (!mesma) this.iniciarArraste(this.doc, previa);
+    if (this.arraste) this.arraste.previa = previa;
   }
 
-  private iniciarArraste(doc: Documento, ids: readonly string[]): void {
+  private iniciarArraste(doc: Documento, previa: PreviaDeGesto): void {
     this.soltarArraste();
-    const p = doc.pranchetas.find((x) => ids.some((id) => contem(x.filhos, id)));
+    const p = doc.pranchetas.find((x) => previa.ids.some((id) => contem(x.filhos, id)));
     if (!p) return;
-    this.arraste = { prancheta: p, ids, dx: 0, dy: 0, itens: ids.length === 1 ? this.montarPartes(doc, p, ids[0] as string) : undefined, movida: undefined, ultimo: undefined };
+    this.arraste = { prancheta: p, previa, itens: this.montarPartes(doc, p, previa), ultimo: undefined };
   }
 
-  /** As três partes para arrastar o nó. Devolve undefined quando o nó não é uma unidade do nível de cima. */
-  private montarPartes(doc: Documento, p: Prancheta, id: string): Item[] | undefined {
+  /**
+   * As partes do gesto, de baixo para cima: o que está abaixo da primeira unidade tocada numa imagem só; cada unidade
+   * tocada como imagem que se desloca (camada sozinha, só movendo) ou como desenho ao vivo; e o que fica entre elas e
+   * acima em imagens, separando o que depende do que está abaixo (modo de mesclagem, camada de ajuste).
+   */
+  private montarPartes(doc: Documento, p: Prancheta, previa: PreviaDeGesto): Item[] {
+    const ids = new Set(previa.ids);
     const unidades = unidadesDaPrancheta(p);
-    const k = unidades.findIndex((u) => u.nos.length === 1 && u.nos[0]?.id === id);
-    const no = unidades[k]?.nos[0];
-    if (k < 0 || !no || !ehVisual(no)) return undefined;
+    const tocada = (u: Unidade): boolean => u.nos.some((n) => ids.has(n.id) || (n.tipo === 'grupo' && [...ids].some((id) => contem(n.filhos, id))));
+    const primeira = unidades.findIndex(tocada);
     const parte = (nos: readonly No[], fundo: boolean, regiao?: Caixa): Image => {
       this.contadores.partes++;
       return this.fabrica.renderizar(doc, p, nos, fundo, this.escala, regiao);
     };
     const itens: Item[] = [];
-    // abaixo: tudo o que está sob a camada, composto de uma vez (aqui as dependentes enxergam o fundo certo)
+    /**
+     * Imagem fixa do que está acima. Quando são só camadas visuais, a imagem tem o tamanho do que elas ocupam dentro da
+     * prancheta, e não o da prancheta: uma dúzia de imagens do tamanho da prancheta por quadro pesa em placa fraca.
+     */
+    const fixa = (nos: readonly No[], modo: ModoDeMesclagem = 'normal', opacidade = 1): void => {
+      const caixa = this.areaDe(p, nos);
+      if (caixa && (caixa.w <= 0 || caixa.h <= 0)) return;
+      itens.push({ tipo: 'imagem', imagem: parte(nos, false, caixa), x: caixa?.x ?? 0, y: caixa?.y ?? 0, modo, opacidade, movel: false });
+    };
+    // abaixo: tudo o que está sob a primeira unidade tocada, composto de uma vez (aqui as dependentes enxergam o fundo certo)
+    const ate = primeira < 0 ? unidades.length : primeira;
     itens.push({
       tipo: 'imagem',
       imagem: parte(
-        unidades.slice(0, k).flatMap((u) => u.nos),
+        unidades.slice(0, ate).flatMap((u) => u.nos),
         true,
       ),
       x: 0,
@@ -256,46 +315,81 @@ export class CenaDoEditor {
       opacidade: 1,
       movel: false,
     });
-    // a camada: imagem do tamanho dela, sem o recorte da prancheta, para poder entrar e sair ao mover
-    const limites = limitesDoNo(this.sessao, no);
-    const caixa: Caixa = { x: Math.floor(limites.x), y: Math.floor(limites.y), w: Math.ceil(limites.w) + 1, h: Math.ceil(limites.h) + 1 };
-    const normal: NoVisual = { ...no, modoDeMesclagem: 'normal', opacidade: 1 };
-    itens.push({ tipo: 'imagem', imagem: parte([normal], false, caixa), x: caixa.x, y: caixa.y, modo: modoDe(no), opacidade: no.opacidade, movel: true });
-    // acima: trechos independentes viram uma imagem; dependentes ficam separados
+    // daí para cima: trechos independentes viram uma imagem; dependentes ficam separados
     let trecho: No[] = [];
     const fecharTrecho = (): void => {
       if (trecho.length === 0) return;
-      itens.push({ tipo: 'imagem', imagem: parte(trecho, false), x: 0, y: 0, modo: 'normal', opacidade: 1, movel: false });
+      fixa(trecho);
       trecho = [];
     };
-    for (const u of unidades.slice(k + 1)) {
+    for (const u of unidades.slice(ate)) {
+      const base = u.nos[0] as No;
+      if (tocada(u)) {
+        fecharTrecho();
+        if (u.nos.length === 1 && ehVisual(base) && ids.has(base.id) && !previa.caixas?.[base.id]) {
+          // a camada sozinha, só movendo: imagem do tamanho dela, sem o recorte da prancheta, para poder entrar e sair
+          const limites = limitesDoNo(this.sessao, base);
+          const caixa: Caixa = { x: Math.floor(limites.x), y: Math.floor(limites.y), w: Math.ceil(limites.w) + 1, h: Math.ceil(limites.h) + 1 };
+          const normal: NoVisual = { ...base, modoDeMesclagem: 'normal', opacidade: 1 };
+          itens.push({ tipo: 'imagem', imagem: parte([normal], false, caixa), x: caixa.x, y: caixa.y, modo: modoDe(base), opacidade: base.opacidade, movel: true });
+        } else if (base.tipo === 'ajuste' && u.nos.length === 1) itens.push({ tipo: 'ajuste', no: base });
+        else itens.push({ tipo: 'ao-vivo', nos: u.nos, desenhados: undefined });
+        continue;
+      }
       if (!u.dependente) {
         trecho.push(...u.nos);
         continue;
       }
       fecharTrecho();
-      const base = u.nos[0] as No;
       if (base.tipo === 'ajuste') itens.push({ tipo: 'ajuste', no: base });
       else {
         const semModo = { ...base, modoDeMesclagem: 'normal', opacidade: 1 } as No;
-        itens.push({ tipo: 'imagem', imagem: parte([semModo, ...u.nos.slice(1)], false), x: 0, y: 0, modo: modoDe(base), opacidade: base.opacidade, movel: false });
+        fixa([semModo, ...u.nos.slice(1)], modoDe(base), base.opacidade);
       }
     }
     fecharTrecho();
     return itens;
   }
 
-  /** Retângulo da camada arrastada no canvas, com folga para o filtro de imagem. */
+  /** A área que camadas visuais ocupam dentro da prancheta, em unidade inteira. Com grupo ou ajuste no meio, undefined (a prancheta inteira). */
+  private areaDe(p: Prancheta, nos: readonly No[]): Caixa | undefined {
+    let x0 = Number.POSITIVE_INFINITY;
+    let y0 = Number.POSITIVE_INFINITY;
+    let x1 = Number.NEGATIVE_INFINITY;
+    let y1 = Number.NEGATIVE_INFINITY;
+    for (const n of nos) {
+      if (!ehVisual(n)) return undefined;
+      if (!n.visivel) continue;
+      const l = limitesDoNo(this.sessao, n);
+      x0 = Math.min(x0, l.x);
+      y0 = Math.min(y0, l.y);
+      x1 = Math.max(x1, l.x + l.w);
+      y1 = Math.max(y1, l.y + l.h);
+    }
+    const x = Math.max(0, Math.floor(x0));
+    const y = Math.max(0, Math.floor(y0));
+    return { x, y, w: Math.min(p.largura, Math.ceil(x1) + 1) - x, h: Math.min(p.altura, Math.ceil(y1) + 1) - y };
+  }
+
+  /**
+   * Retângulo, no canvas, que contém as camadas arrastadas, com folga para o filtro de imagem.
+   * Só existe quando tudo o que se mexe é imagem em cache: com unidade ao vivo o quadro é redesenhado inteiro.
+   */
   private retanguloDaCamada(camera: CameraEmPixels): [number, number, number, number] | undefined {
     const a = this.arraste;
-    const movel = a?.itens?.find((i) => i.tipo === 'imagem' && i.movel);
-    if (!a || !movel || movel.tipo !== 'imagem') return undefined;
+    if (!a || a.itens.some((i) => i.tipo === 'ao-vivo')) return undefined;
     const posicao = this.posicoes.get(a.prancheta.id) ?? { x: 0, y: 0 };
-    const x = camera.x + (posicao.x + movel.x + a.dx) * camera.zoom;
-    const y = camera.y + (posicao.y + movel.y + a.dy) * camera.zoom;
-    const w = (movel.imagem.width() / this.escala) * camera.zoom;
-    const h = (movel.imagem.height() / this.escala) * camera.zoom;
-    return [Math.floor(x) - 2, Math.floor(y) - 2, Math.ceil(x + w) + 2, Math.ceil(y + h) + 2];
+    let r: [number, number, number, number] | undefined;
+    for (const movel of a.itens) {
+      if (movel.tipo !== 'imagem' || !movel.movel) continue;
+      const x = camera.x + (posicao.x + movel.x + a.previa.dx) * camera.zoom;
+      const y = camera.y + (posicao.y + movel.y + a.previa.dy) * camera.zoom;
+      const w = (movel.imagem.width() / this.escala) * camera.zoom;
+      const h = (movel.imagem.height() / this.escala) * camera.zoom;
+      const este: [number, number, number, number] = [Math.floor(x) - 2, Math.floor(y) - 2, Math.ceil(x + w) + 2, Math.ceil(y + h) + 2];
+      r = r ? [Math.min(r[0], este[0]), Math.min(r[1], este[1]), Math.max(r[2], este[2]), Math.max(r[3], este[3])] : este;
+    }
+    return r;
   }
 
   desenharQuadro(canvas: Canvas, camera: CameraEmPixels, opcoes: OpcoesDoQuadro = {}): void {
@@ -320,20 +414,26 @@ export class CenaDoEditor {
       canvas.translate(posicao.x, posicao.y);
       canvas.clipRect(ck.XYWHRect(0, 0, p.largura, p.altura), ck.ClipOp.Intersect, false);
       const a = this.arraste?.prancheta === p ? this.arraste : undefined;
-      if (a?.itens && doc) {
+      if (a && doc) {
         for (const item of a.itens) {
           if (item.tipo === 'ajuste') {
             desenharNos(this.sessao, canvas, doc, p, [item.no], { fundo: false });
             continue;
           }
+          if (item.tipo === 'ao-vivo') {
+            // a unidade com a prévia aplicada; só é refeita quando a prévia muda
+            if (item.desenhados?.previa !== a.previa) {
+              const ids = new Set(a.previa.ids);
+              item.desenhados = { previa: a.previa, nos: item.nos.map((n) => aplicarPrevia(n, a.previa, ids)) };
+            }
+            desenharNos(this.sessao, canvas, doc, p, item.desenhados.nos, { fundo: false });
+            this.contadores.desenhosAoVivo++;
+            continue;
+          }
           tinta.setAlphaf(item.opacidade);
           this.sessao.mesclador.aplicar(tinta, item.modo);
-          this.desenharImagem(canvas, item.imagem, item.x + (item.movel ? a.dx : 0), item.y + (item.movel ? a.dy : 0), tinta);
+          this.desenharImagem(canvas, item.imagem, item.x + (item.movel ? a.previa.dx : 0), item.y + (item.movel ? a.previa.dy : 0), tinta);
         }
-      } else if (a && doc) {
-        // gesto fora das três partes: a prancheta, com os nós deslocados, é desenhada ao vivo
-        if (!a.movida || a.movida.dx !== a.dx || a.movida.dy !== a.dy) a.movida = { dx: a.dx, dy: a.dy, prancheta: deslocarNos(p, new Set(a.ids), a.dx, a.dy) };
-        desenharNos(this.sessao, canvas, doc, a.movida.prancheta, a.movida.prancheta.filhos);
       } else {
         const c = this.cache.get(p.id);
         if (c) {

@@ -16,6 +16,8 @@ export interface TextoDoMotor extends TextoDiagramado {
   larguraMaxima: number;
   /** caracteres sem desenho nas fontes entregues */
   glifosAusentes: number;
+  /** para cada linha, o trecho do conteúdo que ela mostra: [início, fim), em índices do texto exibido (mesmo tamanho do conteúdo) */
+  intervalos: [number, number][];
 }
 
 export interface MotorDeTexto {
@@ -184,6 +186,7 @@ export function criarMotorDeTexto(ck: CanvasKit, fontes: readonly FonteDeArquivo
     palavraEstourada: undefined,
     fonteEncontrada: false,
     glifosAusentes: 0,
+    intervalos: [],
   });
 
   const medir = (no: NoTexto, paragrafo: Paragraph, exibido: string): TextoDoMotor => {
@@ -240,6 +243,7 @@ export function criarMotorDeTexto(ck: CanvasKit, fontes: readonly FonteDeArquivo
       palavraEstourada,
       fonteEncontrada: true,
       glifosAusentes: paragrafo.unresolvedCodepoints().length,
+      intervalos: metricas.map((m) => [m.startIndex, m.endIndex]),
     };
   };
 

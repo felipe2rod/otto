@@ -1,12 +1,12 @@
 // A estratégia de cache do editor: uma imagem por prancheta e, ao arrastar, três partes (abaixo, a camada, acima).
 // O que o cache mostra precisa ser o que o render direto mostraria.
-import { aplicarLote, type Documento, deslocarNos, disporPranchetas, type Prancheta } from '@otto/documento';
+import { aplicarLote, type Documento, deslocarNos, disporPranchetas, type No, type NoGrupo, type Prancheta } from '@otto/documento';
 import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ajuste, diferencaMaxima, FOTO, forma, grupo, idDe, imagem, novaSessao, peca, texto } from './apoio-de-teste';
 import { renderizarPrancheta } from './compositor';
 import { comparar } from './diferenca';
-import { CenaDoEditor, fabricaNaCpu, unidadesDaPrancheta } from './editor';
+import { aplicarPrevia, type CaixaDePrevia, CenaDoEditor, fabricaNaCpu, unidadesDaPrancheta } from './editor';
 import type { Sessao } from './sessao';
 
 let ck: CanvasKit;
@@ -123,7 +123,7 @@ describe('cache do editor', () => {
     cena.destruir();
   }, 30_000);
 
-  it('camada dentro de grupo isolado, ou mais de uma camada: a prévia redesenha a prancheta ao vivo, e continua certa', () => {
+  it('mover camada dentro de grupo isolado, sozinha ou com outra de fora: o grupo é redesenhado ao vivo, e a prévia continua certa', () => {
     const doc = peca([
       forma('fundo', 0, 0, 200, 200, '#ff8000'),
       grupo('isolado', [bola('dentro', 20, 20, '#ffffff')], { modoDeMesclagem: 'normal', opacidade: 0.8 }),
@@ -133,13 +133,165 @@ describe('cache do editor', () => {
     const cena = nova(doc);
     cena.definirPrevia({ ids: [idDe(doc, 'dentro')], dx: 15, dy: 10 });
     expect(cena.modoDaPrevia).toBe('ao-vivo');
-    // até 2 níveis: a opacidade do grupo arredonda diferente conforme o tipo da superfície (medido: 126 contra 127)
-    expect(diferencaMaxima(quadro(cena, doc, p), renderizarPrancheta(sessao, doc, deslocarNos(p, new Set([idDe(doc, 'dentro')]), 15, 10)).rgba)).toBeLessThanOrEqual(2);
+    // até 3 níveis: a opacidade do grupo arredonda diferente conforme o tipo da superfície (medido: 126 contra 127),
+    // e o que está abaixo e acima do grupo vem de imagem em cache
+    expect(diferencaMaxima(quadro(cena, doc, p), renderizarPrancheta(sessao, doc, deslocarNos(p, new Set([idDe(doc, 'dentro')]), 15, 10)).rgba)).toBeLessThanOrEqual(3);
     const dois = new Set([idDe(doc, 'dentro'), idDe(doc, 'fora')]);
     cena.definirPrevia({ ids: [...dois], dx: -5, dy: 30 });
     expect(cena.modoDaPrevia).toBe('ao-vivo');
-    expect(diferencaMaxima(quadro(cena, doc, p), renderizarPrancheta(sessao, doc, deslocarNos(p, dois, -5, 30)).rgba)).toBeLessThanOrEqual(2);
+    // a camada de fora cruza a margem de baixo: a borda suavizada de um caminho cortado pela prancheta sai diferente da
+    // borda da imagem em cache (medido: 28 pixels acima de 3 níveis, o pior com 32). É diferença de prévia, só na borda.
+    const { d } = comparar(quadro(cena, doc, p), renderizarPrancheta(sessao, doc, deslocarNos(p, dois, -5, 30)).rgba, p.largura, p.altura);
+    expect(d.maxima).toBeLessThanOrEqual(40);
+    expect(d.acimaDe2 / (p.largura * p.altura)).toBeLessThan(0.002);
+    // nenhuma prancheta foi recomposta por causa dos gestos
+    expect(cena.contadores.composicoesDePrancheta).toBe(1);
     cena.destruir();
+  });
+
+  describe('prévia de redimensionar e de girar: a unidade tocada é redesenhada ao vivo, e o resto fica em cache', () => {
+    /** O documento como fica depois de soltar: a operação "alterar" com a caixa da prévia. */
+    const solto = (doc: Documento, caixas: Record<string, CaixaDePrevia>): Documento => {
+      const r = aplicarLote(
+        doc,
+        Object.entries(caixas).map(([alvo, c]) => ({
+          op: 'alterar',
+          alvo,
+          props: { x: c.x, y: c.y, largura: c.largura, altura: c.altura, ...(c.rotacao !== undefined ? { rotacao: c.rotacao } : {}) },
+        })),
+        { autoria: { tipo: 'designer' }, idDoLote: 'soltar-a-caixa' },
+      );
+      if (!r.ok) throw new Error(r.erro.mensagem);
+      return r.doc;
+    };
+
+    for (const [nome, descricao, caixa] of [
+      ['titulo', 'texto em caixa mais estreita: requebra na prévia', { x: 20, y: 120, largura: 110, altura: 170 }],
+      ['foto', 'foto que reenquadra', { x: 40, y: 0, largura: 150, altura: 300 }],
+      ['cartao', 'forma com canto arredondado e sombra, girada: o raio não estica', { x: 130, y: 30, largura: 170, altura: 60, rotacao: 25 }],
+      ['disco', 'camada com modo de mesclagem', { x: 10, y: 20, largura: 200, altura: 60 }],
+      ['base', 'base de um conjunto de recorte: a presa acompanha', { x: 30, y: 200, largura: 200, altura: 90 }],
+      ['ponto', 'camada dentro de grupo em atravessar', { x: 200, y: 200, largura: 60, altura: 90, rotacao: -30 }],
+    ] as const) {
+      it(`${descricao}: difere do render de como vai ficar em no máximo 8 níveis, só em borda`, () => {
+        const doc = documento();
+        const p = doc.pranchetas[0] as Prancheta;
+        const cena = nova(doc);
+        const id = idDe(doc, nome);
+        const antes = { ...cena.contadores };
+        cena.definirPrevia({ ids: [id], dx: 0, dy: 0, caixas: { [id]: caixa } });
+        expect(cena.modoDaPrevia).toBe('ao-vivo');
+        const depois = solto(doc, { [id]: caixa });
+        const { d } = comparar(quadro(cena, doc, p), renderizarPrancheta(sessao, depois, depois.pranchetas[0] as Prancheta).rgba, p.largura, p.altura);
+        expect(d.maxima).toBeLessThanOrEqual(8);
+        expect(d.acimaDe2 / (p.largura * p.altura)).toBeLessThan(0.002);
+        // nenhuma prancheta recomposta, e uma unidade redesenhada no quadro
+        expect(cena.contadores.composicoesDePrancheta).toBe(antes.composicoesDePrancheta);
+        expect(cena.contadores.desenhosAoVivo).toBe(1);
+        cena.destruir();
+      }, 60_000);
+    }
+
+    it('durante o gesto nada é recomposto nem remontado: a cada quadro, só a unidade tocada é redesenhada', () => {
+      const doc = documento();
+      const p = doc.pranchetas[0] as Prancheta;
+      const cena = nova(doc);
+      const id = idDe(doc, 'cartao');
+      cena.definirPrevia({ ids: [id], dx: 0, dy: 0, caixas: { [id]: { x: 150, y: 40, largura: 120, altura: 100 } } });
+      const antes = { ...cena.contadores };
+      for (let i = 1; i <= 6; i++) {
+        cena.definirPrevia({ ids: [id], dx: 0, dy: 0, caixas: { [id]: { x: 150, y: 40, largura: 120 + i * 5, altura: 100 - i * 3, rotacao: i * 4 } } });
+        quadro(cena, doc, p);
+      }
+      expect(cena.contadores.composicoesDePrancheta).toBe(antes.composicoesDePrancheta);
+      expect(cena.contadores.partes).toBe(antes.partes);
+      expect(cena.contadores.desenhosAoVivo).toBe(antes.desenhosAoVivo + 6);
+      cena.destruir();
+    }, 60_000);
+
+    it('seleção múltipla: cada camada com a sua caixa, em alturas diferentes da pilha', () => {
+      const doc = documento();
+      const p = doc.pranchetas[0] as Prancheta;
+      const cena = nova(doc);
+      const caixas = {
+        [idDe(doc, 'cartao')]: { x: 120, y: 20, largura: 180, altura: 150 },
+        [idDe(doc, 'logo')]: { x: 240, y: 5, largura: 70, altura: 70, rotacao: 15 },
+        [idDe(doc, 'titulo')]: { x: 10, y: 140, largura: 300, altura: 100, rotacao: -6 },
+      };
+      cena.definirPrevia({ ids: Object.keys(caixas), dx: 0, dy: 0, caixas });
+      const depois = solto(doc, caixas);
+      const { d } = comparar(quadro(cena, doc, p), renderizarPrancheta(sessao, depois, depois.pranchetas[0] as Prancheta).rgba, p.largura, p.altura);
+      expect(d.maxima).toBeLessThanOrEqual(8);
+      expect(d.acimaDe2 / (p.largura * p.altura)).toBeLessThan(0.002);
+      expect(cena.contadores.desenhosAoVivo).toBe(3);
+      expect(cena.contadores.composicoesDePrancheta).toBe(2);
+      cena.destruir();
+    }, 60_000);
+
+    it('camada dentro de grupo isolado: o grupo é redesenhado, e só ele', () => {
+      const doc = peca([
+        forma('fundo', 0, 0, 200, 200, '#ff8000'),
+        grupo('isolado', [bola('dentro', 20, 20, '#ffffff'), bola('vizinha', 60, 40, '#000000')], { modoDeMesclagem: 'normal', opacidade: 0.8 }),
+        bola('fora', 60, 90, '#0000ff'),
+      ]).doc;
+      const p = doc.pranchetas[0] as Prancheta;
+      const cena = nova(doc);
+      const id = idDe(doc, 'dentro');
+      const caixa = { x: 10, y: 10, largura: 160, altura: 60 };
+      cena.definirPrevia({ ids: [id], dx: 0, dy: 0, caixas: { [id]: caixa } });
+      const depois = solto(doc, { [id]: caixa });
+      expect(diferencaMaxima(quadro(cena, doc, p), renderizarPrancheta(sessao, depois, depois.pranchetas[0] as Prancheta).rgba)).toBeLessThanOrEqual(2);
+      expect(cena.contadores.desenhosAoVivo).toBe(1);
+      cena.destruir();
+    });
+
+    it('ao soltar, a prancheta é recomposta uma vez e fica idêntica ao render de referência', () => {
+      const doc = documento();
+      const cena = nova(doc);
+      const id = idDe(doc, 'titulo');
+      const caixa = { x: 20, y: 120, largura: 110, altura: 170 };
+      cena.definirPrevia({ ids: [id], dx: 0, dy: 0, caixas: { [id]: caixa } });
+      const depois = solto(doc, { [id]: caixa });
+      cena.definirDocumento(depois);
+      cena.definirPrevia(null);
+      expect(cena.comporTudo()).toBe(1);
+      expect(diferencaMaxima(quadro(cena, depois, depois.pranchetas[0] as Prancheta), renderizarPrancheta(sessao, depois, depois.pranchetas[0] as Prancheta).rgba)).toBe(0);
+      cena.destruir();
+    });
+  });
+
+  it('mover várias camadas soltas: uma imagem para cada, nada redesenhado, e a prévia continua certa', () => {
+    const doc = documento();
+    const p = doc.pranchetas[0] as Prancheta;
+    const cena = nova(doc);
+    const ids = [idDe(doc, 'cartao'), idDe(doc, 'logo'), idDe(doc, 'disco')];
+    cena.definirPrevia({ ids, dx: 12, dy: -7 });
+    expect(cena.modoDaPrevia).toBe('partes');
+    const partes = cena.contadores.partes;
+    const { d } = comparar(quadro(cena, doc, p), renderizarPrancheta(sessao, doc, deslocarNos(p, new Set(ids), 12, -7)).rgba, p.largura, p.altura);
+    expect(d.maxima).toBeLessThanOrEqual(8);
+    expect(d.acimaDe2 / (p.largura * p.altura)).toBeLessThan(0.002);
+    cena.definirPrevia({ ids, dx: 30, dy: 5 });
+    quadro(cena, doc, p);
+    expect(cena.contadores.partes).toBe(partes);
+    expect(cena.contadores.desenhosAoVivo).toBe(0);
+    cena.destruir();
+  }, 60_000);
+
+  it('aplicarPrevia: caixa nova troca as propriedades (a máscara fica); deslocamento leva a máscara; o que não muda é o mesmo objeto', () => {
+    const { doc, p } = peca([
+      forma('a', 10, 10, 50, 50, '#000000', { mascara: { tipo: 'forma', forma: 'retangulo', x: 10, y: 10, largura: 20, altura: 20 } }),
+      grupo('g', [forma('b', 0, 0, 10, 10, '#000000'), forma('c', 0, 0, 10, 10, '#000000')]),
+    ]);
+    const [a, g] = p.filhos as [No, No];
+    const idA = idDe(doc, 'a');
+    const comCaixa = aplicarPrevia(a, { ids: [idA], dx: 5, dy: 5, caixas: { [idA]: { x: 1, y: 2, largura: 30, altura: 40, rotacao: 10 } } });
+    expect(comCaixa).toMatchObject({ x: 1, y: 2, largura: 30, altura: 40, rotacao: 10, mascara: { x: 10, y: 10 } });
+    expect(aplicarPrevia(a, { ids: [idA], dx: 5, dy: 5 })).toMatchObject({ x: 15, y: 15, mascara: { x: 15, y: 15 } });
+    expect(aplicarPrevia(g, { ids: [idA], dx: 5, dy: 5 })).toBe(g);
+    const movido = aplicarPrevia(g, { ids: [idDe(doc, 'c')], dx: 5, dy: 5 }) as NoGrupo;
+    expect(movido.filhos[0]).toBe((g as NoGrupo).filhos[0]);
+    expect(movido.filhos[1]).toMatchObject({ x: 5, y: 5 });
   });
 
   it('ao soltar, só a prancheta tocada é recomposta, e o resultado é idêntico ao render de referência', () => {
