@@ -1,0 +1,55 @@
+{
+  "canvaskit": "0.42.0",
+  "cenas": {
+    "formas": {
+      "largura": 480,
+      "altura": 320,
+      "sha256": "111370481846b4ef660e0ea875f09092d931775d2fbe240f8a296e5ad71571fe"
+    },
+    "texto": {
+      "largura": 600,
+      "altura": 420,
+      "sha256": "ac27cf81ba891079b19c3b20afbe7de3a463d8737bc42dae373fab0f2625b16d"
+    },
+    "imagem": {
+      "largura": 600,
+      "altura": 300,
+      "sha256": "6f763a809f2f894e7f192bead25ee1f1516671f94b8fe102a78d0374bf13f47b"
+    },
+    "vetor": {
+      "largura": 300,
+      "altura": 200,
+      "sha256": "66305f803325b78692988bcbf50258cdefc9b302bb9ce18e115c85dc19c7c418"
+    },
+    "grupos": {
+      "largura": 400,
+      "altura": 300,
+      "sha256": "332601fb43a2b7dbc41ac0e125e7066be41a39013f4c376ab4bb489eee22d840"
+    },
+    "mascaras": {
+      "largura": 600,
+      "altura": 300,
+      "sha256": "c20eaf7e0742660e312f82a646900b1a2a70cb7da8d6b7ad05ecd5c98d177721"
+    },
+    "sombra-e-desfoque": {
+      "largura": 480,
+      "altura": 240,
+      "sha256": "ce5e63b12fa727b169fd6052dc05df632074c332dd3a1ace8175f7abe9a0d24b"
+    },
+    "modos": {
+      "largura": 468,
+      "altura": 300,
+      "sha256": "b422f17066ba6ee495f520ae073efd9ff69b0a1869fd19839bdfc8d867f9ce2d"
+    },
+    "ajustes": {
+      "largura": 540,
+      "altura": 240,
+      "sha256": "ce2c68acc0c630576617518c61b259c088e86a73f79a1db19a3e56cbd1ebab1f"
+    },
+    "peca": {
+      "largura": 540,
+      "altura": 675,
+      "sha256": "d0a16f1aad194a2c98211207b93d5bb40377d5f7d5be43374249a5c9e4aa0b58"
+    }
+  }
+}
