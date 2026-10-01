@@ -17,3 +17,16 @@ coverage/
 .DS_Store
 Thumbs.db
 *.log
+
+# dados da POC (imagens baixadas de banco e documentos de teste)
+poc/dados/
+poc/modelos/
+
+# cliente do banco gerado pelo Prisma (prisma generate)
+apps/api/src/plataforma/persistencia/gerado/
+
+# gerado pelo Next
+apps/web/next-env.d.ts
+
+# motor de render copiado do pacote para a pasta estática (apps/web/scripts/copiar-motor.ts)
+apps/web/public/motor/

@@ -1,0 +1,38 @@
+{
+  "name": "otto-poc",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node node_modules/concurrently/dist/bin/index.js -k -n api,web -c yellow,cyan \"node node_modules/tsx/dist/cli.mjs watch src/servidor/servidor.ts\" \"node node_modules/vite/bin/vite.js\"",
+    "api": "node node_modules/tsx/dist/cli.mjs src/servidor/servidor.ts",
+    "web": "node node_modules/vite/bin/vite.js",
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
+    "conferir-psd": "node node_modules/tsx/dist/cli.mjs scripts/conferir-psd.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
+    "@napi-rs/canvas": "^1.0.9",
+    "ag-psd": "^31.0.2",
+    "express": "^5.2.1",
+    "fast-xml-parser": "^5.11.1",
+    "fflate": "^0.8.3",
+    "onnxruntime-node": "^1.30.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}
