@@ -1,0 +1,51 @@
+{
+  "name": "@otto/api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "API e worker do Otto (NestJS na borda, ADR 008)",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "dev:worker": "tsx watch --clear-screen=false src/worker.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "banco:gerar": "prisma generate",
+    "banco:migrar": "prisma migrate deploy",
+    "build": "tsx scripts/empacotar.ts",
+    "start": "node dist/main.mjs",
+    "start:worker": "node dist/worker.mjs",
+    "biblioteca:semear": "tsx src/comandos/semear-biblioteca.ts",
+    "importar:poc": "tsx src/comandos/importar-da-poc.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1143.0",
+    "@nestjs/common": "12.1.2",
+    "@nestjs/core": "12.1.2",
+    "@nestjs/platform-express": "12.1.2",
+    "@otto/documento": "workspace:*",
+    "@otto/render": "workspace:*",
+    "@otto/shared": "workspace:*",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "canvaskit-wasm": "^0.42.0",
+    "fast-xml-parser": "^5.0.0",
+    "pg": "^8.20.0",
+    "pino": "10.3.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "12.1.2",
+    "@types/express": "5.0.6",
+    "@types/node": "^24.0.0",
+    "@types/pg": "8.23.1",
+    "@types/supertest": "7.2.1",
+    "esbuild": "0.28.2",
+    "prisma": "7.10.0",
+    "supertest": "7.3.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

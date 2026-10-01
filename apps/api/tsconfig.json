@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // DOM: só porque @otto/render (consumido pelo código-fonte) cita tipos do navegador no motor do editor.
+    // A API não usa nada do navegador.
+    "lib": ["ES2023", "DOM"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false
+  },
+  "include": ["src", "testes", "prisma.config.ts", "vitest.config.ts"]
+}

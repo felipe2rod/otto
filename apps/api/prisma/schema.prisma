@@ -1,0 +1,168 @@
+// Esquema do banco do Otto. Regras (ADR 023, docs/mvp/backend.md seção 6):
+// - toda tabela de negócio tem conta_id uuid NOT NULL; exceção só em prisma/isolamento.excecoes.ts;
+// - filha referencia mãe por (id, conta_id);
+// - a política de RLS de cada tabela é escrita à mão na MESMA migração que cria a tabela
+//   (o Prisma não descreve política); o teste toda-tabela-tem-politica falha se faltar;
+// - ids são UUID v7 gerados na aplicação, não no banco.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/plataforma/persistencia/gerado"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AutoriaDoLote {
+  designer
+  agente
+
+  @@map("autoria_do_lote")
+}
+
+enum TipoDeLote {
+  edicao
+  reversao
+
+  @@map("tipo_de_lote")
+}
+
+enum EspecieDeArquivo {
+  imagem
+  vetor
+  mascara
+
+  @@map("especie_de_arquivo")
+}
+
+/// A conta: uma pessoa ou um estúdio (ADR 023, nota do pivô). Participa do RLS pela própria id.
+model Conta {
+  id       String   @id @db.Uuid
+  nome     String
+  interna  Boolean  @default(false)
+  criadaEm DateTime @default(now()) @map("criada_em") @db.Timestamptz(3)
+
+  documentos Documento[]
+  arquivos   Arquivo[]
+
+  @@map("contas")
+}
+
+/// Metadado do documento e ponteiro para a versão atual. A árvore mora em versoes_de_documento.
+model Documento {
+  id              String    @id @db.Uuid
+  contaId         String    @map("conta_id") @db.Uuid
+  nome            String
+  versaoAtual     Int       @default(0) @map("versao_atual")
+  versaoDoFormato Int       @map("versao_do_formato")
+  pranchetas      Int       @default(0)
+  criadoEm        DateTime  @default(now()) @map("criado_em") @db.Timestamptz(3)
+  alteradoEm      DateTime  @default(now()) @map("alterado_em") @db.Timestamptz(3)
+  arquivadoEm     DateTime? @map("arquivado_em") @db.Timestamptz(3)
+
+  conta   Conta               @relation(fields: [contaId], references: [id])
+  versoes VersaoDeDocumento[]
+  lotes   LoteDeOperacoes[]
+
+  // alvo da chave estrangeira composta das filhas
+  @@unique([id, contaId])
+  // lista de documentos da conta, do mais recente para o mais antigo
+  @@index([contaId, alteradoEm(sort: Desc)])
+  @@map("documentos")
+}
+
+/// A árvore do documento em cada versão. No MVP, um snapshot por lote (a árvore mede de 7 a 18 KB).
+/// `arvore` aceita nulo para o snapshot poder virar periódico sem migração.
+model VersaoDeDocumento {
+  contaId     String   @map("conta_id") @db.Uuid
+  documentoId String   @map("documento_id") @db.Uuid
+  versao      Int
+  arvore      Json?
+  bytes       Int
+  criadaEm    DateTime @default(now()) @map("criada_em") @db.Timestamptz(3)
+
+  documento Documento @relation(fields: [documentoId, contaId], references: [id, contaId])
+
+  // é a leitura de "abrir", de "ver o antes" e de desfazer: sempre por documento e versão
+  @@id([documentoId, versao])
+  @@map("versoes_de_documento")
+}
+
+/// O histórico único (ADR 027): cada lote com autoria e versão resultante. Só acréscimo:
+/// desfazer grava um lote de reversão e marca `desfeitoPor`; nenhuma linha é apagada.
+model LoteDeOperacoes {
+  id               String        @id @db.Uuid
+  contaId          String        @map("conta_id") @db.Uuid
+  documentoId      String        @map("documento_id") @db.Uuid
+  versao           Int
+  autoria          AutoriaDoLote
+  /// id da tarefa do agente; a tabela de tarefas e a chave estrangeira entram na fatia do agente
+  tarefaId         String?       @map("tarefa_id") @db.Uuid
+  tipo             TipoDeLote    @default(edicao)
+  reverteAteVersao Int?          @map("reverte_ate_versao")
+  desfeitoPor      String?       @map("desfeito_por") @db.Uuid
+  descricao        String
+  operacoes        Json
+  /** Guardado à parte para o histórico não precisar carregar as operações (um vetor pesa MB). */
+  quantidadeDeOperacoes Int      @default(0) @map("quantidade_de_operacoes")
+  tocados          Json
+  /// id gerado pelo editor: reenviar o mesmo lote não aplica duas vezes
+  chaveDoCliente   String?       @map("chave_do_cliente") @db.Uuid
+  criadoEm         DateTime      @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  documento Documento @relation(fields: [documentoId, contaId], references: [id, contaId])
+
+  // dois lotes não ocupam a mesma versão, mesmo com defeito na aplicação; e serve o histórico por documento
+  @@unique([documentoId, versao])
+  // reenvio do mesmo lote pelo editor
+  @@unique([contaId, documentoId, chaveDoCliente])
+  // os lotes de um conjunto de alterações do agente
+  @@index([contaId, tarefaId])
+  @@map("lotes_de_operacoes")
+}
+
+/// Imagem, vetor ou máscara da conta, por hash de conteúdo (ADR 027). A linha é a autorização;
+/// o hash não é. `chaveDoObjeto` nunca vem do cliente e nunca volta para ele.
+model Arquivo {
+  id              String           @id @db.Uuid
+  contaId         String           @map("conta_id") @db.Uuid
+  sha256          String           @db.Char(64)
+  tipoMime        String           @map("tipo_mime")
+  bytes           Int
+  largura         Int?
+  altura          Int?
+  especie         EspecieDeArquivo
+  origemBanco     String?          @map("origem_banco")
+  origemIdExterno String?          @map("origem_id_externo")
+  origemAutor     String?          @map("origem_autor")
+  origemLicenca   String?          @map("origem_licenca")
+  origemUrl       String?          @map("origem_url")
+  nomeOriginal    String?          @map("nome_original")
+  chaveDoObjeto   String           @map("chave_do_objeto")
+  criadoEm        DateTime         @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  conta Conta @relation(fields: [contaId], references: [id])
+
+  // é a busca de toda leitura de arquivo: conta e hash
+  @@unique([contaId, sha256])
+  @@map("arquivos")
+}
+
+/// Fontes do Otto: iguais para todas as contas (licença aberta). Catálogo global, sem conta_id:
+/// exceção declarada em isolamento.excecoes.ts. Fonte enviada pela conta, quando existir, é outra tabela.
+model FonteDaBiblioteca {
+  id             String   @id @db.Uuid
+  familia        String
+  peso           Int
+  nomePostScript String?  @map("nome_postscript")
+  sha256         String   @db.Char(64)
+  bytes          Int
+  chaveDoObjeto  String   @map("chave_do_objeto")
+  licenca        String?
+  criadaEm       DateTime @default(now()) @map("criada_em") @db.Timestamptz(3)
+
+  // é a busca do editor e do medidor: família e peso
+  @@unique([familia, peso])
+  @@map("fontes_da_biblioteca")
+}

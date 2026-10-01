@@ -1,0 +1,95 @@
+{
+  "licenca": "SIL Open Font License 1.1",
+  "fontes": [
+    {
+      "familia": "Anton",
+      "peso": 400,
+      "arquivo": "Anton-Regular.ttf"
+    },
+    {
+      "familia": "Bebas Neue",
+      "peso": 400,
+      "arquivo": "BebasNeue-Regular.ttf"
+    },
+    {
+      "familia": "Archivo Black",
+      "peso": 400,
+      "arquivo": "ArchivoBlack-Regular.ttf"
+    },
+    {
+      "familia": "Alfa Slab One",
+      "peso": 400,
+      "arquivo": "AlfaSlabOne-Regular.ttf"
+    },
+    {
+      "familia": "DM Serif Display",
+      "peso": 400,
+      "arquivo": "DMSerifDisplay-Regular.ttf"
+    },
+    {
+      "familia": "Abril Fatface",
+      "peso": 400,
+      "arquivo": "AbrilFatface-Regular.ttf"
+    },
+    {
+      "familia": "Instrument Serif",
+      "peso": 400,
+      "arquivo": "InstrumentSerif-Regular.ttf"
+    },
+    {
+      "familia": "IBM Plex Sans",
+      "peso": 300,
+      "arquivo": "IBMPlexSans-Light.ttf"
+    },
+    {
+      "familia": "IBM Plex Sans",
+      "peso": 400,
+      "arquivo": "IBMPlexSans-Regular.ttf"
+    },
+    {
+      "familia": "IBM Plex Sans",
+      "peso": 500,
+      "arquivo": "IBMPlexSans-Medium.ttf"
+    },
+    {
+      "familia": "IBM Plex Sans",
+      "peso": 600,
+      "arquivo": "IBMPlexSans-SemiBold.ttf"
+    },
+    {
+      "familia": "IBM Plex Sans",
+      "peso": 700,
+      "arquivo": "IBMPlexSans-Bold.ttf"
+    },
+    {
+      "familia": "IBM Plex Sans Condensed",
+      "peso": 500,
+      "arquivo": "IBMPlexSansCondensed-Medium.ttf"
+    },
+    {
+      "familia": "IBM Plex Sans Condensed",
+      "peso": 700,
+      "arquivo": "IBMPlexSansCondensed-Bold.ttf"
+    },
+    {
+      "familia": "IBM Plex Serif",
+      "peso": 400,
+      "arquivo": "IBMPlexSerif-Regular.ttf"
+    },
+    {
+      "familia": "IBM Plex Serif",
+      "peso": 600,
+      "arquivo": "IBMPlexSerif-SemiBold.ttf"
+    },
+    {
+      "familia": "Space Mono",
+      "peso": 400,
+      "arquivo": "SpaceMono-Regular.ttf"
+    },
+    {
+      "familia": "Space Mono",
+      "peso": 700,
+      "arquivo": "SpaceMono-Bold.ttf"
+    }
+  ]
+}

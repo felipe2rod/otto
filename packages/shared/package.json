@@ -1,0 +1,22 @@
+{
+  "name": "@otto/shared",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Contratos que atravessam a rede (zod), códigos de erro e tipos marcados. Sem framework (ADR 019)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@otto/documento": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

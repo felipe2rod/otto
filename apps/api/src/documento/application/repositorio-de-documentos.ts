@@ -1,0 +1,89 @@
+// Porta: onde os documentos moram. O escopo da conta é sempre o primeiro argumento (ADR 023).
+// Nenhum tipo do Prisma cruza esta porta (ADR 020, exigência 1).
+import type { Documento } from '@otto/documento';
+import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
+
+export interface RegistroDeDocumento {
+  id: string;
+  nome: string;
+  /** Versão atual. 0 é o documento como nasceu; cada lote soma 1. */
+  versao: number;
+  pranchetas: number;
+  alteradoEm: Date;
+}
+
+export interface DocumentoGuardado extends RegistroDeDocumento {
+  arvore: Documento;
+}
+
+export interface LoteGravado {
+  /** Id do servidor. */
+  id: string;
+  /** Id que o editor mandou (é o idDoLote de aplicarLote). Nulo em lote criado pelo servidor. */
+  chaveDoCliente: string | null;
+  versao: number;
+  autoria: 'designer' | 'agente';
+  tarefaId: string | null;
+  tipo: 'edicao' | 'reversao';
+  reverteAteVersao: number | null;
+  /** Id do lote de reversão que desfez este, enquanto estiver desfeito. */
+  desfeitoPor: string | null;
+  descricao: string;
+  tocados: string[];
+  quantidadeDeOperacoes: number;
+  criadoEm: Date;
+}
+
+export interface NovoLote {
+  id: string;
+  chaveDoCliente?: string;
+  /** Versão que este lote produz: a atual mais 1. */
+  versao: number;
+  autoria: 'designer' | 'agente';
+  tarefaId?: string;
+  tipo: 'edicao' | 'reversao';
+  reverteAteVersao?: number;
+  descricao: string;
+  operacoes: readonly unknown[];
+  tocados: readonly string[];
+  /** A árvore como fica depois deste lote. */
+  arvore: Documento;
+}
+
+export interface Pagina<T> {
+  itens: T[];
+  proximoCursor: string | null;
+}
+
+/** O documento com a linha travada, dentro de uma transação. Só existe durante `comTrava`. */
+export interface DocumentoTravado {
+  readonly registro: RegistroDeDocumento;
+  arvore(): Promise<Documento>;
+  arvoreDaVersao(versao: number): Promise<Documento | undefined>;
+  lote(versao: number): Promise<LoteGravado | undefined>;
+  lotePorChaveDoCliente(chave: string): Promise<LoteGravado | undefined>;
+  /** As reversões seguidas no fim do histórico, da mais nova para a mais velha. */
+  caudaDeReversoes(): Promise<LoteGravado[]>;
+  /** Grava o lote e a árvore nova e avança a versão. Tudo ou nada, com o resto da transação. */
+  gravarLote(novo: NovoLote): Promise<void>;
+  /** Marca (ou desmarca, com null) o lote de edição de uma versão como desfeito. */
+  marcarDesfeito(versao: number, por: string | null): Promise<void>;
+}
+
+export abstract class RepositorioDeDocumentos {
+  abstract criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento }): Promise<DocumentoGuardado>;
+  /** Não arquivados, do alterado mais recentemente para o mais antigo. */
+  abstract listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number }): Promise<Pagina<RegistroDeDocumento>>;
+  /** undefined se não existe, se foi arquivado ou se é de outra conta. */
+  abstract abrir(escopo: EscopoDaConta, id: string): Promise<DocumentoGuardado | undefined>;
+  abstract renomear(escopo: EscopoDaConta, id: string, nome: string): Promise<RegistroDeDocumento | undefined>;
+  /** Arquiva (não apaga). false se não existe nesta conta. */
+  abstract arquivar(escopo: EscopoDaConta, id: string): Promise<boolean>;
+  /** Do lote mais novo para o mais velho. undefined se o documento não existe nesta conta. */
+  abstract historico(escopo: EscopoDaConta, id: string, pagina: { cursor?: string; limite: number }): Promise<Pagina<LoteGravado> | undefined>;
+  /**
+   * Trava o documento e roda `fn` numa transação: dois lotes nunca ocupam a mesma versão.
+   * Se `fn` lançar, nada é gravado. undefined se o documento não existe nesta conta.
+   */
+  abstract comTrava<T>(escopo: EscopoDaConta, id: string, fn: (doc: DocumentoTravado) => Promise<T>): Promise<T | undefined>;
+}
