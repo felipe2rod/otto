@@ -5,17 +5,37 @@ import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { EscopoDaConta } from '../../../../plataforma/escopo/escopo-da-conta';
-import { ArmazenamentoDeArquivo } from '../../../application/armazenamento-de-arquivo';
+import { ArmazenamentoDeArquivo, type ArquivoDoLink, conferirValidade, type OpcoesDoLink } from '../../../application/armazenamento-de-arquivo';
 import { conferirChave, conferirChaveDaBiblioteca } from '../../../application/chave-de-objeto';
+import { AssinadorDeLinks, ROTA_DOS_LINKS_LOCAIS } from '../links-locais';
 
 const naoExiste = (e: unknown): boolean => (e as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
 
 export class ArmazenamentoEmDiscoLocal extends ArmazenamentoDeArquivo {
   private readonly pasta: string;
+  private readonly links: AssinadorDeLinks | undefined;
 
-  constructor(pasta: string) {
+  /** @param segredoDeAssinatura sem ele, este adaptador guarda e lê, mas não gera link de download. */
+  constructor(pasta: string, segredoDeAssinatura?: string) {
     super();
     this.pasta = path.resolve(pasta);
+    this.links = segredoDeAssinatura ? new AssinadorDeLinks(segredoDeAssinatura) : undefined;
+  }
+
+  async linkAssinado(escopo: EscopoDaConta, chave: string, opcoes: OpcoesDoLink): Promise<string> {
+    conferirChave(escopo, chave, 'leitura');
+    conferirValidade(opcoes.validadeEmSegundos);
+    if (!this.links) throw new Error('armazenamento em disco local sem segredo de assinatura: não gera link');
+    return `${ROTA_DOS_LINKS_LOCAIS}/${this.links.assinar({ chave, nome: opcoes.nomeDoArquivo, tipo: opcoes.tipoMime }, opcoes.validadeEmSegundos)}`;
+  }
+
+  async abrirLinkProprio(token: string): Promise<ArquivoDoLink | undefined> {
+    const dados = this.links?.abrir(token);
+    if (!dados) return undefined;
+    // a chave veio de dentro de um token que nós assinamos; ainda assim só desce a partir da pasta
+    if (dados.chave.split('/').some((s) => s === '' || s === '.' || s === '..')) return undefined;
+    const bytes = await this.lerDoDisco(dados.chave);
+    return bytes ? { bytes, nome: dados.nome, tipo: dados.tipo } : undefined;
   }
 
   /** conferirChave já recusou "..", barra dupla e caminho absoluto; aqui a chave só desce a partir da pasta. */

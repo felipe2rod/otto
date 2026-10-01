@@ -70,6 +70,18 @@ export const CODIGOS_DE_ERRO = {
   imagemIlegivel: 'imagem_ilegivel',
   /** 422. detalhe: { motivo }. */
   svgInvalido: 'svg_invalido',
+  /** 422. O pedido de exportação cita prancheta que o documento não tem. */
+  pranchetaDesconhecida: 'prancheta_desconhecida',
+  /** 422. O documento não tem prancheta nenhuma para exportar. */
+  nadaParaExportar: 'nada_para_exportar',
+  /** 429. A conta já tem exportações demais na fila. detalhe: { naFila, limite }. */
+  limiteDeExportacoes: 'limite_de_exportacoes',
+  /** 409. O arquivo ainda não saiu. detalhe: { estado }. */
+  exportacaoNaoPronta: 'exportacao_nao_pronta',
+  /** 410. Os arquivos da exportação já foram apagados (7 dias). Peça outra. */
+  exportacaoExpirada: 'exportacao_expirada',
+  /** 503. A fila de trabalho não aceitou o pedido. Tente de novo. */
+  filaIndisponivel: 'fila_indisponivel',
   /** 500. */
   erroInterno: 'erro_interno',
 } as const;
@@ -91,6 +103,12 @@ export const EstadoDaTarefa = z.enum(['na_fila', 'rodando', 'aguardando_confirma
 export type EstadoDaTarefa = z.infer<typeof EstadoDaTarefa>;
 
 const TarefaResumida = z.object({ id: Id, estado: EstadoDaTarefa });
+
+/**
+ * Se há o que desfazer e o que refazer DEPOIS desta resposta. Vem em abrir, lote, desfazer e refazer.
+ * Resposta sem os campos vale como falso.
+ */
+const PossibilidadesDoHistorico = { podeDesfazer: z.boolean().default(false), podeRefazer: z.boolean().default(false) };
 
 /** Parâmetros de paginação de toda lista: ?cursor=&limite= */
 export const Paginacao = z.object({
@@ -131,6 +149,14 @@ export const DocumentoAberto = z.object({
   nome: z.string(),
   versao: Versao,
   arvore: Documento,
+  ...PossibilidadesDoHistorico,
+  /**
+   * As famílias de fonte que o documento usa, com os pesos que a biblioteca TEM de cada uma.
+   * `pesos` vazio: a biblioteca não tem a família, e o texto não é desenhado.
+   * O editor sabe a troca de peso por aqui, com `pesoMaisProximo(pesos, pedido)`: a rota de bytes
+   * devolve exatamente esse peso, e ninguém precisa ler cabeçalho de resposta binária.
+   */
+  fontes: z.array(z.object({ familia: z.string(), pesos: z.array(z.int()) })).default([]),
   tarefaAtiva: TarefaResumida.optional(),
   /** Alterações do Otto aguardando revisão. */
   conjuntoPendente: z.object({ tarefaId: Id, versaoInicial: Versao, tocados: z.array(z.string()) }).optional(),
@@ -178,6 +204,7 @@ export const RespostaDeLote = z.object({
   versao: Versao,
   lote: z.object({ id: Id, tocados: z.array(z.string()) }),
   arvore: Documento.optional(),
+  ...PossibilidadesDoHistorico,
 });
 export type RespostaDeLote = z.infer<typeof RespostaDeLote>;
 
@@ -190,7 +217,7 @@ export const PedidoDeDesfazer = z.strictObject({ versaoBase: Versao });
 export type PedidoDeDesfazer = z.infer<typeof PedidoDeDesfazer>;
 
 /** Desfazer e refazer sempre devolvem a árvore: o editor adota. */
-export const RespostaDeDesfazer = z.object({ versao: Versao, arvore: Documento });
+export const RespostaDeDesfazer = z.object({ versao: Versao, arvore: Documento, ...PossibilidadesDoHistorico });
 export type RespostaDeDesfazer = z.infer<typeof RespostaDeDesfazer>;
 
 /** Item de GET /api/documentos/:id/historico. Sem as operações: o histórico é para listar, não para reaplicar. */
@@ -251,6 +278,22 @@ export const VetorImportado = z.object({
   avisos: z.array(z.string()),
 });
 export type VetorImportado = z.infer<typeof VetorImportado>;
+
+/**
+ * O peso que existe mais perto do pedido; no empate, o mais pesado. É a mesma regra na rota de bytes
+ * da fonte, no medidor do servidor e na exportação. Sem peso nenhum, undefined.
+ */
+export function pesoMaisProximo(pesos: readonly number[], pedido: number): number | undefined {
+  let melhor: number | undefined;
+  for (const peso of pesos) {
+    if (melhor === undefined) melhor = peso;
+    else {
+      const [distancia, atual] = [Math.abs(peso - pedido), Math.abs(melhor - pedido)];
+      if (distancia < atual || (distancia === atual && peso > melhor)) melhor = peso;
+    }
+  }
+  return melhor;
+}
 
 /** Item de GET /api/fontes?q= */
 export const FonteDaLista = z.object({ familia: z.string(), pesos: z.array(z.int()) });

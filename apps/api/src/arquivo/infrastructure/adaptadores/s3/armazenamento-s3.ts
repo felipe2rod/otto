@@ -3,12 +3,19 @@
 // "armazenamento" do compose; na produção, o serviço de objetos da hospedagem.
 // O SDK e os tipos dele não saem deste arquivo.
 import { DeleteObjectCommand, GetObjectCommand, HeadBucketCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { EscopoDaConta } from '../../../../plataforma/escopo/escopo-da-conta';
-import { ArmazenamentoDeArquivo } from '../../../application/armazenamento-de-arquivo';
+import { ArmazenamentoDeArquivo, type ArquivoDoLink, conferirValidade, type OpcoesDoLink } from '../../../application/armazenamento-de-arquivo';
 import { conferirChave, conferirChaveDaBiblioteca } from '../../../application/chave-de-objeto';
+import { disposicaoDeAnexo } from '../links-locais';
 
 export interface OpcoesDoS3 {
   endereco: string;
+  /**
+   * Endereço pelo qual o NAVEGADOR alcança o servidor de objetos. O link assinado é feito para ele
+   * (a assinatura cobre o nome do host). Sem isto, vale `endereco`.
+   */
+  enderecoPublico?: string;
   regiao: string;
   bucket: string;
   chaveDeAcesso: string;
@@ -24,6 +31,8 @@ const naoExiste = (e: unknown): boolean => {
 
 export class ArmazenamentoS3 extends ArmazenamentoDeArquivo {
   private readonly cliente: S3Client;
+  /** O mesmo cliente, apontado para o endereço público: só assina link, nunca fala com o servidor. */
+  private readonly assinante: S3Client;
   private readonly bucket: string;
   private readonly prefixo: string;
 
@@ -31,14 +40,27 @@ export class ArmazenamentoS3 extends ArmazenamentoDeArquivo {
     super();
     this.bucket = opcoes.bucket;
     this.prefixo = opcoes.prefixo ? `${opcoes.prefixo}/` : '';
-    this.cliente = new S3Client({
-      endpoint: opcoes.endereco,
+    const comum = {
       region: opcoes.regiao,
       // bucket no caminho, não no nome do host: é o que os servidores compatíveis aceitam sem DNS próprio
       forcePathStyle: true,
       credentials: { accessKeyId: opcoes.chaveDeAcesso, secretAccessKey: opcoes.chaveSecreta },
       maxAttempts: 3,
-    });
+    };
+    this.cliente = new S3Client({ ...comum, endpoint: opcoes.endereco });
+    this.assinante = new S3Client({ ...comum, endpoint: opcoes.enderecoPublico ?? opcoes.endereco });
+  }
+
+  async linkAssinado(escopo: EscopoDaConta, chave: string, opcoes: OpcoesDoLink): Promise<string> {
+    conferirChave(escopo, chave, 'leitura');
+    conferirValidade(opcoes.validadeEmSegundos);
+    const pedido = new GetObjectCommand({ ...this.objeto(chave), ResponseContentDisposition: disposicaoDeAnexo(opcoes.nomeDoArquivo), ResponseContentType: opcoes.tipoMime });
+    return getSignedUrl(this.assinante, pedido, { expiresIn: opcoes.validadeEmSegundos });
+  }
+
+  /** O link deste adaptador aponta para o servidor de objetos, não para a API. */
+  async abrirLinkProprio(_token: string): Promise<ArquivoDoLink | undefined> {
+    return undefined;
   }
 
   private objeto(chave: string): { Bucket: string; Key: string } {
@@ -105,6 +127,7 @@ export class ArmazenamentoS3 extends ArmazenamentoDeArquivo {
   }
 
   fechar(): void {
+    this.assinante.destroy();
     this.cliente.destroy();
   }
 }

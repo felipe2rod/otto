@@ -16,10 +16,13 @@ Não há passo antes. Os padrões de desenvolvimento estão no `compose.yaml`; c
 |---|---|
 | http://localhost:8080 | Página (`apps/web`) |
 | http://localhost:8080/api/saude/pronto | API, na mesma origem |
+| http://localhost:8081 | Armazenamento. Só para o download de exportação: o link assinado aponta para cá |
 
-A borda (porta 8080) é a única porta publicada. Banco, armazenamento, API e worker só existem na rede do Docker.
+Duas portas são publicadas, só na máquina local: a borda (8080) e o armazenamento (8081, que recusa pedido sem assinatura). Banco, API e worker só existem na rede do Docker.
 
-O que sobe: `borda`, `web`, `api`, `worker`, `banco` (PostgreSQL) e `armazenamento` (compatível com S3). Antes deles rodam, uma vez, `instalar` (dependências nos volumes e cliente do banco gerado), `migracao` (migrações, com o papel migrador) e `semear` (fontes base da biblioteca).
+O que sobe: `borda`, `web`, `api`, `worker`, `banco` (PostgreSQL) e `armazenamento` (compatível com S3). Antes deles rodam, uma vez, `instalar` (dependências nos volumes e cliente do banco gerado), `migracao` (migrações e esquema da fila, com o papel migrador) e `semear` (fontes base da biblioteca).
+
+`api` e `worker` recarregam sozinhos quando o código muda. A exceção é o cliente do banco gerado (`apps/api/src/plataforma/persistencia/gerado/`), que é regravado a cada `docker compose run` e por isso fica fora da vigia: depois de mudar o `schema.prisma`, rode `docker compose restart api worker`.
 
 ### Peças da POC
 
@@ -31,6 +34,25 @@ curl -s 'http://localhost:8080/api/documentos?limite=100'
 ```
 
 Entram 48 dos 51 documentos. Os outros três estão com o arquivo corrompido no disco (não são mais JSON). O histórico da POC não é importado: cada peça entra na versão 0.
+
+### Exportar uma peça
+
+A exportação sai da fila: a API só registra o pedido e o `worker` renderiza e monta os arquivos, uma exportação por vez. O download é um link assinado de 5 minutos, novo a cada pedido.
+
+```bash
+API=http://localhost:8080/api
+DOC=$(curl -s "$API/documentos?limite=1" | python3 -c 'import sys,json; print(json.load(sys.stdin)["itens"][0]["id"])')
+
+# o relatório antes de exportar (na hora, sem renderizar)
+curl -s -X POST "$API/documentos/$DOC/exportacoes/relatorio" -H 'X-Otto-Cliente: editor' -H 'Content-Type: application/json' -d '{"formato":"psd"}'
+
+# pedir (202), acompanhar e baixar
+EXP=$(curl -s -X POST "$API/documentos/$DOC/exportacoes" -H 'X-Otto-Cliente: editor' -H 'Content-Type: application/json' -d '{"formato":"psd"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+curl -s "$API/exportacoes/$EXP"                       # repita até "estado" ser pronta, pronta_em_parte ou falhou
+curl -sL -o peca.psd "$API/exportacoes/$EXP/arquivos/0"   # 302 para o link assinado
+```
+
+Corpo do pedido: `{"formato":"psd","arquivos":"por-prancheta"|"juntas","pranchetas":[ids]}` ou `{"formato":"png","escala":1|2,"semFundo":true|false,"pranchetas":[ids]}`. O contrato inteiro está em `packages/shared/src/exportacao.ts`.
 
 Para derrubar: `docker compose down`. Para apagar também os dados e as dependências instaladas: `docker compose down -v`.
 
@@ -54,7 +76,7 @@ docker compose run --rm teste pnpm format                        # Biome, corrig
 |---|---|
 | http://localhost:8080 | Site público, estático |
 | http://localhost:8080/editor | Peças: a lista da conta, com criar, renomear, duplicar e excluir |
-| http://localhost:8080/editor/p/:id | O editor da peça, ligado à API: mover (arraste e setas), painéis de Camadas e Propriedades, desfazer e refazer |
+| http://localhost:8080/editor/p/:id | O editor da peça, ligado à API: mover (arraste e setas), redimensionar pela alça, seleção múltipla (Shift+clique), duplicar (Ctrl+J), inserir imagem ou SVG (botão ou soltar no canvas), trocar imagem, painéis de Camadas (com reordenar por arraste) e Propriedades, renomear a peça, desfazer e refazer |
 | http://localhost:8080/editor/bancada | **Só em desenvolvimento.** O editor com um documento de exemplo fixo, sem API: o motor de render desenhando, clicar seleciona, arrastar move. Não existe no build de produção |
 
 ```bash
@@ -98,7 +120,8 @@ Depois: `docker compose build && docker compose run --rm instalar pnpm install`.
 ```
 apps/api          API e worker (NestJS). Mesmo código, dois pontos de entrada: src/main.ts e src/worker.ts
 apps/web          Site e editor (Next.js)
-packages/documento, render   Núcleo: sem NestJS, sem Prisma, sem Next, sem nome de fornecedor
+packages/documento, render, psd   Núcleo: sem NestJS, sem Prisma, sem Next. Documento e operações; motor de render; exportação PSD e PNG com relatório.
+                  Fornecedor só em pasta adaptadores/ (a biblioteca de PSD fica atrás da porta FormatoDeArquivoEmCamadas)
 packages/shared   Contratos que atravessam a rede (zod)
 testes/fronteira  Testes que fazem as regras acima falharem o build
 docker/           Dockerfile, script de início do banco, configuração da borda
@@ -108,17 +131,19 @@ docker/           Dockerfile, script de início do banco, configuração da bord
 - **Na API, injeção sempre por token explícito** (`@Inject(Porta)`), com a porta escrita como classe abstrata.
 - **Fornecedor só em pasta `adaptadores/`** e na configuração (ADR 020).
 - **Banco:** toda tabela tem `conta_id` e política de RLS, escrita na mesma migração que cria a tabela (ADR 023). O único caminho para o banco é `PrismaComEscopo.executar(escopo, fn)`.
-- **Contrato HTTP:** os esquemas zod de pedido e resposta, os códigos de erro e os limites estão em `packages/shared/src/contrato.ts`. A API valida com eles e o editor também. Toda escrita precisa do cabeçalho `X-Otto-Cliente: editor`.
-- **Na API, cada módulo** (`documento`, `arquivo`, `biblioteca`) tem `domain/` e `application/` sem NestJS, `infrastructure/` com os adaptadores e `presentation/` com os controladores. Os comandos de terminal (`src/comandos/`) montam os mesmos casos de uso sem o NestJS.
+- **Contrato HTTP:** os esquemas zod de pedido e resposta, os códigos de erro e os limites estão em `packages/shared/src/contrato.ts`; os da exportação, em `packages/shared/src/exportacao.ts`. A API valida com eles e o editor também. Toda escrita precisa do cabeçalho `X-Otto-Cliente: editor`.
+- **Na API, cada módulo** (`documento`, `arquivo`, `biblioteca`, `exportacao`) tem `domain/` e `application/` sem NestJS, `infrastructure/` com os adaptadores e `presentation/` com os controladores. Os comandos de terminal (`src/comandos/`) montam os mesmos casos de uso sem o NestJS.
 
 ## Banco
 
 ```bash
 docker compose exec banco psql -U otto_migrador -d otto     # como dono das tabelas
-docker compose run --rm migracao                            # aplicar migrações pendentes
+docker compose run --rm migracao                            # aplicar migrações pendentes e preparar a fila
 ```
 
-Migração nova: escreva o `schema.prisma`, gere o SQL de base com `prisma migrate diff`, e complete à mão permissões, RLS e `down.sql`. Veja `apps/api/prisma/migrations/20261001000000_chao/`.
+Migração nova: escreva o `schema.prisma`, gere o SQL de base com `prisma migrate diff`, e complete à mão permissões, RLS e `down.sql`. Veja `apps/api/prisma/migrations/20261001000000_chao/`. Migração que cria chave estrangeira para tabela com RLS precisa abrir um escopo vazio no começo (`SELECT set_config('app.conta_id', '00000000-0000-0000-0000-000000000000', false)`) e fechar no fim (`RESET app.conta_id`): o banco valida a chave como dono da tabela, que também está sob a política. Veja `20261001180000_exportacoes/`.
+
+A fila (pg-boss) mora no esquema `pgboss` do mesmo banco. Quem cria o esquema e as filas é o migrador (`pnpm --filter @otto/api fila:preparar`, que o serviço `migracao` já roda); API e worker só leem e escrevem linha.
 
 ## Suposição em vigor
 

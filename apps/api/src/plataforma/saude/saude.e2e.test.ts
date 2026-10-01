@@ -11,6 +11,8 @@ import { configurarAplicacao, ModuloRaiz } from '../../aplicacao';
 import { ArmazenamentoDeArquivo } from '../../arquivo/application/armazenamento-de-arquivo';
 import { ArmazenamentoEmMemoria } from '../../arquivo/infrastructure/adaptadores/memoria/armazenamento-em-memoria';
 import { lerConfiguracao } from '../config/configuracao';
+import { BarramentoEmMemoria } from '../fila/adaptadores/memoria/barramento-em-memoria';
+import { BarramentoDeEventos } from '../fila/barramento-de-eventos';
 import { SondaDoBanco } from './sonda-do-banco';
 
 const env = {
@@ -50,6 +52,9 @@ describe.each(['api', 'worker'] as const)('saúde do serviço %s', (servico) => 
       .useValue(new SondaFixa(banco))
       .overrideProvider(ArmazenamentoDeArquivo)
       .useValue(armazenamento)
+      // a fila de verdade mora no banco, e este teste não tem banco
+      .overrideProvider(BarramentoDeEventos)
+      .useValue(new BarramentoEmMemoria())
       .compile();
     app = configurarAplicacao(modulo.createNestApplication({ bodyParser: false }));
     await app.init();

@@ -4,6 +4,7 @@ import { aplicarLote, caixaDe, type Documento, documentoVazio } from '@otto/docu
 import { CODIGOS_DE_ERRO, lerContaId } from '@otto/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RepositorioDeArquivosEmMemoria } from '../../arquivo/infrastructure/memoria/repositorio-de-arquivos-em-memoria';
+import { BibliotecaDeFontesEmMemoria } from '../../biblioteca/infrastructure/memoria/biblioteca-de-fontes-em-memoria';
 import { ErroDaAplicacao } from '../../plataforma/erros/erro-da-aplicacao';
 import { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
 import { RepositorioDeDocumentosEmMemoria } from '../infrastructure/memoria/repositorio-de-documentos-em-memoria';
@@ -38,11 +39,13 @@ const criarImagem = (arquivo: string) => ({
 let docs: CasosDeUsoDeDocumento;
 let arquivos: RepositorioDeArquivosEmMemoria;
 let medidor: MedidorEspiao;
+let fontes: BibliotecaDeFontesEmMemoria;
 
 beforeEach(() => {
   arquivos = new RepositorioDeArquivosEmMemoria();
   medidor = new MedidorEspiao();
-  docs = new CasosDeUsoDeDocumento(new RepositorioDeDocumentosEmMemoria(), arquivos, medidor, randomUUID);
+  fontes = new BibliotecaDeFontesEmMemoria();
+  docs = new CasosDeUsoDeDocumento(new RepositorioDeDocumentosEmMemoria(), arquivos, medidor, randomUUID, undefined, fontes);
 });
 
 async function erroDe(promessa: Promise<unknown>): Promise<ErroDaAplicacao> {
@@ -60,7 +63,7 @@ const lote = (versaoBase: number, operacoes: unknown[], extra: object = {}) => (
 describe('criar, abrir, listar', () => {
   it('cria com o nome padrão, na versão 0, com a árvore vazia', async () => {
     const d = await docs.criar(contaA, {});
-    expect(d).toMatchObject({ nome: 'Sem título', versao: 0, arvore: documentoVazio() });
+    expect(d).toEqual({ id: d.id, nome: 'Sem título', versao: 0, arvore: documentoVazio(), podeDesfazer: false, podeRefazer: false, fontes: [] });
     expect(await docs.abrir(contaA, d.id)).toEqual(d);
   });
 
@@ -349,5 +352,77 @@ describe('histórico', () => {
     expect(p2.itens[0]).toMatchObject({ id: pedido.id, versao: 1, autoria: 'designer', tipo: 'edicao', descricao: 'monta a peça', quantidadeDeOperacoes: 2, desfeito: false });
     expect(p2.itens[0]).not.toHaveProperty('operacoes');
     expect(p2.proximoCursor).toBeNull();
+  });
+});
+
+describe('pode desfazer, pode refazer', () => {
+  const possibilidades = async (id: string) => {
+    const d = await docs.abrir(contaA, id);
+    return [d.podeDesfazer, d.podeRefazer];
+  };
+
+  it('acompanham o histórico em cada resposta e ao abrir', async () => {
+    const d = await docs.criar(contaA, {});
+    expect(await possibilidades(d.id)).toEqual([false, false]);
+
+    const umLote = await docs.aplicarLote(contaA, d.id, lote(0, [criarPrancheta()]));
+    expect([umLote.podeDesfazer, umLote.podeRefazer]).toEqual([true, false]);
+    await docs.aplicarLote(contaA, d.id, lote(1, [criarForma('A')]));
+    expect(await possibilidades(d.id)).toEqual([true, false]);
+
+    const desfez = await docs.desfazer(contaA, d.id, { versaoBase: 2 });
+    expect([desfez.podeDesfazer, desfez.podeRefazer]).toEqual([true, true]);
+    const desfezTudo = await docs.desfazer(contaA, d.id, { versaoBase: 3 });
+    expect([desfezTudo.podeDesfazer, desfezTudo.podeRefazer]).toEqual([false, true]);
+    expect(await possibilidades(d.id)).toEqual([false, true]);
+
+    const refez = await docs.refazer(contaA, d.id, { versaoBase: 4 });
+    expect([refez.podeDesfazer, refez.podeRefazer]).toEqual([true, true]);
+    const refezTudo = await docs.refazer(contaA, d.id, { versaoBase: 5 });
+    expect([refezTudo.podeDesfazer, refezTudo.podeRefazer]).toEqual([true, false]);
+    expect(await possibilidades(d.id)).toEqual([true, false]);
+  });
+
+  it('edição nova depois de desfazer: não dá mais para refazer', async () => {
+    const d = await docs.criar(contaA, {});
+    await docs.aplicarLote(contaA, d.id, lote(0, [criarPrancheta()]));
+    await docs.desfazer(contaA, d.id, { versaoBase: 1 });
+    const r = await docs.aplicarLote(contaA, d.id, lote(2, [criarPrancheta('Story')]));
+    expect([r.podeDesfazer, r.podeRefazer]).toEqual([true, false]);
+  });
+
+  it('o lote reenviado responde como da primeira vez', async () => {
+    const d = await docs.criar(contaA, {});
+    const pedido = lote(0, [criarPrancheta()]);
+    await docs.aplicarLote(contaA, d.id, pedido);
+    const deNovo = await docs.aplicarLote(contaA, d.id, pedido);
+    expect([deNovo.podeDesfazer, deNovo.podeRefazer]).toEqual([true, false]);
+  });
+
+  it('cópia nasce sem nada para desfazer', async () => {
+    const d = await docs.criar(contaA, {});
+    await docs.aplicarLote(contaA, d.id, lote(0, [criarPrancheta()]));
+    const copia = await docs.duplicar(contaA, d.id, {});
+    expect([copia.podeDesfazer, copia.podeRefazer]).toEqual([false, false]);
+  });
+});
+
+describe('fontes do documento aberto', () => {
+  const texto = (nome: string, fonte: string, peso = 400) => ({
+    op: 'criarNo',
+    prancheta: 'Feed',
+    no: { tipo: 'texto', nome, x: 0, y: 0, largura: 300, altura: 100, conteudo: 'Otto', fonte, peso, tamanho: 40, cor: '#000000' },
+  });
+
+  it('diz os pesos que a biblioteca tem de cada família usada; família que não existe vem com a lista vazia', async () => {
+    await fontes.registrar({ familia: 'IBM Plex Sans', peso: 700, nomePostScript: 'IBMPlexSans-Bold', licenca: null, conteudo: Uint8Array.from([1]) });
+    await fontes.registrar({ familia: 'IBM Plex Sans', peso: 400, nomePostScript: 'IBMPlexSans', licenca: null, conteudo: Uint8Array.from([2]) });
+    await fontes.registrar({ familia: 'Anton', peso: 400, nomePostScript: 'Anton-Regular', licenca: null, conteudo: Uint8Array.from([3]) });
+    const d = await docs.criar(contaA, {});
+    await docs.aplicarLote(contaA, d.id, lote(0, [criarPrancheta(), texto('Título', 'IBM Plex Sans', 600), texto('Rodapé', 'Sumida')]));
+    expect((await docs.abrir(contaA, d.id)).fontes).toEqual([
+      { familia: 'IBM Plex Sans', pesos: [400, 700] },
+      { familia: 'Sumida', pesos: [] },
+    ]);
   });
 });

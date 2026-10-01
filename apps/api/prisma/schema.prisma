@@ -62,8 +62,9 @@ model Documento {
   arquivadoEm     DateTime? @map("arquivado_em") @db.Timestamptz(3)
 
   conta   Conta               @relation(fields: [contaId], references: [id])
-  versoes VersaoDeDocumento[]
-  lotes   LoteDeOperacoes[]
+  versoes     VersaoDeDocumento[]
+  lotes       LoteDeOperacoes[]
+  exportacoes Exportacao[]
 
   // alvo da chave estrangeira composta das filhas
   @@unique([id, contaId])
@@ -165,4 +166,79 @@ model FonteDaBiblioteca {
   // é a busca do editor e do medidor: família e peso
   @@unique([familia, peso])
   @@map("fontes_da_biblioteca")
+}
+
+enum FormatoDeExportacao {
+  psd
+  png
+
+  @@map("formato_de_exportacao")
+}
+
+enum EstadoDaExportacao {
+  na_fila
+  rodando
+  pronta
+  pronta_em_parte
+  falhou
+
+  @@map("estado_da_exportacao")
+}
+
+/// Um pedido de exportação e o seu andamento. É da VERSÃO do documento no momento do pedido.
+/// O relatório cita nome de camada: é conteúdo, fica sob RLS e nunca vai para log (ADR 031).
+model Exportacao {
+  id                String              @id @db.Uuid
+  contaId           String              @map("conta_id") @db.Uuid
+  documentoId       String              @map("documento_id") @db.Uuid
+  versao            Int
+  /// nome do documento no momento do pedido: vira nome de arquivo
+  nome              String
+  formato           FormatoDeExportacao
+  /// { arquivos?, pranchetas, escala?, semFundo? }: o pedido, com as pranchetas já resolvidas em ids
+  opcoes            Json
+  estado            EstadoDaExportacao  @default(na_fila)
+  pranchetasNoTotal Int                 @map("pranchetas_no_total")
+  pranchetasProntas Int                 @default(0) @map("pranchetas_prontas")
+  /// [{ pranchetaId, codigo }]: o que não saiu, quando o resultado é parcial
+  falhas            Json                @default("[]")
+  relatorio         Json?
+  erroCodigo        String?             @map("erro_codigo")
+  duracaoMs         Int?                @map("duracao_ms")
+  /// sinal de vida do worker: exportação "rodando" sem sinal há minutos é dada como interrompida
+  batimentoEm       DateTime?           @map("batimento_em") @db.Timestamptz(3)
+  criadaEm          DateTime            @default(now()) @map("criada_em") @db.Timestamptz(3)
+  iniciadaEm        DateTime?           @map("iniciada_em") @db.Timestamptz(3)
+  terminadaEm       DateTime?           @map("terminada_em") @db.Timestamptz(3)
+  /// quando os arquivos podem ser apagados (7 dias depois de prontos)
+  expiraEm          DateTime?           @map("expira_em") @db.Timestamptz(3)
+
+  documento Documento             @relation(fields: [documentoId, contaId], references: [id, contaId])
+  arquivos  ArquivoDeExportacao[]
+
+  // alvo da chave estrangeira composta dos arquivos
+  @@unique([id, contaId])
+  // quantas a conta tem na fila ou rodando; a mais recente de um documento
+  @@index([contaId, estado])
+  @@index([contaId, documentoId, criadaEm(sort: Desc)])
+  @@map("exportacoes")
+}
+
+/// Cada arquivo que uma exportação gerou. `chaveDoObjeto` nunca vai ao cliente: o download é por link assinado.
+model ArquivoDeExportacao {
+  contaId       String   @map("conta_id") @db.Uuid
+  exportacaoId  String   @map("exportacao_id") @db.Uuid
+  indice        Int
+  nome          String
+  tipoMime      String   @map("tipo_mime")
+  bytes         Int
+  pranchetaId   String?  @map("prancheta_id")
+  chaveDoObjeto String   @map("chave_do_objeto")
+  criadoEm      DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  exportacao Exportacao @relation(fields: [exportacaoId, contaId], references: [id, contaId])
+
+  // é a leitura do download: exportação e índice
+  @@id([exportacaoId, indice])
+  @@map("arquivos_de_exportacao")
 }

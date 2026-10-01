@@ -70,6 +70,16 @@ export interface DocumentoTravado {
   marcarDesfeito(versao: number, por: string | null): Promise<void>;
 }
 
+/** O bastante para saber se dá para desfazer e refazer, sem travar o documento. */
+export interface ResumoDoHistorico {
+  /** O lote mais recente. Ausente em documento sem lote. */
+  atual?: LoteGravado;
+  /** As reversões seguidas no fim do histórico, da mais nova para a mais velha. */
+  cauda: LoteGravado[];
+  /** O lote logo antes da cauda. Ausente se a cauda começa na versão 1 ou se não há lote. */
+  antesDaCauda?: LoteGravado;
+}
+
 export abstract class RepositorioDeDocumentos {
   abstract criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento }): Promise<DocumentoGuardado>;
   /** Não arquivados, do alterado mais recentemente para o mais antigo. */
@@ -77,6 +87,10 @@ export abstract class RepositorioDeDocumentos {
   /** undefined se não existe, se foi arquivado ou se é de outra conta. */
   abstract abrir(escopo: EscopoDaConta, id: string): Promise<DocumentoGuardado | undefined>;
   abstract renomear(escopo: EscopoDaConta, id: string, nome: string): Promise<RegistroDeDocumento | undefined>;
+  /** undefined se o documento não existe nesta conta. */
+  abstract resumoDoHistorico(escopo: EscopoDaConta, id: string): Promise<ResumoDoHistorico | undefined>;
+  /** A árvore e o nome do documento numa versão. undefined se o documento ou a versão não existem nesta conta. */
+  abstract arvoreNaVersao(escopo: EscopoDaConta, id: string, versao: number): Promise<{ nome: string; arvore: Documento } | undefined>;
   /** Arquiva (não apaga). false se não existe nesta conta. */
   abstract arquivar(escopo: EscopoDaConta, id: string): Promise<boolean>;
   /** Do lote mais novo para o mais velho. undefined se o documento não existe nesta conta. */

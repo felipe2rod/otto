@@ -2,42 +2,14 @@
 // Só o motor de TEXTO é usado: mede a tinta, não cria superfície nem rasteriza. Cabe numa requisição.
 // O CanvasKit é carregado uma vez por processo, na primeira vez que um lote mede (50 a 80 ms, 128 MB).
 // Cada lote abre uma sessão própria e a destrói: nada fica de um lote para o outro.
-import { type Documento, todasAsCamadas } from '@otto/documento';
+import type { Documento } from '@otto/documento';
 import { criarMedidor, criarSessao, type FonteDeArquivo } from '@otto/render';
 import { carregarCanvasKit } from '@otto/render/node';
 import type { BibliotecaDeFontes } from '../../../biblioteca/application/biblioteca-de-fontes';
 import { type MedidorAberto, MedidorDeTexto } from '../../application/medidor-de-texto';
+import { familiasCitadas } from '../../domain/familias-citadas';
 
 type Motor = Awaited<ReturnType<typeof carregarCanvasKit>>;
-
-/**
- * Famílias de fonte que o lote pode precisar medir: as do documento e as que as operações citam
- * (um lote pode criar o texto e alinhar na mesma tacada).
- */
-export function familiasCitadas(doc: Documento, operacoes: readonly unknown[]): Set<string> {
-  const familias = new Set<string>();
-  for (const estilo of Object.values(doc.tokens.estilosDeTexto)) familias.add(estilo.fonte);
-  for (const prancheta of doc.pranchetas) {
-    for (const no of todasAsCamadas(prancheta.filhos)) {
-      if (no.tipo !== 'texto') continue;
-      familias.add(no.fonte);
-      for (const trecho of no.trechos ?? []) if (trecho.fonte) familias.add(trecho.fonte);
-    }
-  }
-  const varrer = (valor: unknown, profundidade: number): void => {
-    if (profundidade > 12 || typeof valor !== 'object' || valor === null) return;
-    if (Array.isArray(valor)) {
-      for (const item of valor) varrer(item, profundidade + 1);
-      return;
-    }
-    for (const [chave, dentro] of Object.entries(valor)) {
-      if (chave === 'fonte' && typeof dentro === 'string') familias.add(dentro);
-      else varrer(dentro, profundidade + 1);
-    }
-  };
-  varrer(operacoes, 0);
-  return familias;
-}
 
 export class MedidorComCanvasKit extends MedidorDeTexto {
   private motor: Promise<Motor> | undefined;

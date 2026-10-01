@@ -60,7 +60,7 @@ Toda tabela leva o id da conta, com RLS (ADR 023).
 | Porta | Adaptador inicial | Estado |
 |---|---|---|
 | `ModeloDoAgente` | Claude via DigitalOcean (imagem e cache a confirmar no spike) | ADR 029 |
-| `FormatoDeArquivoEmCamadas` | ag-psd (a verificar no spike) | ADR 028 |
+| `FormatoDeArquivoEmCamadas` | ag-psd (em uso em `packages/psd`, só dentro do adaptador) | ADR 028 |
 | `ArmazenamentoDeArquivo` | S3-compatível | ADR 020 |
 | `BancoDeImagens` | Pixabay (chave do Otto); outros com chave da conta | ADR 032 |
 | `BarramentoDeEventos` | pg-boss | ADR 009 |

@@ -6,14 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { EscopoDaConta } from '../../../../plataforma/escopo/escopo-da-conta';
 import { contratoDoArmazenamentoDeArquivo } from '../../../application/armazenamento-de-arquivo.contrato';
 import { chaveDeArquivoDaConta } from '../../../application/chave-de-objeto';
+import { baixarLinkLocal } from '../links-locais';
 import { ArmazenamentoEmDiscoLocal } from './armazenamento-em-disco-local';
 
 contratoDoArmazenamentoDeArquivo('disco local', async () => {
   const pasta = await mkdtemp(path.join(tmpdir(), 'otto-armazenamento-'));
-  return {
-    armazenamento: new ArmazenamentoEmDiscoLocal(pasta),
-    limpar: () => rm(pasta, { recursive: true, force: true }),
-  };
+  const armazenamento = new ArmazenamentoEmDiscoLocal(pasta, 'segredo-de-teste-com-mais-de-trinta-e-dois-caracteres');
+  return { armazenamento, baixar: (link) => baixarLinkLocal(armazenamento, link), limpar: () => rm(pasta, { recursive: true, force: true }) };
 });
 
 describe('ArmazenamentoEmDiscoLocal', () => {

@@ -20,5 +20,13 @@ contratoDoArmazenamentoDeArquivo('compatível com S3', async () => {
     // cada execução num prefixo próprio do bucket de teste: uma não vê o resto da outra
     prefixo: `teste-${randomUUID()}`,
   });
-  return { armazenamento, limpar: async () => armazenamento.fechar() };
+  return {
+    armazenamento,
+    // o link do S3 é seguido direto no servidor de objetos, sem passar pela API
+    baixar: async (link) => {
+      const r = await fetch(link);
+      return { status: r.status, ...(r.ok ? { bytes: new Uint8Array(await r.arrayBuffer()) } : {}), disposicao: r.headers.get('content-disposition'), tipo: r.headers.get('content-type') };
+    },
+    limpar: async () => armazenamento.fechar(),
+  };
 });

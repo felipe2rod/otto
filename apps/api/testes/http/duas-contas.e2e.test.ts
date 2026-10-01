@@ -2,7 +2,7 @@
 // de B, tenta-se alcançar o que é de A por cada rota. O esperado é sempre o 404 de "não existe",
 // com corpo idêntico ao de id inexistente (nunca 403, que confirmaria a existência), e nada alterado.
 import { createHash, randomUUID } from 'node:crypto';
-import { ArquivoEnviado, CODIGOS_DE_ERRO, DocumentoAberto, ErroDaApi, Historico, ListaDeDocumentos } from '@otto/shared';
+import { ArquivoEnviado, CODIGOS_DE_ERRO, DocumentoAberto, ErroDaApi, Exportacao, Historico, ListaDeDocumentos } from '@otto/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type ApiDeTeste, type ClienteDeTeste, criarForma, criarPrancheta, PNG, subirApi } from './subir';
 
@@ -93,6 +93,44 @@ describe('com a sessão de B, o arquivo de A não existe', () => {
     expect((await B.get(`/api/arquivos/${SHA_DO_PNG}`)).status).toBe(200);
     expect(await api.armazenamento.existe(api.contaA, `contas/${api.contaA.contaId}/arquivos/${SHA_DO_PNG}`)).toBe(true);
     expect(await api.armazenamento.existe(api.contaB, `contas/${api.contaB.contaId}/arquivos/${SHA_DO_PNG}`)).toBe(true);
+  });
+});
+
+describe('com a sessão de B, a exportação de A não existe', () => {
+  let exportacaoDeA: Exportacao;
+
+  beforeAll(async () => {
+    const pedida = Exportacao.parse((await A.post(`/api/documentos/${docDeA.id}/exportacoes`).send({ formato: 'psd' })).body);
+    await api.fila.ociosa();
+    exportacaoDeA = Exportacao.parse((await A.get(`/api/exportacoes/${pedida.id}`)).body);
+    expect(exportacaoDeA.estado).toBe('pronta');
+  });
+
+  it.each([
+    ['POST /api/documentos/:id/exportacoes', () => B.post(`/api/documentos/${docDeA.id}/exportacoes`).send({ formato: 'psd' })],
+    ['POST /api/documentos/:id/exportacoes/relatorio', () => B.post(`/api/documentos/${docDeA.id}/exportacoes/relatorio`).send({ formato: 'psd' })],
+    ['GET /api/exportacoes/:id', () => B.get(`/api/exportacoes/${exportacaoDeA.id}`)],
+    ['GET /api/exportacoes/:id/arquivos/:indice', () => B.get(`/api/exportacoes/${exportacaoDeA.id}/arquivos/0`)],
+  ])('%s responde o mesmo 404 de id inexistente, sem pôr nada na fila e sem chamar o armazenamento', async (_rota, chamar) => {
+    const [publicados, links, leituras] = [api.fila.publicados.length, api.armazenamento.linksPedidos, api.armazenamento.leituras];
+    const r = await chamar();
+    expect({ status: r.status, body: r.body }).toEqual(inexistente);
+    expect([api.fila.publicados.length, api.armazenamento.linksPedidos, api.armazenamento.leituras]).toEqual([publicados, links, leituras]);
+  });
+
+  it('trabalho na fila com a conta trocada não é processado: a exportação de A não roda como se fosse de B', async () => {
+    const pedida = Exportacao.parse((await A.post(`/api/documentos/${docDeA.id}/exportacoes`).send({ formato: 'png' })).body);
+    await api.fila.ociosa();
+    const antes = Exportacao.parse((await A.get(`/api/exportacoes/${pedida.id}`)).body);
+    // alguém consegue pôr na fila o id de A com a conta de B
+    await api.fila.publicar('exportacao', { contaId: api.contaB.contaId, id: pedida.id });
+    await api.fila.ociosa();
+    expect(Exportacao.parse((await A.get(`/api/exportacoes/${pedida.id}`)).body)).toEqual(antes);
+    expect((await B.get(`/api/exportacoes/${pedida.id}`)).status).toBe(404);
+  });
+
+  it('A, que é dona, baixa', async () => {
+    expect((await A.get(`/api/exportacoes/${exportacaoDeA.id}/arquivos/0`)).status).toBe(302);
   });
 });
 

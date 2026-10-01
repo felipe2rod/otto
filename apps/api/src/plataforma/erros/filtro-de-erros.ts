@@ -28,6 +28,12 @@ const STATUS_POR_CODIGO: Record<CodigoDeErro, number> = {
   [C.imagemGrandeDemais]: 422,
   [C.imagemIlegivel]: 422,
   [C.svgInvalido]: 422,
+  [C.pranchetaDesconhecida]: 422,
+  [C.nadaParaExportar]: 422,
+  [C.limiteDeExportacoes]: 429,
+  [C.exportacaoNaoPronta]: 409,
+  [C.exportacaoExpirada]: 410,
+  [C.filaIndisponivel]: 503,
   [C.erroInterno]: 500,
 };
 

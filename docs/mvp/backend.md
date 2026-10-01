@@ -792,7 +792,7 @@ Li `docs/mvp/frontend.md` depois de fechar o desenho. O que confere, o que respo
 13. Os preços de hospedagem são os de `custos.md` (2026-09-26). Não reconferi.
 14. O tamanho relativo das fatias (P, M, G) é estimativa minha, sem base medida.
 
-## 17. O que mudou na implementação (fatias 0 e 1)
+## 17. O que mudou na implementação (fatias 0 a 2)
 
 O plano acima foi escrito antes do código. Esta seção registra onde a implementação se afastou dele, e por quê. Onde ela e o texto das seções anteriores divergem, vale esta.
 
@@ -857,3 +857,65 @@ Limites em vigor: 500 operações por lote, 6 MB por corpo de lote, 4 MB por ár
 
 - **Importador de SVG** (`apps/api/src/arquivo/application/vetor/importar-svg.ts`). Veio de `poc/src/servidor/svg.ts` quase como estava, com a borda endurecida (entidade XML recusada, teto de elementos e de caminhos, erro com código). O mapeamento SVG para vetor é do especialista-grafico; o arquivo deve ir para um pacote do núcleo quando ele decidir onde.
 - **Texto que a pessoa lê, produzido pelo servidor**, ainda sem o guardião da marca: o nome padrão de documento e o sufixo de cópia (`documento/textos.ts`), e os avisos do importador de SVG.
+
+### 17.8 Fatia 2: exportação pela fila
+
+**Contrato** (`packages/shared/src/exportacao.ts`; substitui a tabela da seção 7.6):
+
+| Rota | Pedido | Resposta |
+|---|---|---|
+| `POST /api/documentos/:id/exportacoes/relatorio` | `PedidoDeExportacao` | `200 RelatorioDeExportacao`. Na hora, sem renderizar, sem criar nada |
+| `POST /api/documentos/:id/exportacoes` | `PedidoDeExportacao` | `202 Exportacao`. `422 prancheta_desconhecida`, `422 nada_para_exportar`, `429 limite_de_exportacoes`, `503 fila_indisponivel` |
+| `GET /api/exportacoes/:id` | — | `Exportacao`, com `Cache-Control: no-store` |
+| `GET /api/exportacoes/:id/arquivos/:indice` | — | `302` para link assinado de 5 minutos, novo a cada pedido. `409 exportacao_nao_pronta`, `410 exportacao_expirada` |
+| `GET /api/links/:token` | — | Só com o armazenamento em disco local: a própria API entrega o arquivo do link. Sem sessão: o link é a credencial |
+
+`PedidoDeExportacao` é `{ formato: "psd", arquivos: "por-prancheta" \| "juntas", pranchetas? }` ou `{ formato: "png", escala: 1 \| 2, semFundo, pranchetas? }`. Os formatos "pacote" e "prancheta" do plano viraram isso: uma exportação tem **vários arquivos**, cada um com o seu endereço de download. Não há zip.
+
+| Plano | Implementação | Por quê |
+|---|---|---|
+| Estados `na_fila`, `rodando`, `pronta`, `falhou` | Mais `pronta_em_parte` | Cada prancheta é exportada em separado: a que falha entra em `falhas`, as outras saem. No PSD com as pranchetas juntas não há meio-termo: falhou, falhou tudo |
+| `GET .../arquivo` | `GET .../arquivos/:indice` | Um arquivo por prancheta |
+| Relatório antes de exportar dependia do grafico | Existe: `relatorioDeExportacao` de `@otto/psd` não renderiza (1 a 6 ms) | Para PNG, o relatório traz só o que falta e a origem das imagens |
+| Exportação da versão atual | Da versão **do momento do pedido**, gravada na linha | Editar depois do pedido não muda o arquivo |
+| 2 novas tentativas | 200, a cada 3 s | A tentativa é o que faz uma exportação esperar a vez da conta quando outro processo está com ela. Falha de render não é tentada de novo: vira `falhou` ou `pronta_em_parte` |
+| Uma por conta garantida pela fila | **Garantida pelo banco** (índice único parcial em `exportacoes`, `WHERE estado = 'rodando'`) e, dentro do processo, pelo adaptador da fila | Ver "O que a medição mostrou" |
+| Job de limpeza | Não existe ainda. `expira_em` (7 dias depois de pronta) é gravado, e baixar depois dele responde 410 | Fica com a fila `manutencao`, na fatia de produção |
+
+**Como roda.** A API grava a linha (`na_fila`) e publica `{ contaId, id }`. O worker abre o escopo com a conta do trabalho (`escopoDoTrabalho`, em `plataforma/escopo/`) e chama `iniciar`, que relê a exportação sob RLS: se ela não existe naquela conta ou não está mais na fila, o trabalho termina sem fazer nada (entrega repetida e conta trocada dão no mesmo). Fontes vêm da biblioteca; imagens, só as que têm linha em `arquivos` **naquela conta**. Hash citado que não é da conta não chega ao motor e aparece no relatório como "em falta". Cada arquivo vai para `contas/{conta}/exportacoes/{exportacao}/{indice}.{ext}`; a chave nunca sai na resposta.
+
+**Queda do worker.** Durante o trabalho o worker grava um sinal de vida a cada 5 s. Exportação `rodando` sem sinal há 2 minutos é dada como `falhou` (`interrompida`) na próxima vez que a conta começa uma exportação, ou quando a fila reentrega o trabalho (10 minutos). No desligamento normal o worker espera a exportação em curso (até 30 s).
+
+**Link assinado.** `ArmazenamentoDeArquivo.linkAssinado(escopo, chave, { validadeEmSegundos, nomeDoArquivo, tipoMime })`, nos três adaptadores, com teste de contrato (entrega o arquivo como anexo, vence, não aceita adulteração, recusa chave de outra conta). No S3, URL pré-assinada; o endereço que vai no link é `ARMAZENAMENTO_ENDERECO_PUBLICO` (em desenvolvimento, `http://localhost:8081`). No disco local e no falso, um token HMAC que a rota `/api/links/:token` abre; precisa de `SEGREDO_DE_ASSINATURA`.
+
+**Fila.** Porta `BarramentoDeEventos` (`plataforma/fila/`), adaptadores pg-boss e em memória, um contrato para os dois. O esquema `pgboss` é criado pelo migrador (`fila:preparar`); `otto_app` só lê e escreve linha. Com a fila fora do ar na subida, API e worker ficam de pé e tentam ligar a cada 5 s; pedir exportação responde 503 e a linha não fica pendurada.
+
+**O que a medição mostrou** (2026-10-01, máquina de desenvolvimento, peça importada "Jazz na Praça (teto da ferramenta)", 2 pranchetas, 38 camadas, PSD por prancheta, 6 MB no total):
+
+| Medida | Valor |
+|---|---|
+| Do pedido ao arquivo pronto, visto pelo cliente (consulta a cada 0,5 s) | 1,9 a 3,7 s em seis seguidas; 4,5 s na primeira depois de o worker subir (carga do motor) |
+| Só o trabalho do worker (`duracaoMs`) | 1,2 a 2,0 s; 2,8 s na primeira |
+| Espera na fila | 0,5 a 1,1 s (o worker consulta a fila a cada 1 s) |
+| 5 pranchetas, 46 camadas, 23 MB | 7,2 s do pedido ao pronto; 6,3 s de trabalho |
+| PNG 2x das duas pranchetas | 4,8 s; 3,9 s de trabalho |
+| 64 exportações de uma peça leve em 150 s | Mediana 1,3 s, p95 2,6 s, pior 4,2 s |
+| Pico de memória do worker | 422 MB em desenvolvimento (com recarga automática); 241 MB na imagem de produção |
+
+O teto de memória está no `compose.yaml`: 2 GB no worker e 1 GB na API em desenvolvimento. Com 241 MB medidos na imagem de produção, 1 GB por worker é o ponto de partida para produção.
+
+**A política "singleton" do pg-boss foi descartada pela medição.** A primeira versão deixava a fila garantir "uma por conta" (um trabalho ativo por chave). Numa das medições, a exportação seguinte da mesma conta ficou **123 s parada**: o pg-boss decide quem está ativo por uma estatística da fila refeita a cada 60 s, e um consumidor que carrega essa estatística velha ignora os trabalhos da conta até a próxima leitura. O contrato da porta ganhou um teste que reproduz isso ("a vez da conta"). A fila agora é comum, e a vez da conta é garantida pelo banco e pelo caso de uso (`ContaOcupada` devolve o trabalho para a fila).
+
+**Regra de migração nova.** Criar chave estrangeira para tabela com `FORCE ROW LEVEL SECURITY` falha com "unrecognized configuration parameter app.conta_id": o banco valida a chave como dono da tabela, que também está sob a política. A migração abre um escopo vazio no começo e fecha no fim (`20261001180000_exportacoes`).
+
+**Dado de uso.** `exportacao_pedida` (formato, pranchetas, juntas) e `exportacao_terminada` (formato, resultado, pranchetas, falhas, arquivos, bytes, espera e duração). Falha de render vai para o log como `falha_na_exportacao`, com o tipo do erro e os quadros da pilha, **sem a mensagem** (ela pode citar camada ou fonte). O link assinado e a chave do objeto não aparecem no log; o teste `log-sem-conteudo` confere.
+
+**Pedidos do react atendidos.** `podeDesfazer` e `podeRefazer` em `DocumentoAberto` e nas respostas de lote, desfazer e refazer. `DocumentoAberto.fontes` lista, para cada família que o documento usa, os pesos que existem; com `pesoMaisProximo` (exportada de `@otto/shared`, a mesma função do servidor) o editor sabe qual peso vai receber sem ler o cabeçalho `X-Otto-Peso`.
+
+**Em aberto desta fatia.**
+
+- Exportação que esgota as 200 tentativas (10 minutos esperando a vez da conta) fica `na_fila` para sempre e conta no limite de 5. Só acontece com mais de um worker e uma exportação muito longa. A varredura entra com a fila `manutencao`.
+- A conta de "5 na fila" não é atômica: dois pedidos simultâneos podem passar em um.
+- `/api/saude/pronto` não inclui a fila.
+- O texto dos avisos do relatório (`avisos[].texto`, `camadas[].observacao`) vem de `@otto/psd` em português, sem o guardião da marca. O editor deve escolher a frase pelo `codigo`.
+- SVG e PDF (ADR 034) não entraram.

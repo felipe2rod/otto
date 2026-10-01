@@ -116,7 +116,7 @@ describe('lote', () => {
   });
 
   it('a resposta traz a versão e os tocados; a árvore só quando pedida', () => {
-    expect(RespostaDeLote.parse({ versao: 1, lote: { id: ID, tocados: ['a', 'b'] } }).arvore).toBeUndefined();
+    expect(RespostaDeLote.parse({ versao: 1, lote: { id: ID, tocados: ['a', 'b'] }, podeDesfazer: true, podeRefazer: false }).arvore).toBeUndefined();
     expect(RespostaDeLote.parse({ versao: 1, lote: { id: ID, tocados: [] }, arvore: documentoVazio() }).arvore?.pranchetas).toEqual([]);
   });
 });

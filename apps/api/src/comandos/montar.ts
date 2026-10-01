@@ -21,7 +21,8 @@ export function montarComando(env: Record<string, string | undefined>) {
     process.exit(1);
   }
   const prisma = new PrismaComEscopo(config.banco.urlDoApp, { conexoes: 2, tempoLimiteMs: 30_000 });
-  const armazenamento = config.armazenamento.adaptador === 's3' ? new ArmazenamentoS3(config.armazenamento) : new ArmazenamentoEmDiscoLocal(config.armazenamento.pasta);
+  const armazenamento =
+    config.armazenamento.adaptador === 's3' ? new ArmazenamentoS3(config.armazenamento) : new ArmazenamentoEmDiscoLocal(config.armazenamento.pasta, config.armazenamento.segredoDeAssinatura);
   const documentos = new RepositorioDeDocumentosNoBanco(prisma);
   const arquivos = new CasosDeUsoDeArquivo(new RepositorioDeArquivosNoBanco(prisma), armazenamento, uuidV7, config.limites);
   const fontes = new BibliotecaDeFontesNoBanco(prisma, armazenamento);

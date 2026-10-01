@@ -2,6 +2,7 @@ import { lerContaId } from '@otto/shared';
 import { describe, expect, it } from 'vitest';
 import { ResolvedorDeContaFixa } from './adaptadores/resolvedor-de-conta-fixa';
 import { EscopoDaConta } from './escopo-da-conta';
+import { escopoDoTrabalho } from './escopo-do-trabalho';
 
 const CONTA = '01990000-0000-7000-8000-000000000001';
 
@@ -29,5 +30,16 @@ describe('ResolvedorDeContaFixa (sem login no MVP: suposição a confirmar com o
     const resolvedor = new ResolvedorDeContaFixa(lerContaId(CONTA));
     expect((await resolvedor.resolverDaRequisicao(undefined)).contaId).toBe(CONTA);
     expect((await resolvedor.resolverDaRequisicao('qualquer-coisa')).contaId).toBe(CONTA);
+  });
+});
+
+describe('escopoDoTrabalho (a conta do payload é hipótese; a prova é a linha lida sob RLS)', () => {
+  it('abre o escopo com a conta que veio no trabalho', () => {
+    expect(escopoDoTrabalho({ contaId: CONTA }).contaId).toBe(CONTA);
+  });
+
+  it('conta que não é UUID não abre escopo', () => {
+    expect(() => escopoDoTrabalho({ contaId: 'todas' })).toThrow();
+    expect(() => escopoDoTrabalho({ contaId: '' })).toThrow();
   });
 });

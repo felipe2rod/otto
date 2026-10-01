@@ -1,17 +1,7 @@
 // Regras puras da biblioteca de fontes.
 
-/** O peso que existe mais perto do pedido. No empate, o mais pesado (é o que os motores de texto fazem). */
-export function pesoMaisProximo(pesos: readonly number[], pedido: number): number | undefined {
-  let melhor: number | undefined;
-  for (const peso of pesos) {
-    if (melhor === undefined) melhor = peso;
-    else {
-      const [distancia, atual] = [Math.abs(peso - pedido), Math.abs(melhor - pedido)];
-      if (distancia < atual || (distancia === atual && peso > melhor)) melhor = peso;
-    }
-  }
-  return melhor;
-}
+// A regra do peso mais próximo mora em @otto/shared: é a mesma no servidor e no editor.
+export { pesoMaisProximo } from '@otto/shared';
 
 /**
  * Nome PostScript (registro 6 da tabela "name") lido do próprio arquivo TTF ou OTF.

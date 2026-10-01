@@ -5,8 +5,8 @@
   "type": "module",
   "description": "API e worker do Otto (NestJS na borda, ADR 008)",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/main.ts",
-    "dev:worker": "tsx watch --clear-screen=false src/worker.ts",
+    "dev": "tsx watch --clear-screen=false --exclude './src/plataforma/persistencia/gerado/**' src/main.ts",
+    "dev:worker": "tsx watch --clear-screen=false --exclude './src/plataforma/persistencia/gerado/**' src/worker.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "banco:gerar": "prisma generate",
@@ -15,14 +15,18 @@
     "start": "node dist/main.mjs",
     "start:worker": "node dist/worker.mjs",
     "biblioteca:semear": "tsx src/comandos/semear-biblioteca.ts",
-    "importar:poc": "tsx src/comandos/importar-da-poc.ts"
+    "importar:poc": "tsx src/comandos/importar-da-poc.ts",
+    "fila:preparar": "tsx src/comandos/preparar-fila.ts",
+    "banco:preparar": "prisma migrate deploy && tsx src/comandos/preparar-fila.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1143.0",
+    "@aws-sdk/s3-request-presigner": "^3.0.0",
     "@nestjs/common": "12.1.2",
     "@nestjs/core": "12.1.2",
     "@nestjs/platform-express": "12.1.2",
     "@otto/documento": "workspace:*",
+    "@otto/psd": "workspace:*",
     "@otto/render": "workspace:*",
     "@otto/shared": "workspace:*",
     "@prisma/adapter-pg": "7.10.0",
@@ -30,6 +34,7 @@
     "canvaskit-wasm": "^0.42.0",
     "fast-xml-parser": "^5.0.0",
     "pg": "^8.20.0",
+    "pg-boss": "^12.0.0",
     "pino": "10.3.1",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",

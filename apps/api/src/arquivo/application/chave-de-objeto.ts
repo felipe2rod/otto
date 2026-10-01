@@ -23,6 +23,14 @@ export function chaveDeArquivoDaConta(escopo: EscopoDaConta, sha256: string): st
   return `contas/${escopo.contaId}/arquivos/${sha256}`;
 }
 
+const EXTENSAO = /^[a-z0-9]{1,5}$/;
+
+/** Chave de um arquivo gerado por exportação: contas/{conta}/exportacoes/{exportação}/{índice}.{extensão}. */
+export function chaveDeExportacao(escopo: EscopoDaConta, exportacaoId: string, indice: number, extensao: string): string {
+  if (!SEGMENTO.test(exportacaoId) || !Number.isInteger(indice) || indice < 0 || !EXTENSAO.test(extensao)) throw new ChaveDeObjetoInvalida();
+  return `contas/${escopo.contaId}/exportacoes/${exportacaoId}/${indice}.${extensao}`;
+}
+
 /**
  * Confere a chave contra o escopo. Todo adaptador chama isto antes de tocar o armazenamento.
  * - chave malformada (segmento vazio, "..", barra invertida, absoluta): ChaveDeObjetoInvalida;

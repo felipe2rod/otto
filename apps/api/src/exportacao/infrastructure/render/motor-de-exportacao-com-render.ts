@@ -1,0 +1,49 @@
+// Adaptador de MotorDeExportacao: o motor de render único (@otto/render, CanvasKit em CPU) e o
+// escritor de PSD (@otto/psd, atrás da porta FormatoDeArquivoEmCamadas do especialista-grafico).
+// Só o worker chama isto: é CPU por segundos e centenas de MB (o limite está no compose).
+// O WebAssembly é carregado uma vez por processo; cada exportação abre e destrói a própria sessão.
+import type { Documento } from '@otto/documento';
+import { criarFormatoPsd, exportarPng, exportarPsd, type RecursosDaExportacao } from '@otto/psd';
+import { carregarCanvasKit } from '@otto/render/node';
+import { type ArquivoGerado, type EntreEtapas, MotorDeExportacao } from '../../application/motor-de-exportacao';
+
+type Motor = Awaited<ReturnType<typeof carregarCanvasKit>>;
+
+export class MotorDeExportacaoComRender extends MotorDeExportacao {
+  private motor: Promise<Motor> | undefined;
+  private readonly formato = criarFormatoPsd();
+  /** Quantas vezes o WebAssembly foi carregado neste processo. Deve ficar em 1. */
+  cargasDoMotor = 0;
+
+  private carregar(): Promise<Motor> {
+    if (!this.motor) {
+      this.cargasDoMotor++;
+      this.motor = carregarCanvasKit();
+      // se a carga falhar, a próxima chamada tenta de novo em vez de guardar a falha
+      this.motor.catch(() => {
+        this.motor = undefined;
+      });
+    }
+    return this.motor;
+  }
+
+  async psd(
+    doc: Documento,
+    recursos: RecursosDaExportacao,
+    opcoes: { nome: string; pranchetas: readonly string[]; arquivos: 'por-prancheta' | 'juntas' },
+    entreEtapas: EntreEtapas,
+  ): Promise<ArquivoGerado[]> {
+    const { arquivos } = await exportarPsd(await this.carregar(), this.formato, doc, recursos, { nome: opcoes.nome, pranchetas: opcoes.pranchetas, arquivos: opcoes.arquivos, entreEtapas });
+    return arquivos;
+  }
+
+  async png(
+    doc: Documento,
+    recursos: RecursosDaExportacao,
+    opcoes: { nome: string; pranchetas: readonly string[]; escala: 1 | 2; semFundo: boolean },
+    entreEtapas: EntreEtapas,
+  ): Promise<ArquivoGerado[]> {
+    const { arquivos } = await exportarPng(await this.carregar(), doc, recursos, { nome: opcoes.nome, pranchetas: opcoes.pranchetas, escala: opcoes.escala, semFundo: opcoes.semFundo, entreEtapas });
+    return arquivos;
+  }
+}

@@ -11,6 +11,7 @@ import {
   type Pagina,
   type RegistroDeDocumento,
   RepositorioDeDocumentos,
+  type ResumoDoHistorico,
 } from '../../application/repositorio-de-documentos';
 
 interface Guardado {
@@ -66,6 +67,22 @@ export class RepositorioDeDocumentosEmMemoria extends RepositorioDeDocumentos {
     if (!g) return undefined;
     g.registro = { ...g.registro, nome, alteradoEm: this.agora() };
     return { ...g.registro };
+  }
+
+  async resumoDoHistorico(escopo: EscopoDaConta, id: string): Promise<ResumoDoHistorico | undefined> {
+    const g = this.achar(escopo, id);
+    if (!g) return undefined;
+    const cauda: LoteGravado[] = [];
+    for (let i = g.lotes.length - 1; i >= 0 && g.lotes[i]?.tipo === 'reversao'; i--) cauda.push({ ...(g.lotes[i] as LoteGravado) });
+    const atual = g.lotes.at(-1);
+    const antes = g.lotes[g.lotes.length - cauda.length - 1];
+    return { ...(atual ? { atual: { ...atual } } : {}), cauda, ...(antes ? { antesDaCauda: { ...antes } } : {}) };
+  }
+
+  async arvoreNaVersao(escopo: EscopoDaConta, id: string, versao: number): Promise<{ nome: string; arvore: Documento } | undefined> {
+    const g = this.achar(escopo, id);
+    const arvore = g?.arvores.get(versao);
+    return g && arvore ? { nome: g.registro.nome, arvore } : undefined;
   }
 
   async arquivar(escopo: EscopoDaConta, id: string): Promise<boolean> {

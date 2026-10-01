@@ -13,6 +13,7 @@ import {
   type Pagina,
   type RegistroDeDocumento,
   RepositorioDeDocumentos,
+  type ResumoDoHistorico,
 } from '../../application/repositorio-de-documentos';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -101,6 +102,38 @@ export class RepositorioDeDocumentosNoBanco extends RepositorioDeDocumentos {
       if (alteradas.count === 0) return undefined;
       const linha = await tx.documento.findFirst({ where: { id, contaId: escopo.contaId } });
       return linha ? registro(linha) : undefined;
+    });
+  }
+
+  async resumoDoHistorico(escopo: EscopoDaConta, id: string): Promise<ResumoDoHistorico | undefined> {
+    if (!UUID.test(id)) return undefined;
+    return this.prisma.executar(escopo, async (tx) => {
+      const doc = await tx.documento.findFirst({ where: { id, contaId: escopo.contaId, arquivadoEm: null }, select: { versaoAtual: true } });
+      if (!doc) return undefined;
+      if (doc.versaoAtual === 0) return { cauda: [] };
+      // a edição mais recente marca o começo da cauda; tudo depois dela é reversão
+      const ultimaEdicao = await tx.loteDeOperacoes.findFirst({ where: { documentoId: id, contaId: escopo.contaId, tipo: 'edicao' }, orderBy: { versao: 'desc' }, select: { versao: true } });
+      const desde = ultimaEdicao?.versao ?? 0;
+      const linhas = await tx.loteDeOperacoes.findMany({
+        where: { documentoId: id, contaId: escopo.contaId, versao: { gte: Math.max(1, desde) } },
+        orderBy: { versao: 'desc' },
+        select: CAMPOS_DO_LOTE,
+      });
+      const lotes = linhas.map(loteGravado);
+      const cauda = lotes.filter((l) => l.versao > desde);
+      const antes = lotes.find((l) => l.versao === desde);
+      const atual = lotes[0];
+      return { ...(atual ? { atual } : {}), cauda, ...(antes ? { antesDaCauda: antes } : {}) };
+    });
+  }
+
+  async arvoreNaVersao(escopo: EscopoDaConta, id: string, versao: number): Promise<{ nome: string; arvore: Documento } | undefined> {
+    if (!UUID.test(id) || !Number.isInteger(versao) || versao < 0) return undefined;
+    return this.prisma.executar(escopo, async (tx) => {
+      const doc = await tx.documento.findFirst({ where: { id, contaId: escopo.contaId }, select: { nome: true } });
+      if (!doc) return undefined;
+      const linha = await tx.versaoDeDocumento.findUnique({ where: { documentoId_versao: { documentoId: id, versao } } });
+      return linha?.arvore ? { nome: doc.nome, arvore: lerArvore(linha.arvore) } : undefined;
     });
   }
 

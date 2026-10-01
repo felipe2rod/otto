@@ -184,6 +184,36 @@ export function contratoDoRepositorioDeDocumentos(nome: string, criar: () => Pro
       });
     });
 
+    it('resumo do histórico: o lote atual, a cauda de reversões e o lote logo antes dela', async () => {
+      const d = await novo(A);
+      expect(await r.resumoDoHistorico(A, d.id)).toEqual({ cauda: [] });
+      const reversao = (versao: number, ate: number) => lote(versao, { tipo: 'reversao', reverteAteVersao: ate, operacoes: [], tocados: [], descricao: '' });
+      await r.comTrava(A, d.id, (doc) => doc.gravarLote(lote(1)));
+      await r.comTrava(A, d.id, (doc) => doc.gravarLote(lote(2)));
+      const soEdicoes = await r.resumoDoHistorico(A, d.id);
+      expect([soEdicoes?.atual?.versao, soEdicoes?.cauda, soEdicoes?.antesDaCauda?.versao]).toEqual([2, [], 2]);
+      await r.comTrava(A, d.id, (doc) => doc.gravarLote(reversao(3, 1)));
+      await r.comTrava(A, d.id, (doc) => doc.gravarLote(reversao(4, 0)));
+      const comCauda = await r.resumoDoHistorico(A, d.id);
+      expect(comCauda?.atual?.versao).toBe(4);
+      expect(comCauda?.cauda.map((l) => l.versao)).toEqual([4, 3]);
+      expect(comCauda?.antesDaCauda?.versao).toBe(2);
+      // escopo trocado e documento inexistente
+      expect(await r.resumoDoHistorico(B, d.id)).toBeUndefined();
+      expect(await r.resumoDoHistorico(A, randomUUID())).toBeUndefined();
+    });
+
+    it('árvore de uma versão, fora de trava: é o que a exportação lê', async () => {
+      const d = await novo(A);
+      const l1 = lote(1);
+      await r.comTrava(A, d.id, (doc) => doc.gravarLote(l1));
+      await r.comTrava(A, d.id, (doc) => doc.gravarLote(lote(2)));
+      expect(await r.arvoreNaVersao(A, d.id, 1)).toEqual({ nome: 'doc', arvore: l1.arvore });
+      expect((await r.arvoreNaVersao(A, d.id, 0))?.arvore).toEqual(documentoVazio());
+      expect(await r.arvoreNaVersao(A, d.id, 9)).toBeUndefined();
+      expect(await r.arvoreNaVersao(B, d.id, 1)).toBeUndefined();
+    });
+
     it('histórico: do mais novo para o mais velho, paginado', async () => {
       const d = await novo(A);
       for (const v of [1, 2, 3]) await r.comTrava(A, d.id, (doc) => doc.gravarLote(lote(v)));

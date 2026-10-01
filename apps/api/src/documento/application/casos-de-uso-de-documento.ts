@@ -24,12 +24,14 @@ import {
   type RespostaDeLote,
 } from '@otto/shared';
 import type { RepositorioDeArquivos } from '../../arquivo/application/repositorio-de-arquivos';
+import type { BibliotecaDeFontes } from '../../biblioteca/application/biblioteca-de-fontes';
 import { ErroDaAplicacao, NaoEncontrado, PedidoInvalido } from '../../plataforma/erros/erro-da-aplicacao';
 import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
 import { CursorInvalido } from '../../plataforma/paginacao/cursor';
 import { type RegistroDeUso, RegistroDeUsoMudo } from '../../plataforma/uso/registro-de-uso';
 import { arquivosDaArvore } from '../domain/arquivos-da-arvore';
-import { conteudoDe, planejarDesfazer, planejarRefazer } from '../domain/historico';
+import { familiasCitadas } from '../domain/familias-citadas';
+import { conteudoDe, type LoteNoHistorico, planejarDesfazer, planejarRefazer } from '../domain/historico';
 import { NOME_PADRAO_DE_DOCUMENTO, nomeDaCopia } from '../textos';
 import type { MedidorDeTexto } from './medidor-de-texto';
 import type { DocumentoGuardado, DocumentoTravado, LoteGravado, RegistroDeDocumento, RepositorioDeDocumentos } from './repositorio-de-documentos';
@@ -39,7 +41,17 @@ export const LIMITE_DE_BYTES_DA_ARVORE = 4 * 1024 * 1024;
 
 const bytesDe = (arvore: Documento): number => Buffer.byteLength(JSON.stringify(arvore), 'utf8');
 
-const aberto = (d: DocumentoGuardado): DocumentoAberto => ({ id: d.id, nome: d.nome, versao: d.versao, arvore: d.arvore });
+type Possibilidades = Pick<DocumentoAberto, 'podeDesfazer' | 'podeRefazer'>;
+
+/** Se há o que desfazer (algum conteúdo de pé) e o que refazer (um desfazer logo antes, sem edição depois). */
+function possibilidades(atual: LoteNoHistorico | undefined, cauda: readonly LoteNoHistorico[], antesDaCauda: LoteNoHistorico | undefined): Possibilidades {
+  return { podeDesfazer: conteudoDe(atual) > 0, podeRefazer: planejarRefazer(cauda, conteudoDe(antesDaCauda)) !== undefined };
+}
+
+/** Documento que acabou de nascer (criado ou duplicado): não há histórico. */
+const SEM_HISTORICO: Possibilidades = { podeDesfazer: false, podeRefazer: false };
+/** Depois de um lote de edição: dá para desfazer, e o que havia para refazer se perdeu. */
+const DEPOIS_DE_EDITAR: Possibilidades = { podeDesfazer: true, podeRefazer: false };
 
 function doHistorico(l: LoteGravado): LoteDoHistorico {
   return {
@@ -64,10 +76,26 @@ export class CasosDeUsoDeDocumento {
     private readonly medidores: MedidorDeTexto,
     private readonly gerarId: () => string,
     private readonly uso: RegistroDeUso = new RegistroDeUsoMudo(),
+    private readonly fontes?: BibliotecaDeFontes,
   ) {}
 
+  /** O documento como a rota o devolve: com as possibilidades do histórico e os pesos de fonte que existem. */
+  private async aberto(d: DocumentoGuardado, historico: Possibilidades): Promise<DocumentoAberto> {
+    const fontes: DocumentoAberto['fontes'] = [];
+    if (this.fontes) {
+      for (const familia of [...familiasCitadas(d.arvore)].sort()) fontes.push({ familia, pesos: (await this.fontes.pesosDa(familia)).map((f) => f.peso) });
+    }
+    return { id: d.id, nome: d.nome, versao: d.versao, arvore: d.arvore, ...historico, fontes };
+  }
+
+  private async possibilidadesDe(doc: DocumentoTravado): Promise<Possibilidades> {
+    const cauda = await doc.caudaDeReversoes();
+    const antes = doc.registro.versao - cauda.length;
+    return possibilidades(await doc.lote(doc.registro.versao), cauda, antes > 0 ? await doc.lote(antes) : undefined);
+  }
+
   async criar(escopo: EscopoDaConta, pedido: PedidoDeCriarDocumento): Promise<DocumentoAberto> {
-    return aberto(await this.documentos.criar(escopo, { id: this.gerarId(), nome: pedido.nome ?? NOME_PADRAO_DE_DOCUMENTO, arvore: documentoVazio() }));
+    return this.aberto(await this.documentos.criar(escopo, { id: this.gerarId(), nome: pedido.nome ?? NOME_PADRAO_DE_DOCUMENTO, arvore: documentoVazio() }), SEM_HISTORICO);
   }
 
   async listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number }): Promise<ListaDeDocumentos> {
@@ -79,7 +107,8 @@ export class CasosDeUsoDeDocumento {
   async abrir(escopo: EscopoDaConta, id: string): Promise<DocumentoAberto> {
     const doc = await this.documentos.abrir(escopo, id);
     if (!doc) throw new NaoEncontrado();
-    return aberto(doc);
+    const resumo = await this.documentos.resumoDoHistorico(escopo, id);
+    return this.aberto(doc, resumo ? possibilidades(resumo.atual, resumo.cauda, resumo.antesDaCauda) : SEM_HISTORICO);
   }
 
   /** Renomear não é operação do catálogo nem passo do histórico: o nome é do registro. */
@@ -93,7 +122,7 @@ export class CasosDeUsoDeDocumento {
   async duplicar(escopo: EscopoDaConta, id: string, pedido: PedidoDeDuplicarDocumento): Promise<DocumentoAberto> {
     const original = await this.documentos.abrir(escopo, id);
     if (!original) throw new NaoEncontrado();
-    return aberto(await this.documentos.criar(escopo, { id: this.gerarId(), nome: pedido.nome ?? nomeDaCopia(original.nome), arvore: original.arvore }));
+    return this.aberto(await this.documentos.criar(escopo, { id: this.gerarId(), nome: pedido.nome ?? nomeDaCopia(original.nome), arvore: original.arvore }), SEM_HISTORICO);
   }
 
   async arquivar(escopo: EscopoDaConta, id: string): Promise<void> {
@@ -112,7 +141,7 @@ export class CasosDeUsoDeDocumento {
       const repetido = await doc.lotePorChaveDoCliente(pedido.id);
       if (repetido) {
         const arvore = pedido.devolver ? await doc.arvoreDaVersao(repetido.versao) : undefined;
-        return { versao: repetido.versao, lote: { id: pedido.id, tocados: repetido.tocados }, ...(arvore ? { arvore } : {}) };
+        return { versao: repetido.versao, lote: { id: pedido.id, tocados: repetido.tocados }, ...(arvore ? { arvore } : {}), ...DEPOIS_DE_EDITAR };
       }
       this.conferirVersao(doc, pedido.versaoBase);
 
@@ -148,7 +177,7 @@ export class CasosDeUsoDeDocumento {
         operacoesPorTipo[op] = (operacoesPorTipo[op] ?? 0) + 1;
       }
       this.uso.registrar(escopo, { evento: 'lote_aplicado', documentoId: id, autoria: 'designer', operacoesPorTipo, nosTocados: resultado.tocados.length, mediuTexto: sessao !== undefined, versao });
-      return { versao, lote: { id: pedido.id, tocados: resultado.tocados }, ...(pedido.devolver ? { arvore: resultado.doc } : {}) };
+      return { versao, lote: { id: pedido.id, tocados: resultado.tocados }, ...(pedido.devolver ? { arvore: resultado.doc } : {}), ...DEPOIS_DE_EDITAR };
     });
   }
 
@@ -162,7 +191,7 @@ export class CasosDeUsoDeDocumento {
       if (!plano) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.nadaParaDesfazer);
       const resposta = await this.reverter(doc, plano.restaurar);
       await doc.marcarDesfeito(plano.desfaz, resposta.loteId);
-      return { versao: resposta.versao, arvore: resposta.arvore };
+      return { versao: resposta.versao, arvore: resposta.arvore, ...(await this.possibilidadesDe(doc)) };
     });
   }
 
@@ -175,7 +204,7 @@ export class CasosDeUsoDeDocumento {
       if (!plano) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.nadaParaRefazer);
       const resposta = await this.reverter(doc, plano.restaurar);
       await doc.marcarDesfeito(plano.refaz, null);
-      return { versao: resposta.versao, arvore: resposta.arvore };
+      return { versao: resposta.versao, arvore: resposta.arvore, ...(await this.possibilidadesDe(doc)) };
     });
   }
 

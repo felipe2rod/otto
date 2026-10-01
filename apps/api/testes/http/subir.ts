@@ -1,7 +1,8 @@
 // Sobe a API de verdade (NestJS, rotas, guarda, filtro, banco de teste) sem abrir porta de rede.
-// Trocados só na borda: armazenamento e biblioteca de fontes em memória, o registro (para ler o log)
-// e o resolvedor de escopo, que nos testes escolhe a conta pelo cookie. É assim que a suíte
+// Trocados só na borda: armazenamento, biblioteca de fontes e fila em memória, o registro (para ler
+// o log) e o resolvedor de escopo, que nos testes escolhe a conta pelo cookie. É assim que a suíte
 // "duas-contas" existe antes do login: o ponto único de escopo é o mesmo da produção.
+// A fila roda no próprio processo, com o MESMO consumidor do worker e o motor de exportação de verdade.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { INestApplication } from '@nestjs/common';
@@ -13,9 +14,13 @@ import { ArmazenamentoDeArquivo } from '../../src/arquivo/application/armazename
 import { ArmazenamentoEmMemoria } from '../../src/arquivo/infrastructure/adaptadores/memoria/armazenamento-em-memoria';
 import { BibliotecaDeFontes } from '../../src/biblioteca/application/biblioteca-de-fontes';
 import { BibliotecaDeFontesEmMemoria } from '../../src/biblioteca/infrastructure/memoria/biblioteca-de-fontes-em-memoria';
+import { CasosDeUsoDeExportacao } from '../../src/exportacao/application/casos-de-uso-de-exportacao';
+import { consumirExportacoes } from '../../src/exportacao/infrastructure/consumidor-de-exportacoes';
 import { lerConfiguracao } from '../../src/plataforma/config/configuracao';
 import type { EscopoDaConta } from '../../src/plataforma/escopo/escopo-da-conta';
 import { ResolvedorDeEscopo } from '../../src/plataforma/escopo/resolvedor-de-escopo';
+import { BarramentoEmMemoria } from '../../src/plataforma/fila/adaptadores/memoria/barramento-em-memoria';
+import { BarramentoDeEventos } from '../../src/plataforma/fila/barramento-de-eventos';
 import { Registro } from '../../src/plataforma/log/registro';
 import { criarContaDeTeste, urlDoAppDeTeste } from '../banco/conexoes';
 
@@ -43,6 +48,11 @@ export class ArmazenamentoEspiao extends ArmazenamentoEmMemoria {
     this.leituras++;
     return super.ler(escopo, chave);
   }
+  linksPedidos = 0;
+  override async linkAssinado(...argumentos: Parameters<ArmazenamentoEmMemoria['linkAssinado']>): Promise<string> {
+    this.linksPedidos++;
+    return super.linkAssinado(...argumentos);
+  }
 }
 
 export interface ApiDeTeste {
@@ -51,6 +61,8 @@ export interface ApiDeTeste {
   contaB: EscopoDaConta;
   armazenamento: ArmazenamentoEspiao;
   fontes: BibliotecaDeFontesEmMemoria;
+  /** A fila, no próprio processo. `await fila.ociosa()` espera as exportações pedidas terminarem. */
+  fila: BarramentoEmMemoria;
   /** Linhas de log emitidas, já lidas como JSON. */
   log: Record<string, unknown>[];
   logCru: string[];
@@ -68,7 +80,8 @@ export interface ClienteDeTeste {
   cru: ReturnType<typeof request>;
 }
 
-export async function subirApi(envExtra: Record<string, string> = {}): Promise<ApiDeTeste> {
+/** @param opcoes `consumirFila: false` deixa as exportações paradas na fila (para testar o que acontece antes de ficarem prontas). */
+export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { consumirFila?: boolean } = {}): Promise<ApiDeTeste> {
   const [contaA, contaB] = [await criarContaDeTeste('Conta A'), await criarContaDeTeste('Conta B')];
   const config = lerConfiguracao({
     AMBIENTE: 'teste',
@@ -89,6 +102,7 @@ export async function subirApi(envExtra: Record<string, string> = {}): Promise<A
   });
   const armazenamento = new ArmazenamentoEspiao();
   const fontes = new BibliotecaDeFontesEmMemoria();
+  const fila = new BarramentoEmMemoria();
   await fontes.registrar({ familia: 'Anton', peso: 400, nomePostScript: 'Anton-Regular', licenca: null, conteudo: FONTE_ANTON });
 
   const modulo = await Test.createTestingModule({ imports: [ModuloRaiz.para('api', config)] })
@@ -98,18 +112,21 @@ export async function subirApi(envExtra: Record<string, string> = {}): Promise<A
     .useValue(armazenamento)
     .overrideProvider(BibliotecaDeFontes)
     .useValue(fontes)
+    .overrideProvider(BarramentoDeEventos)
+    .useValue(fila)
     .overrideProvider(Registro)
     .useValue(registro)
     .compile();
   const app = configurarAplicacao(modulo.createNestApplication({ bodyParser: false }));
   await app.init();
+  if (opcoes.consumirFila !== false) await consumirExportacoes(fila, app.get(CasosDeUsoDeExportacao));
 
   const como = (conta: 'A' | 'B'): ClienteDeTeste => {
     const agente = request(app.getHttpServer());
     const com = (t: request.Test) => t.set('Cookie', `otto_sessao=${conta}`).set(CABECALHOS.cliente.nome, CABECALHOS.cliente.valor);
     return { get: (c) => com(agente.get(c)), post: (c) => com(agente.post(c)), patch: (c) => com(agente.patch(c)), delete: (c) => com(agente.delete(c)), cru: agente };
   };
-  return { app, contaA, contaB, armazenamento, fontes, log, logCru, como, fechar: () => app.close() };
+  return { app, contaA, contaB, armazenamento, fontes, fila, log, logCru, como, fechar: () => app.close() };
 }
 
 export const criarPrancheta = (nome = 'Feed') => ({ op: 'criarPrancheta', nome, largura: 1080, altura: 1350, fundo: '#ffffff' });

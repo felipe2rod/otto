@@ -27,6 +27,8 @@ export class GuardaDeEscopo implements CanActivate {
     const req = contexto.switchToHttp().getRequest<RequisicaoDoOtto>();
     // saúde não tem conta nem sessão
     if (req.path.startsWith('/api/saude/')) return true;
+    // download por link assinado: o link é a credencial, não há sessão (arquivo/presentation/controlador-de-links.ts)
+    if (req.method === 'GET' && req.path.startsWith('/api/links/')) return true;
 
     if (ESCRITA.has(req.method)) {
       if (req.get(CABECALHOS.cliente.nome) !== CABECALHOS.cliente.valor) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.clienteNaoIdentificado);

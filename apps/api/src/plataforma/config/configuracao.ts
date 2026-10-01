@@ -23,6 +23,13 @@ const Esquema = z
       .string()
       .regex(/^https?:\/\//)
       .optional(),
+    // por onde o NAVEGADOR alcança o servidor de objetos: é para ele que o link de download é assinado
+    ARMAZENAMENTO_ENDERECO_PUBLICO: z
+      .string()
+      .regex(/^https?:\/\//)
+      .optional(),
+    // só para o adaptador disco-local: assina os links de download que a própria API serve
+    SEGREDO_DE_ASSINATURA: z.string().min(32).optional(),
     ARMAZENAMENTO_REGIAO: z.string().min(1).default('us-east-1'),
     ARMAZENAMENTO_BUCKET: z.string().min(1).optional(),
     ARMAZENAMENTO_CHAVE_DE_ACESSO: z.string().min(1).optional(),
@@ -48,8 +55,16 @@ const Esquema = z
   });
 
 export type ConfiguracaoDoArmazenamento =
-  | { readonly adaptador: 'disco-local'; readonly pasta: string }
-  | { readonly adaptador: 's3'; readonly endereco: string; readonly regiao: string; readonly bucket: string; readonly chaveDeAcesso: string; readonly chaveSecreta: string };
+  | { readonly adaptador: 'disco-local'; readonly pasta: string; readonly segredoDeAssinatura?: string }
+  | {
+      readonly adaptador: 's3';
+      readonly endereco: string;
+      readonly enderecoPublico: string;
+      readonly regiao: string;
+      readonly bucket: string;
+      readonly chaveDeAcesso: string;
+      readonly chaveSecreta: string;
+    };
 
 export interface Configuracao {
   readonly ambiente: 'desenvolvimento' | 'teste' | 'producao';
@@ -87,10 +102,11 @@ export function lerConfiguracao(env: Record<string, string | undefined>): Config
     limites: Object.freeze({ bytesPorArquivo: e.BYTES_MAXIMOS_POR_ARQUIVO, ladoMaximoDeImagem: e.LADO_MAXIMO_DE_IMAGEM, megapixelsNoMaximo: e.MEGAPIXELS_MAXIMOS_DE_IMAGEM }),
     armazenamento: Object.freeze(
       e.ARMAZENAMENTO_ADAPTADOR === 'disco-local'
-        ? { adaptador: 'disco-local' as const, pasta: e.ARMAZENAMENTO_PASTA as string }
+        ? { adaptador: 'disco-local' as const, pasta: e.ARMAZENAMENTO_PASTA as string, ...(e.SEGREDO_DE_ASSINATURA ? { segredoDeAssinatura: e.SEGREDO_DE_ASSINATURA } : {}) }
         : {
             adaptador: 's3' as const,
             endereco: e.ARMAZENAMENTO_ENDERECO as string,
+            enderecoPublico: e.ARMAZENAMENTO_ENDERECO_PUBLICO ?? (e.ARMAZENAMENTO_ENDERECO as string),
             regiao: e.ARMAZENAMENTO_REGIAO,
             bucket: e.ARMAZENAMENTO_BUCKET as string,
             chaveDeAcesso: e.ARMAZENAMENTO_CHAVE_DE_ACESSO as string,

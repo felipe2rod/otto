@@ -4,7 +4,8 @@ import path from 'node:path';
 import { Documento, type No } from '@otto/documento';
 import { describe, expect, it } from 'vitest';
 import { BibliotecaDeFontesEmMemoria } from '../../../biblioteca/infrastructure/memoria/biblioteca-de-fontes-em-memoria';
-import { familiasCitadas, MedidorComCanvasKit } from './medidor-com-canvaskit';
+import { familiasCitadas } from '../../domain/familias-citadas';
+import { MedidorComCanvasKit } from './medidor-com-canvaskit';
 
 const FONTES = path.resolve(import.meta.dirname, '../../../../../../packages/render/recursos-de-teste/fontes');
 

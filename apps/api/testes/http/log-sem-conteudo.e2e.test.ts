@@ -22,6 +22,8 @@ const SENTINELAS = {
 let api: ApiDeTeste;
 let A: ClienteDeTeste;
 let documentoId: string;
+let exportacaoId: string;
+let tokenDoLink: string;
 
 beforeAll(async () => {
   api = await subirApi();
@@ -60,6 +62,16 @@ beforeAll(async () => {
   await A.get(`/api/documentos/${doc.id}/historico`);
   await A.get('/api/documentos');
   await A.get(`/api/arquivos/${sha256}`);
+  // exportação: pedido, trabalho da fila, consulta, download pelo link (o nome do arquivo é o nome do documento)
+  await A.post(`/api/documentos/${doc.id}/exportacoes/relatorio`).send({ formato: 'psd' });
+  const exportacao = (await A.post(`/api/documentos/${doc.id}/exportacoes`).send({ formato: 'psd' })).body as { id: string };
+  exportacaoId = exportacao.id;
+  await api.fila.ociosa();
+  await A.get(`/api/exportacoes/${exportacao.id}`);
+  const link = (await A.get(`/api/exportacoes/${exportacao.id}/arquivos/0`)).headers.location as string;
+  tokenDoLink = link.split('/').at(-1) as string;
+  await A.cru.get(link);
+  await A.post(`/api/documentos/${doc.id}/exportacoes`).send({ formato: 'psd', pranchetas: [S.alvoQueNaoExiste] });
   await A.post(`/api/documentos/${doc.id}/desfazer`).send({ versaoBase: 1 });
   await A.post(`/api/documentos/${doc.id}/duplicar`).send({ nome: S.nomeNovo });
   await A.get(`/api/rota-que-nao-existe/${S.nomeDoDocumento}?q=${S.busca}`);
@@ -88,8 +100,9 @@ describe('o log não carrega conteúdo', () => {
 describe('o log carrega o que precisa', () => {
   it('toda requisição de negócio registra conta, correlação, método, rota como modelo, status e duração', () => {
     // rota que não existe e corpo que nem chegou a ser lido não são caminho de negócio:
-    // não passam pela guarda e não têm conta
-    const requisicoes = api.log.filter((l) => l.evento === 'requisicao' && l.rota !== '(rota desconhecida)');
+    // não passam pela guarda e não têm conta. O download pelo link assinado também não tem
+    // sessão: quem autoriza é o link.
+    const requisicoes = api.log.filter((l) => l.evento === 'requisicao' && l.rota !== '(rota desconhecida)' && l.rota !== '/api/links/:token');
     expect(requisicoes.length).toBeGreaterThanOrEqual(12);
     for (const l of requisicoes) {
       expect(l, JSON.stringify(l)).toMatchObject({ contaId: api.contaA.contaId, servico: 'api' });
@@ -118,9 +131,26 @@ describe('o log carrega o que precisa', () => {
   });
 
   it('o erro de lote registra o código e o tipo da operação, não a mensagem (que cita a camada)', () => {
-    const recusas = api.log.filter((l) => l.evento === 'requisicao' && l.status === 422);
+    const recusas = api.log.filter((l) => l.evento === 'requisicao' && l.status === 422 && l.rota === '/api/documentos/:id/lotes');
     expect(recusas.length).toBeGreaterThan(0);
     for (const l of recusas) expect(l).toMatchObject({ codigo: 'lote_invalido' });
+  });
+
+  it('a exportação registra formato, contagens, bytes, espera e duração; o link assinado e a chave do objeto não aparecem', () => {
+    expect(api.log.find((l) => l.evento === 'exportacao_pedida')).toMatchObject({ contaId: api.contaA.contaId, exportacaoId, documentoId, formato: 'psd', pranchetas: 1, juntas: false });
+    const terminada = api.log.find((l) => l.evento === 'exportacao_terminada');
+    expect(terminada).toMatchObject({ contaId: api.contaA.contaId, exportacaoId, formato: 'psd', resultado: 'pronta', pranchetas: 1, falhas: 0, arquivos: 1 });
+    expect(typeof terminada?.duracaoMs).toBe('number');
+    expect(typeof terminada?.esperaMs).toBe('number');
+    expect(terminada?.bytes).toBeGreaterThan(1000);
+    const rotas = new Set(api.log.filter((l) => l.evento === 'requisicao').map((l) => `${l.metodo} ${l.rota}`));
+    expect(rotas).toContain('POST /api/documentos/:id/exportacoes');
+    expect(rotas).toContain('GET /api/exportacoes/:id/arquivos/:indice');
+    expect(rotas).toContain('GET /api/links/:token');
+    for (const linha of api.logCru) {
+      expect(linha).not.toContain(tokenDoLink);
+      expect(linha).not.toContain(`/exportacoes/${exportacaoId}/0`);
+    }
   });
 
   it('o envio de arquivo registra tipo, bytes e medidas', () => {

@@ -36,6 +36,8 @@ x-servidor: &servidor
   #   ARMAZENAMENTO_ADAPTADOR: disco-local  e  ARMAZENAMENTO_PASTA: /dados/arquivos
   ARMAZENAMENTO_ADAPTADOR: s3
   ARMAZENAMENTO_ENDERECO: http://armazenamento:7070
+  # Endereço do armazenamento VISTO DO NAVEGADOR: é o que vai no link assinado de download.
+  ARMAZENAMENTO_ENDERECO_PUBLICO: http://localhost:${PORTA_DO_ARMAZENAMENTO:-8081}
   ARMAZENAMENTO_BUCKET: otto
   ARMAZENAMENTO_CHAVE_DE_ACESSO: ${ARMAZENAMENTO_CHAVE_DE_ACESSO:-otto-dev}
   ARMAZENAMENTO_CHAVE_SECRETA: ${ARMAZENAMENTO_CHAVE_SECRETA:-segredo-do-armazenamento-dev}
@@ -47,7 +49,7 @@ services:
     volumes:
       - ./docker/borda/Caddyfile:/etc/caddy/Caddyfile:ro
     ports:
-      # única porta publicada, e só na máquina local. Ocupadas no host: 80, 3030, 3306, 5433, 7070, 8137.
+      # página e API, só na máquina local. Ocupadas no host: 80, 3030, 3306, 5433, 7070, 8137.
       - "127.0.0.1:${PORTA_DA_BORDA:-8080}:8080"
     depends_on:
       api: { condition: service_healthy }
@@ -59,6 +61,9 @@ services:
     environment:
       <<: *servidor
       PORTA: "3000"
+    # A API não renderiza nem exporta: mede texto (um motor de 128 MB) e serve. O teto é folgado
+    # porque em desenvolvimento ela roda com recarga automática.
+    mem_limit: 1g
     healthcheck: &saude
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+process.env.PORTA+'/api/saude/pronto').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 5s
@@ -76,6 +81,10 @@ services:
     environment:
       <<: *servidor
       PORTA: "3001"
+    # Teto de memória do worker. Uma exportação por vez (EXPORTACOES_AO_MESMO_TEMPO = 1); o pico
+    # medido está em docs/mvp/backend.md, seção 17. Passou do teto: o contêiner é morto, a exportação
+    # fica sem sinal de vida e é dada como interrompida, e a API continua de pé.
+    mem_limit: 2g
     healthcheck: *saude
     depends_on:
       instalar: { condition: service_completed_successfully }
@@ -100,8 +109,9 @@ services:
 
   migracao:
     <<: *node
-    # único serviço de desenvolvimento com a URL do papel migrador (ADR 023)
-    command: ["pnpm", "--filter", "@otto/api", "banco:migrar"]
+    # único serviço de desenvolvimento com a URL do papel migrador (ADR 023).
+    # Aplica as migrações e prepara o esquema da fila (pg-boss), que API e worker só leem e escrevem.
+    command: ["pnpm", "--filter", "@otto/api", "banco:preparar"]
     environment:
       BANCO_URL_MIGRADOR: postgresql://otto_migrador:${BANCO_SENHA_MIGRADOR:-migrador-dev}@banco:5432/otto
     depends_on:
@@ -148,6 +158,10 @@ services:
       ROOT_SECRET_KEY: ${ARMAZENAMENTO_CHAVE_SECRETA:-segredo-do-armazenamento-dev}
     volumes:
       - objetos:/dados
+    ports:
+      # O download de exportação é um link assinado que o NAVEGADOR abre direto no armazenamento.
+      # Só na máquina local; sem a assinatura (5 minutos) o servidor recusa.
+      - "127.0.0.1:${PORTA_DO_ARMAZENAMENTO:-8081}:7070"
 
   # ---------- testes (não sobe com `docker compose up`) ----------
   teste:

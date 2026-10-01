@@ -92,7 +92,8 @@ FROM build AS migracao
 WORKDIR /workspace/apps/api
 USER node
 # chama a ferramenta direto: o pnpm, como usuário sem privilégio, tentaria reconciliar o node_modules
-CMD ["./node_modules/.bin/prisma", "migrate", "deploy"]
+# 1. migrações; 2. esquema da fila (pg-boss), criado pelo migrador e liberado para o papel da aplicação
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && ./node_modules/.bin/tsx src/comandos/preparar-fila.ts"]
 
 # ---------- web: site público e editor (Next em modo standalone, ADR 019) ----------
 # Parte de "deps", não de "build": o web não precisa do build da API.

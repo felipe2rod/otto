@@ -17,11 +17,17 @@ describe('fronteira do escopo', () => {
     expect(citam(fora('plataforma/persistencia'), /PrismaClient|@prisma\/client|@prisma\/adapter-pg|persistencia\/gerado/)).toEqual([]);
   });
 
-  it('o driver do banco só é importado dentro de plataforma/persistencia', () => {
-    expect(citam(fora('plataforma/persistencia'), /from\s+['"]pg['"]/)).toEqual([]);
+  it('o driver do banco só é importado dentro de plataforma/persistencia e do adaptador da fila', () => {
+    const permitido = (a: string) => relativo(a).startsWith('apps/api/src/plataforma/fila/adaptadores/pg-boss/');
+    expect(
+      citam(
+        fora('plataforma/persistencia').filter((a) => !permitido(a)),
+        /from\s+['"]pg['"]/,
+      ),
+    ).toEqual([]);
   });
 
-  it('EscopoDaConta só é aberto dentro de plataforma/escopo', () => {
+  it('EscopoDaConta só é aberto dentro de plataforma/escopo (pela requisição ou pelo trabalho da fila)', () => {
     expect(citam(fora('plataforma/escopo'), /EscopoDaConta\.abrir\(/)).toEqual([]);
   });
 
@@ -41,6 +47,7 @@ describe('fronteira do escopo', () => {
       'apps/api/src/comandos/semear-biblioteca.ts',
       'apps/api/src/comandos/importar-da-poc.ts',
       'apps/api/src/comandos/montar.ts',
+      'apps/api/src/comandos/preparar-fila.ts',
     ]);
     expect(citam(fora('plataforma/config'), /process\.env/).filter((a) => !permitido.has(a))).toEqual([]);
   });

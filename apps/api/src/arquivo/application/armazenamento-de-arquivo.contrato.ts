@@ -8,6 +8,8 @@ import { ChaveDeObjetoInvalida, chaveDeArquivoDaConta } from './chave-de-objeto'
 
 export interface AdaptadorSobTeste {
   armazenamento: ArmazenamentoDeArquivo;
+  /** Segue um link assinado como um navegador seguiria. Cada adaptador tem o seu jeito de servir. */
+  baixar(link: string): Promise<{ status: number; bytes?: Uint8Array; disposicao?: string | null; tipo?: string | null }>;
   limpar(): Promise<void>;
 }
 
@@ -101,6 +103,54 @@ export function contratoDoArmazenamentoDeArquivo(nome: string, criar: () => Prom
       await expect(sob.armazenamento.guardarNaBiblioteca(chaveDeA, new Uint8Array([2]), 'image/png')).rejects.toBeInstanceOf(ChaveDeObjetoInvalida);
       await expect(sob.armazenamento.guardarNaBiblioteca('biblioteca/../contas/x', new Uint8Array([2]), 'image/png')).rejects.toBeInstanceOf(ChaveDeObjetoInvalida);
       expect(Array.from((await sob.armazenamento.ler(contaA, chaveDeA)) as Uint8Array)).toEqual([1]);
+    });
+
+    describe('link assinado de vida curta', () => {
+      const chaveDaExportacao = (escopo: EscopoDaConta, n: string) => `contas/${escopo.contaId}/exportacoes/01990000-0000-7000-8000-0000000000e${n}/0.psd`;
+      const opcoes = { validadeEmSegundos: 60, nomeDoArquivo: 'Promoção "de verão" - Feed.psd', tipoMime: 'image/vnd.adobe.photoshop' };
+
+      it('entrega os bytes, como anexo, com o nome pedido e o tipo', async () => {
+        const chave = chaveDaExportacao(contaA, '1');
+        await sob.armazenamento.guardar(contaA, chave, new Uint8Array([8, 66, 80, 83]), opcoes.tipoMime);
+        const link = await sob.armazenamento.linkAssinado(contaA, chave, opcoes);
+        const r = await sob.baixar(link);
+        expect(r.status).toBe(200);
+        expect(Array.from(r.bytes as Uint8Array)).toEqual([8, 66, 80, 83]);
+        expect(r.disposicao).toContain('attachment');
+        expect(decodeURIComponent(r.disposicao ?? '')).toContain('Promoção "de verão" - Feed.psd');
+        expect(r.tipo).toContain('image/vnd.adobe.photoshop');
+      });
+
+      it('o link não carrega credencial fixa nem dá acesso a outro objeto: trocar um caractere invalida', async () => {
+        const chave = chaveDaExportacao(contaA, '2');
+        await sob.armazenamento.guardar(contaA, chave, new Uint8Array([1]), opcoes.tipoMime);
+        const link = await sob.armazenamento.linkAssinado(contaA, chave, opcoes);
+        const meio = Math.floor(link.length - 6);
+        const adulterado = `${link.slice(0, meio)}${link[meio] === 'a' ? 'b' : 'a'}${link.slice(meio + 1)}`;
+        expect((await sob.baixar(adulterado)).status).toBeGreaterThanOrEqual(400);
+      });
+
+      it('vence: depois da validade o link não entrega mais', async () => {
+        const chave = chaveDaExportacao(contaA, '3');
+        await sob.armazenamento.guardar(contaA, chave, new Uint8Array([1]), opcoes.tipoMime);
+        const link = await sob.armazenamento.linkAssinado(contaA, chave, { ...opcoes, validadeEmSegundos: 1 });
+        expect((await sob.baixar(link)).status).toBe(200);
+        await new Promise((ok) => setTimeout(ok, 2500));
+        expect((await sob.baixar(link)).status).toBeGreaterThanOrEqual(400);
+      });
+
+      it('escopo trocado: a conta B não consegue link para chave da conta A', async () => {
+        const chave = chaveDaExportacao(contaA, '4');
+        await sob.armazenamento.guardar(contaA, chave, new Uint8Array([1]), opcoes.tipoMime);
+        await expect(sob.armazenamento.linkAssinado(contaB, chave, opcoes)).rejects.toBeInstanceOf(EscopoDivergente);
+      });
+
+      it('recusa chave malformada e validade fora do razoável', async () => {
+        await expect(sob.armazenamento.linkAssinado(contaA, `contas/${contaA.contaId}/../x/y/z`, opcoes)).rejects.toBeInstanceOf(ChaveDeObjetoInvalida);
+        const chave = chaveDaExportacao(contaA, '5');
+        await expect(sob.armazenamento.linkAssinado(contaA, chave, { ...opcoes, validadeEmSegundos: 0 })).rejects.toThrow();
+        await expect(sob.armazenamento.linkAssinado(contaA, chave, { ...opcoes, validadeEmSegundos: 7200 })).rejects.toThrow();
+      });
     });
 
     it('a biblioteca do Otto é lida por qualquer conta, e nenhuma conta grava nela', async () => {

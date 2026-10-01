@@ -70,6 +70,7 @@ describe('lerConfiguracao', () => {
     expect(lerConfiguracao(comS3).armazenamento).toEqual({
       adaptador: 's3',
       endereco: 'http://armazenamento:7070',
+      enderecoPublico: 'http://armazenamento:7070',
       regiao: 'us-east-1',
       bucket: 'otto',
       chaveDeAcesso: 'acesso',
@@ -84,6 +85,22 @@ describe('lerConfiguracao', () => {
 
   it('com S3, o endereço precisa ser http ou https', () => {
     expect(erroDe({ ...comS3, ARMAZENAMENTO_ENDERECO: 'armazenamento:7070' }).variaveis).toEqual(['ARMAZENAMENTO_ENDERECO']);
+  });
+
+  it('com S3, o endereço público é opcional e vale o interno quando falta', () => {
+    expect(lerConfiguracao(comS3).armazenamento).toMatchObject({ enderecoPublico: 'http://armazenamento:7070' });
+    expect(lerConfiguracao({ ...comS3, ARMAZENAMENTO_ENDERECO_PUBLICO: 'http://localhost:8081' }).armazenamento).toMatchObject({
+      endereco: 'http://armazenamento:7070',
+      enderecoPublico: 'http://localhost:8081',
+    });
+    expect(erroDe({ ...comS3, ARMAZENAMENTO_ENDERECO_PUBLICO: 'localhost' }).variaveis).toEqual(['ARMAZENAMENTO_ENDERECO_PUBLICO']);
+  });
+
+  it('com disco local, o segredo de assinatura dos links é opcional, mas não pode ser curto', () => {
+    expect(lerConfiguracao(valida).armazenamento).toEqual({ adaptador: 'disco-local', pasta: '/dados/arquivos' });
+    const segredo = 'um-segredo-de-assinatura-com-mais-de-32-caracteres';
+    expect(lerConfiguracao({ ...valida, SEGREDO_DE_ASSINATURA: segredo }).armazenamento).toEqual({ adaptador: 'disco-local', pasta: '/dados/arquivos', segredoDeAssinatura: segredo });
+    expect(erroDe({ ...valida, SEGREDO_DE_ASSINATURA: 'curto' }).variaveis).toEqual(['SEGREDO_DE_ASSINATURA']);
   });
 
   it('limites de envio têm padrão e aceitam troca; valor absurdo é recusado', () => {

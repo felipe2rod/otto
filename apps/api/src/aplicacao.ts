@@ -2,7 +2,7 @@
 // (main.ts e worker.ts). O NestJS fica aqui e nas pastas presentation/ e infrastructure/;
 // caso de uso e porta não o conhecem (ADR 008).
 import 'reflect-metadata';
-import { type DynamicModule, type INestApplication, Inject, Module, type OnApplicationShutdown } from '@nestjs/common';
+import { type DynamicModule, type INestApplication, Module } from '@nestjs/common';
 import { APP_GUARD, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { LIMITES, TIPOS_DE_IMAGEM } from '@otto/shared';
@@ -13,24 +13,35 @@ import { ArmazenamentoEmDiscoLocal } from './arquivo/infrastructure/adaptadores/
 import { ArmazenamentoS3 } from './arquivo/infrastructure/adaptadores/s3/armazenamento-s3';
 import { RepositorioDeArquivosNoBanco } from './arquivo/infrastructure/prisma/repositorio-de-arquivos-no-banco';
 import { ControladorDeArquivos, ControladorDeVetores } from './arquivo/presentation/controlador-de-arquivos';
+import { ControladorDeLinks } from './arquivo/presentation/controlador-de-links';
 import { BibliotecaDeFontes } from './biblioteca/application/biblioteca-de-fontes';
 import { CasosDeUsoDeFontes } from './biblioteca/application/casos-de-uso-de-fontes';
 import { BibliotecaDeFontesNoBanco } from './biblioteca/infrastructure/biblioteca-de-fontes-no-banco';
 import { ControladorDeFontes } from './biblioteca/presentation/controlador-de-fontes';
+import { CicloDeVida } from './ciclo-de-vida';
 import { CasosDeUsoDeDocumento } from './documento/application/casos-de-uso-de-documento';
 import { MedidorDeTexto } from './documento/application/medidor-de-texto';
 import { RepositorioDeDocumentos } from './documento/application/repositorio-de-documentos';
 import { RepositorioDeDocumentosNoBanco } from './documento/infrastructure/prisma/repositorio-de-documentos-no-banco';
 import { MedidorComCanvasKit } from './documento/infrastructure/render/medidor-com-canvaskit';
 import { ControladorDeDocumentos } from './documento/presentation/controlador-de-documentos';
+import { CasosDeUsoDeExportacao, type FalhaObservada } from './exportacao/application/casos-de-uso-de-exportacao';
+import { MotorDeExportacao } from './exportacao/application/motor-de-exportacao';
+import { RepositorioDeExportacoes } from './exportacao/application/repositorio-de-exportacoes';
+import { RepositorioDeExportacoesNoBanco } from './exportacao/infrastructure/prisma/repositorio-de-exportacoes-no-banco';
+import { MotorDeExportacaoComRender } from './exportacao/infrastructure/render/motor-de-exportacao-com-render';
+import { ControladorDeExportacoes } from './exportacao/presentation/controlador-de-exportacoes';
 import { type Configuracao, type ConfiguracaoDoArmazenamento, ConfiguracaoInvalida, lerConfiguracao } from './plataforma/config/configuracao';
 import { FiltroDeErros } from './plataforma/erros/filtro-de-erros';
 import { ResolvedorDeContaFixa } from './plataforma/escopo/adaptadores/resolvedor-de-conta-fixa';
 import { ResolvedorDeEscopo } from './plataforma/escopo/resolvedor-de-escopo';
+import { BarramentoComPgBoss } from './plataforma/fila/adaptadores/pg-boss/barramento-com-pg-boss';
+import { BarramentoDeEventos } from './plataforma/fila/barramento-de-eventos';
 import { GuardaDeEscopo } from './plataforma/http/guarda-de-escopo';
 import { registroDeRequisicoes } from './plataforma/http/registro-de-requisicoes';
 import { uuidV7 } from './plataforma/identidade/uuid-v7';
 import { Registro } from './plataforma/log/registro';
+import { semConteudo } from './plataforma/log/sem-conteudo';
 import { PrismaComEscopo } from './plataforma/persistencia/prisma-com-escopo';
 import { SondaDoPrisma } from './plataforma/persistencia/sonda-do-prisma';
 import { ControladorDeSaude } from './plataforma/saude/controlador-de-saude';
@@ -39,17 +50,8 @@ import { CONFIGURACAO, SERVICO, type Servico } from './plataforma/servico';
 import { RegistroDeUso } from './plataforma/uso/registro-de-uso';
 import { RegistroDeUsoNoLog } from './plataforma/uso/registro-de-uso-no-log';
 
-/** Fecha o pool do banco quando o processo recebe o sinal de término. */
-class EncerramentoDoBanco implements OnApplicationShutdown {
-  constructor(@Inject(PrismaComEscopo) private readonly prisma: PrismaComEscopo) {}
-
-  async onApplicationShutdown(): Promise<void> {
-    await this.prisma.fechar();
-  }
-}
-
 function criarArmazenamento(config: ConfiguracaoDoArmazenamento): ArmazenamentoDeArquivo {
-  return config.adaptador === 's3' ? new ArmazenamentoS3(config) : new ArmazenamentoEmDiscoLocal(config.pasta);
+  return config.adaptador === 's3' ? new ArmazenamentoS3(config) : new ArmazenamentoEmDiscoLocal(config.pasta, config.segredoDeAssinatura);
 }
 
 @Module({})
@@ -59,7 +61,10 @@ export class ModuloRaiz {
     return {
       module: ModuloRaiz,
       // o worker só responde saúde; as rotas de negócio são da API
-      controllers: servico === 'api' ? [ControladorDeSaude, ControladorDeDocumentos, ControladorDeArquivos, ControladorDeVetores, ControladorDeFontes] : [ControladorDeSaude],
+      controllers:
+        servico === 'api'
+          ? [ControladorDeSaude, ControladorDeDocumentos, ControladorDeArquivos, ControladorDeVetores, ControladorDeLinks, ControladorDeFontes, ControladorDeExportacoes]
+          : [ControladorDeSaude],
       providers: [
         { provide: SERVICO, useValue: servico },
         { provide: CONFIGURACAO, useValue: config },
@@ -79,21 +84,72 @@ export class ModuloRaiz {
           useFactory: (prisma: PrismaComEscopo, armazenamento: ArmazenamentoDeArquivo) => new BibliotecaDeFontesNoBanco(prisma, armazenamento),
           inject: [PrismaComEscopo, ArmazenamentoDeArquivo],
         },
+        { provide: RepositorioDeExportacoes, useFactory: (prisma: PrismaComEscopo) => new RepositorioDeExportacoesNoBanco(prisma), inject: [PrismaComEscopo] },
+        // a fila mora no mesmo PostgreSQL; só o worker consome e faz a manutenção dela
+        {
+          provide: BarramentoDeEventos,
+          useFactory: (registro: Registro) =>
+            new BarramentoComPgBoss(config.banco.urlDoApp, { consumidor: servico === 'worker', aoErrar: (tipo) => registro.warn({ evento: 'erro_na_fila', erro: tipo }) }),
+          inject: [Registro],
+        },
+        // o WebAssembly do motor só é carregado na primeira exportação: na API, nunca
+        { provide: MotorDeExportacao, useFactory: () => new MotorDeExportacaoComRender() },
         { provide: MedidorDeTexto, useFactory: (fontes: BibliotecaDeFontes) => new MedidorComCanvasKit(fontes), inject: [BibliotecaDeFontes] },
         // casos de uso: classes puras, montadas aqui
         {
           provide: CasosDeUsoDeDocumento,
-          useFactory: (documentos: RepositorioDeDocumentos, arquivos: RepositorioDeArquivos, medidor: MedidorDeTexto, uso: RegistroDeUso) =>
-            new CasosDeUsoDeDocumento(documentos, arquivos, medidor, uuidV7, uso),
-          inject: [RepositorioDeDocumentos, RepositorioDeArquivos, MedidorDeTexto, RegistroDeUso],
+          useFactory: (documentos: RepositorioDeDocumentos, arquivos: RepositorioDeArquivos, medidor: MedidorDeTexto, uso: RegistroDeUso, fontes: BibliotecaDeFontes) =>
+            new CasosDeUsoDeDocumento(documentos, arquivos, medidor, uuidV7, uso, fontes),
+          inject: [RepositorioDeDocumentos, RepositorioDeArquivos, MedidorDeTexto, RegistroDeUso, BibliotecaDeFontes],
         },
         {
           provide: CasosDeUsoDeArquivo,
           useFactory: (arquivos: RepositorioDeArquivos, armazenamento: ArmazenamentoDeArquivo, uso: RegistroDeUso) => new CasosDeUsoDeArquivo(arquivos, armazenamento, uuidV7, config.limites, uso),
           inject: [RepositorioDeArquivos, ArmazenamentoDeArquivo, RegistroDeUso],
         },
+        {
+          provide: CasosDeUsoDeExportacao,
+          useFactory: (
+            documentos: RepositorioDeDocumentos,
+            exportacoes: RepositorioDeExportacoes,
+            arquivos: RepositorioDeArquivos,
+            armazenamento: ArmazenamentoDeArquivo,
+            fontes: BibliotecaDeFontes,
+            fila: BarramentoDeEventos,
+            motor: MotorDeExportacao,
+            uso: RegistroDeUso,
+            registro: Registro,
+          ) =>
+            new CasosDeUsoDeExportacao({
+              documentos,
+              exportacoes,
+              arquivos,
+              armazenamento,
+              fontes,
+              fila,
+              motor,
+              gerarId: uuidV7,
+              uso,
+              aoFalhar: (falha: FalhaObservada) => registro.warn({ evento: 'falha_na_exportacao', exportacaoId: falha.exportacaoId, etapa: falha.etapa, ...semConteudo(falha.erro) }),
+            }),
+          inject: [
+            RepositorioDeDocumentos,
+            RepositorioDeExportacoes,
+            RepositorioDeArquivos,
+            ArmazenamentoDeArquivo,
+            BibliotecaDeFontes,
+            BarramentoDeEventos,
+            MotorDeExportacao,
+            RegistroDeUso,
+            Registro,
+          ],
+        },
         { provide: CasosDeUsoDeFontes, useFactory: (fontes: BibliotecaDeFontes) => new CasosDeUsoDeFontes(fontes), inject: [BibliotecaDeFontes] },
-        EncerramentoDoBanco,
+        {
+          provide: CicloDeVida,
+          useFactory: (prisma: PrismaComEscopo, fila: BarramentoDeEventos, exportacoes: CasosDeUsoDeExportacao, registro: Registro) => new CicloDeVida(servico, prisma, fila, exportacoes, registro),
+          inject: [PrismaComEscopo, BarramentoDeEventos, CasosDeUsoDeExportacao, Registro],
+        },
       ],
     };
   }
