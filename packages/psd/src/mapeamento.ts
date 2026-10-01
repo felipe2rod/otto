@@ -8,6 +8,8 @@ import type { Ajuste, Efeitos, Filtro, Mascara, ModoDoGrupo, TipoDeNo } from '@o
 
 /** Os três destinos do ADR 028. */
 export type DestinoDoMapeamento = 'Nativo' | 'Raster' | 'Bloqueado';
+/** Os três destinos da saída vetorial (ADR 034): vetor editável, imagem embutida com aviso, ou fora do arquivo com aviso. */
+export type DestinoVetorialDoMapeamento = 'Nativo' | 'Raster' | 'Omitido';
 
 export interface LinhaDoMapeamento {
   /** o que é, no Otto, como a pessoa lê */
@@ -16,6 +18,8 @@ export interface LinhaDoMapeamento {
   psd: string;
   destino: DestinoDoMapeamento;
   observacao?: string;
+  /** a saída vetorial (SVG e PDF, ADR 034). Ausente no que o Otto bloqueia. */
+  vetorial?: { destino: DestinoVetorialDoMapeamento; como: string };
 }
 
 const nativo = (otto: string, psd: string, observacao?: string): LinhaDoMapeamento => ({ otto, psd, destino: 'Nativo', ...(observacao ? { observacao } : {}) });
@@ -101,12 +105,12 @@ const EFEITOS: Record<keyof Efeitos | 'sombra' | 'traco', LinhaDoMapeamento> = {
 
 const MASCARAS: Record<Mascara['tipo'], LinhaDoMapeamento> = {
   degrade: nativo('Máscara em degradê', 'Máscara de camada (canal −2)', 'Vai como pixels: no Photoshop não é mais um degradê editável'),
-  forma: nativo('Máscara de forma (suave, invertida)', 'Máscara de camada (canal −2)', 'Vai como pixels, por causa da borda suave'),
+  forma: nativo('Máscara de forma', 'Máscara de camada (canal −2)', 'Vai como pixels, por causa da borda suave'),
   sujeito: nativo('Máscara do sujeito da foto', 'Máscara de camada (canal −2)'),
 };
 
 const OUTROS = {
-  documento: nativo('Documento', 'Cabeçalho do arquivo', 'RGB, 8 bits. PSB quando um lado passa de 30.000 px. Ainda sem perfil sRGB embutido'),
+  documento: nativo('Documento', 'Cabeçalho do arquivo', 'RGB, 8 bits, com o perfil sRGB embutido. PSB quando um lado passa de 30.000 px'),
   prancheta: nativo('Prancheta', 'Um arquivo por prancheta; no arquivo com todas, grupo com dados de prancheta (`artb`)'),
   'fundo-da-prancheta': nativo('Fundo da prancheta', 'Camada de preenchimento sólido (`SoCo`)'),
   'preenchimento-em-degrade': nativo('Preenchimento em degradê (linear e radial)', 'Camada de preenchimento em degradê (`GdFl`)'),
@@ -129,6 +133,13 @@ const OUTROS = {
   'foto-em-webp': raster('Foto em WebP', 'Camada de pixels', 'O arquivo original não é embutido'),
   'texto-sem-fonte': raster('Texto cuja fonte não foi entregue', 'Camada de pixels vazia', 'O motor não troca de fonte: a camada sai sem o texto, e o relatório diz qual fonte falta'),
   'vetor-fora-do-padrao': raster('Vetor com caminho que não é só M, C e Z', 'Camada de pixels'),
+  'mascara-suave-ou-invertida': nativo('Máscara de forma com borda suave ou invertida', 'Máscara de camada (canal −2)', 'É a máscara de forma; tem linha própria porque na saída vetorial vira imagem'),
+  'recorte-em-texto': nativo('Máscara de recorte cuja base é texto, ou uma camada que virou imagem', 'Recorte (clipping) da camada', 'Tem linha própria porque na saída vetorial vira imagem'),
+  'degrade-transparente-no-pdf': nativo(
+    'Degradê com parada transparente, no PDF',
+    'Camada de preenchimento em degradê (`GdFl`)',
+    'É o preenchimento em degradê; tem linha própria porque no PDF vira imagem',
+  ),
   'modo-dissolver': bloqueado('Modo dissolver', 'O ruído do Photoshop não é reproduzível'),
   'chanfro-acetinado-padrao': bloqueado('Chanfro e entalhe, acetinado, sobreposição de padrão', 'Custo de reproduzir no motor'),
   'efeito-repetido': bloqueado('Vários efeitos do mesmo tipo na mesma camada', 'Fora da v1'),
@@ -146,8 +157,107 @@ export type ChaveDoMapeamento =
   | `mascara:${Mascara['tipo']}`
   | keyof typeof OUTROS;
 
+type ChaveBloqueada = 'modo-dissolver' | 'chanfro-acetinado-padrao' | 'efeito-repetido' | 'ajustes-fora-da-lista' | 'texto-em-caminho' | 'cor-fora-de-rgb-8-bits';
+type Vetorial = [DestinoVetorialDoMapeamento, string];
+const NATIVO = (como: string): Vetorial => ['Nativo', como];
+const RASTER = (como = 'A camada vira imagem embutida'): Vetorial => ['Raster', como];
+const OMITIDO = (como: string): Vetorial => ['Omitido', como];
+const COM_MODO = NATIVO('Modo de mesclagem do SVG (`mix-blend-mode`) e do PDF');
+const SEM_MODO = OMITIDO('O formato não tem este modo: a camada sai em modo normal');
+const SEM_AJUSTE = OMITIDO('Não vai: o arquivo fica sem o ajuste de cor');
+const FOTO_FILTRADA = RASTER('A foto vira imagem com o filtro já aplicado');
+
+/**
+ * A saída vetorial de cada linha (ADR 034, item 2). O Illustrator não restringe o documento: o que não tem equivalente
+ * vetorial vira imagem embutida, ou fica de fora, sempre com aviso no relatório.
+ */
+const VETORIAL: Record<Exclude<ChaveDoMapeamento, ChaveBloqueada>, Vetorial> = {
+  documento: NATIVO('Cores em sRGB'),
+  prancheta: NATIVO('Um SVG por prancheta; no PDF, uma página por prancheta'),
+  'fundo-da-prancheta': NATIVO('Retângulo do tamanho da prancheta'),
+  'no:grupo': NATIVO('Grupo com o nome da camada; no PDF, cada camada de cima da prancheta é uma camada do PDF'),
+  'no:forma': NATIVO('Caminho'),
+  'no:texto': NATIVO('Texto como texto, linha por linha, na quebra do Otto (não requebra sozinho)'),
+  'no:imagem': NATIVO('Imagem embutida (o arquivo original), com o corte da caixa como recorte vetorial'),
+  'no:vetor': NATIVO('Grupo com um caminho para cada caminho'),
+  'no:ajuste': SEM_AJUSTE,
+  'preenchimento-em-degrade': NATIVO('Degradê linear e radial'),
+  'traco-de-vetor': NATIVO('Contorno do caminho'),
+  'trechos-de-texto': NATIVO('Um pedaço de texto para cada estilo, dentro da linha'),
+  'caixa-alta-e-versalete': NATIVO('O texto vai já em maiúsculas; no versalete, as letras que eram minúsculas vão em corpo menor'),
+  opacidade: NATIVO('Opacidade'),
+  'visivel-e-bloqueado': NATIVO('Camada oculta vai oculta; o bloqueio não vai'),
+  rotacao: NATIVO('Na geometria: caminho girado, transformação do texto e da imagem'),
+  'recorte-da-foto': NATIVO('Recorte vetorial'),
+  'recortada-na-de-baixo': NATIVO('Recorte vetorial pela forma da camada de baixo, quando ela é forma, vetor ou foto'),
+  'ajuste-de-cor-da-foto': RASTER('A foto vira imagem com o ajuste já aplicado'),
+  token: NATIVO('Valor resolvido'),
+  'mascara:degrade': RASTER(),
+  'mascara:forma': NATIVO('Recorte vetorial, quando não tem borda suave nem está invertida'),
+  'mascara:sujeito': RASTER(),
+  'mascara-suave-ou-invertida': RASTER(),
+  'recorte-em-texto': RASTER('A base e as camadas presas a ela viram uma imagem só'),
+  'degrade-transparente-no-pdf': RASTER('Só no PDF: no SVG vai como degradê'),
+  'modo:atravessar': NATIVO('Grupo sem isolamento'),
+  'modo:normal': NATIVO('Normal'),
+  'modo:escurecer': COM_MODO,
+  'modo:multiplicacao': COM_MODO,
+  'modo:subexposicao-de-cores': COM_MODO,
+  'modo:subexposicao-linear': SEM_MODO,
+  'modo:cor-mais-escura': SEM_MODO,
+  'modo:clarear': COM_MODO,
+  'modo:tela': COM_MODO,
+  'modo:superexposicao-de-cores': COM_MODO,
+  'modo:superexposicao-linear': SEM_MODO,
+  'modo:cor-mais-clara': SEM_MODO,
+  'modo:sobrepor': COM_MODO,
+  'modo:luz-suave': COM_MODO,
+  'modo:luz-direta': COM_MODO,
+  'modo:luz-intensa': SEM_MODO,
+  'modo:luz-linear': SEM_MODO,
+  'modo:luz-do-ponto': SEM_MODO,
+  'modo:mistura-solida': SEM_MODO,
+  'modo:diferenca': COM_MODO,
+  'modo:exclusao': COM_MODO,
+  'modo:subtrair': SEM_MODO,
+  'modo:dividir': SEM_MODO,
+  'modo:matiz': COM_MODO,
+  'modo:saturacao': COM_MODO,
+  'modo:cor': COM_MODO,
+  'modo:luminosidade': COM_MODO,
+  'efeito:sombra': RASTER(),
+  'efeito:traco': NATIVO('Contorno com o dobro da espessura, cortado pela própria forma'),
+  'efeito:sombraInterna': RASTER(),
+  'efeito:brilhoExterno': RASTER(),
+  'efeito:brilhoInterno': RASTER(),
+  'efeito:sobreposicaoDeCor': RASTER(),
+  'efeito:sobreposicaoDeDegrade': RASTER(),
+  'ajuste:curvas': SEM_AJUSTE,
+  'ajuste:niveis': SEM_AJUSTE,
+  'ajuste:matiz-saturacao': SEM_AJUSTE,
+  'ajuste:brilho-contraste': SEM_AJUSTE,
+  'ajuste:vibracao': SEM_AJUSTE,
+  'ajuste:equilibrio-de-cor': SEM_AJUSTE,
+  'ajuste:filtro-de-foto': SEM_AJUSTE,
+  'ajuste:preto-e-branco': SEM_AJUSTE,
+  'ajuste:mapa-de-degrade': SEM_AJUSTE,
+  'filtro:desfoque': FOTO_FILTRADA,
+  'filtro:desfoque-de-movimento': FOTO_FILTRADA,
+  'filtro:ruido': FOTO_FILTRADA,
+  'filtro:nitidez': FOTO_FILTRADA,
+  'filtro-fora-de-foto': RASTER(),
+  'foto-recortada-com-ajuste-de-cor': RASTER(),
+  'foto-em-webp': RASTER('A foto vira imagem PNG, na resolução do documento'),
+  'texto-sem-fonte': RASTER('Imagem vazia'),
+  'vetor-fora-do-padrao': RASTER(),
+};
+
 const comPrefixo = (prefixo: string, parte: Record<string, LinhaDoMapeamento>): [string, LinhaDoMapeamento][] =>
-  Object.entries(parte).map(([chave, linha]) => [prefixo ? `${prefixo}:${chave}` : chave, linha]);
+  Object.entries(parte).map(([chave, linha]) => {
+    const inteira = prefixo ? `${prefixo}:${chave}` : chave;
+    const vetorial = (VETORIAL as Record<string, Vetorial | undefined>)[inteira];
+    return [inteira, vetorial ? { ...linha, vetorial: { destino: vetorial[0], como: vetorial[1] } } : linha];
+  });
 
 /** A tabela inteira, na ordem em que o documento técnico a mostra. */
 export const MAPEAMENTO = Object.fromEntries([
@@ -162,4 +272,5 @@ export const MAPEAMENTO = Object.fromEntries([
 ]) as Record<ChaveDoMapeamento, LinhaDoMapeamento>;
 
 /** A linha da tabela em markdown, como está em docs/tecnico/psd.md. */
-export const linhaEmMarkdown = (chave: string, l: LinhaDoMapeamento): string => `| \`${chave}\` | ${l.otto} | ${l.psd} | ${l.destino} | ${l.observacao ?? ''} |`;
+export const linhaEmMarkdown = (chave: string, l: LinhaDoMapeamento): string =>
+  `| \`${chave}\` | ${l.otto} | ${l.psd} | ${l.destino} | ${l.vetorial?.destino ?? '—'} | ${l.vetorial?.como ?? '—'} | ${l.observacao ?? ''} |`;

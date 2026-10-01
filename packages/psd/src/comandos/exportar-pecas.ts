@@ -1,18 +1,22 @@
-// Exporta peças reais (as da POC) em PSD, para a conferência manual no Photoshop que o ADR 028 pede.
+// Exporta peças reais (as da POC) em PSD, SVG e PDF, para a conferência manual no Photoshop (ADR 028) e no Illustrator (ADR 034).
 // Só LÊ de poc/. Escreve em packages/psd/saida/, que fica fora do git.
 //
 //   docker compose run --rm teste pnpm --filter @otto/psd exportar:pecas
 //   docker compose run --rm teste pnpm --filter @otto/psd exportar:pecas -- <id da peça na POC> [<outro id> ...]
 //
 // Para cada peça grava: um PSD por prancheta, um PSD com todas as pranchetas (quando há mais de uma), o PNG de cada
-// prancheta (o render do Otto, para comparar com o que o Photoshop mostra), o relatório e as fontes para instalar.
+// prancheta (o render do Otto, para comparar com o que o Photoshop e o Illustrator mostram), o relatório e as fontes para
+// instalar; e, na pasta "illustrator", um SVG por prancheta, um PDF com uma página por prancheta e o relatório deles.
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Documento, todasAsCamadas } from '@otto/documento';
 import { nomePostScript } from '@otto/render';
 import { carregarCanvasKit } from '@otto/render/node';
+import { criarFormatoPdf } from '../adaptadores/biblioteca-de-pdf';
 import { criarFormatoPsd } from '../adaptadores/biblioteca-de-psd';
+import { criarFormatoSvg } from '../adaptadores/svg';
 import { exportarPng, exportarPsd, type FonteDaExportacao, type ImagemDaExportacao, nomeDeArquivo } from '../exportar';
+import { exportarVetorial } from '../exportar-vetorial';
 import { relatorioEmTexto } from '../relatorio';
 
 const RAIZ = path.resolve(import.meta.dirname, '../../../..');
@@ -149,6 +153,44 @@ Estrutura
 Anote, por peça, o número do item e o que viu. O que falhar muda de linha em docs/tecnico/psd.md.
 `;
 
+const NO_ILLUSTRATOR = `Conferência no Illustrator (ADR 034)
+
+Para cada peça, na pasta "illustrator", há: um SVG por prancheta, um PDF com uma página por prancheta, e o relatório
+(o que saiu em vetor, o que virou imagem, o que ficou de fora). O PNG de cada prancheta, na pasta da peça, é o que o
+Otto renderiza. Instale antes as fontes da pasta "fontes" da peça. Abra o SVG e o PDF, um de cada vez, e anote para os dois.
+
+Ao abrir
+ 1. O arquivo abre sem erro e sem aviso? Se houver aviso (fonte ausente, perfil de cor), qual é o texto dele?
+ 2. No PDF: o Illustrator pergunta que página abrir, ou abre todas como pranchetas? O tamanho da prancheta é o da peça?
+
+Camadas e nomes
+ 3. No painel Camadas, os objetos têm o nome das camadas do Otto? (No SVG o nome vem do "id"; espaços e acentos chegam certos?)
+ 4. No PDF, as camadas do Otto viram camadas do Illustrator, ou cai tudo numa camada só, em grupos sem nome?
+ 5. Os grupos do Otto continuam grupos, com as camadas dentro?
+ 6. Há grupos de recorte (clipping) a mais em volta de tudo? Atrapalham para selecionar e mover?
+
+Texto (o risco principal)
+ 7. Clique num texto com a ferramenta de texto: ele é texto editável? Está inteiro, ou partido em um objeto por linha,
+    por palavra ou por letra? (O esperado: um objeto de texto por camada, com as linhas dentro.)
+ 8. A fonte, o tamanho e a cor estão certos no painel Caractere? Aparece a fonte certa, ou uma substituta marcada em rosa?
+ 9. A posição das linhas bate com o PNG? Em texto com trechos (preço em destaque), cada trecho tem o estilo dele?
+10. Texto girado continua editável e no lugar?
+
+Forma, vetor e foto
+11. As formas são caminhos editáveis (seta branca mostra os pontos)? A cor troca no painel?
+12. O degradê é um degradê editável do Illustrator (painel Gradiente), no SVG? E no PDF?
+13. O traço por dentro da forma (contorno) aparece igual ao PNG? Veio como contorno dentro de um grupo de recorte?
+14. A foto é uma imagem embutida inteira, com uma máscara de recorte no formato da caixa? Dá para mover a foto dentro da máscara?
+15. Vetor (logo, ícone): um grupo com um caminho para cada parte?
+
+Aparência
+16. Compare com o PNG. O relatório avisa que camada de ajuste fica de fora: fora isso, o que está diferente?
+17. As camadas que viraram imagem (sombra, brilho, filtro) estão no lugar e com a borda certa?
+18. Opacidade e modo de mesclagem (painel Transparência) estão nas camadas certas?
+
+Anote, por peça e por formato (SVG ou PDF), o número do item e o que viu. O que falhar muda de linha em docs/tecnico/psd.md.
+`;
+
 async function exportarPeca(ck: Awaited<ReturnType<typeof carregarCanvasKit>>, id: string): Promise<string[]> {
   const registro = JSON.parse(await readFile(path.join(POC, 'dados/documentos', `${id}.json`), 'utf8')) as { doc?: { nome?: unknown } };
   const lida = Documento.safeParse(registro.doc);
@@ -173,6 +215,16 @@ async function exportarPeca(ck: Awaited<ReturnType<typeof carregarCanvasKit>>, i
   const tempoDoPsd = performance.now() - inicio;
   const juntas = doc.pranchetas.length > 1 ? await exportarPsd(ck, formato, doc, recursos, { nome, arquivos: 'juntas' }) : undefined;
   const png = await exportarPng(ck, doc, recursos, { nome });
+  // a saída para o Illustrator: SVG e PDF, com o relatório dela
+  const inicioDoVetorial = performance.now();
+  const svg = await exportarVetorial(ck, criarFormatoSvg(), doc, recursos, { nome });
+  const tempoDoSvg = performance.now() - inicioDoVetorial;
+  const pdf = await exportarVetorial(ck, criarFormatoPdf(), doc, recursos, { nome });
+  const tempoDoPdf = performance.now() - inicioDoVetorial - tempoDoSvg;
+  await mkdir(path.join(pasta, 'illustrator'), { recursive: true });
+  for (const a of [...svg.arquivos, ...pdf.arquivos]) await writeFile(path.join(pasta, 'illustrator', a.nome), a.bytes);
+  await writeFile(path.join(pasta, 'illustrator', 'relatorio-do-svg.md'), relatorioEmTexto(nome, svg.relatorio));
+  await writeFile(path.join(pasta, 'illustrator', 'relatorio-do-pdf.md'), relatorioEmTexto(nome, pdf.relatorio));
   const arquivos = [...porPrancheta.arquivos, ...(juntas?.arquivos ?? []), ...png.arquivos];
   for (const a of arquivos) await writeFile(path.join(pasta, a.nome), a.bytes);
   await writeFile(path.join(pasta, 'relatorio.md'), relatorioEmTexto(nome, porPrancheta.relatorio));
@@ -191,6 +243,8 @@ async function exportarPeca(ck: Awaited<ReturnType<typeof carregarCanvasKit>>, i
     ...(rel.emFalta.fontes.length ? [`  fontes não encontradas: ${rel.emFalta.fontes.map((f) => f.familia).join(', ')}`] : []),
     ...(rel.emFalta.imagens.length ? [`  imagens não encontradas: ${rel.emFalta.imagens.length}`] : []),
     `  PSD por prancheta: ${Math.round(tempoDoPsd)} ms; arquivos: ${arquivos.map((a) => `${a.nome} (${megas(a.bytes.length)})`).join(', ')}`,
+    `  SVG: ${Math.round(tempoDoSvg)} ms, ${svg.arquivos.map((a) => megas(a.bytes.length)).join(' + ')}; PDF: ${Math.round(tempoDoPdf)} ms, ${pdf.arquivos.map((a) => megas(a.bytes.length)).join(' + ')}`,
+    `  no vetorial: ${svg.relatorio.camadas.filter((c) => c.destino === 'nativo-editavel').length} em vetor, ${svg.relatorio.camadas.filter((c) => c.destino === 'raster-com-aviso').length} viraram imagem, ${svg.relatorio.camadas.filter((c) => c.destino === 'omitido-com-aviso').length} ficaram de fora${pdf.relatorio.camadas.filter((c) => c.destino === 'raster-com-aviso').length !== svg.relatorio.camadas.filter((c) => c.destino === 'raster-com-aviso').length ? ` (no PDF, ${pdf.relatorio.camadas.filter((c) => c.destino === 'raster-com-aviso').length} viraram imagem)` : ''}`,
   ];
 }
 
@@ -202,9 +256,12 @@ for (const id of ids.length > 0 ? ids : PADRAO) {
   try {
     linhas.push(...(await exportarPeca(ck, id)));
   } catch (erro) {
-    linhas.push(`${id}: não exportada (${erro instanceof Error ? erro.message : String(erro)})`);
+    linhas.push(`${id}: não exportada (${erro instanceof Error ? (process.env.DEPURAR ? erro.stack : erro.message) : String(erro)})`);
   }
 }
 await writeFile(path.join(SAIDA, 'CONFERIR-NO-PHOTOSHOP.txt'), CONFERENCIA);
+await writeFile(path.join(SAIDA, 'CONFERIR-NO-ILLUSTRATOR.txt'), NO_ILLUSTRATOR);
 const uso = process.resourceUsage();
-process.stdout.write(`${linhas.join('\n')}\n\nMemória no pico do processo: ${megas(uso.maxRSS * 1024)}\nArquivos em ${SAIDA}\nO que conferir: ${path.join(SAIDA, 'CONFERIR-NO-PHOTOSHOP.txt')}\n`);
+process.stdout.write(
+  `${linhas.join('\n')}\n\nMemória no pico do processo: ${megas(uso.maxRSS * 1024)}\nArquivos em ${SAIDA}\nO que conferir: ${path.join(SAIDA, 'CONFERIR-NO-PHOTOSHOP.txt')} e ${path.join(SAIDA, 'CONFERIR-NO-ILLUSTRATOR.txt')}\n`,
+);

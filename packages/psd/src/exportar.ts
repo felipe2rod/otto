@@ -6,6 +6,7 @@ import type { Documento, No, NoVisual, Prancheta } from '@otto/documento';
 import { codificarPng, criarSessao, limitesDoNo, nomePostScript, renderizarMascara, renderizarPrancheta, type Sessao } from '@otto/render';
 import type { CanvasKit } from 'canvaskit-wasm';
 import { type FonteDePixels, type FonteDisponivel, type ImagemDisponivel, montar, type TipoDeImagem } from './montar';
+import { perfilSrgb } from './perfil-srgb';
 import type { FormatoDeArquivoEmCamadas, MascaraDoArquivo, PixelsDoArquivo } from './porta';
 import { fecharRelatorio, type RelatorioDeExportacao, relatorioVazio } from './relatorio';
 
@@ -159,7 +160,7 @@ export async function exportarPsd(ck: CanvasKit, formato: FormatoDeArquivoEmCama
         const dx = montagem.posicoes.get(p.id)?.x ?? 0;
         for (let y = 0; y < r.altura; y++) composta.set(r.rgba.subarray(y * r.largura * 4, (y + 1) * r.largura * 4), (y * montagem.largura + dx) * 4);
       }
-      const gravado = formato.escrever({ largura: montagem.largura, altura: montagem.altura, composta, camadas: montagem.camadas, embutidos: montagem.embutidos });
+      const gravado = await formato.escrever({ largura: montagem.largura, altura: montagem.altura, composta, camadas: montagem.camadas, embutidos: montagem.embutidos, perfilDeCor: perfilSrgb() });
       const nome = `${nomeDeArquivo(juntas ? `${opcoes.nome} (todas as pranchetas)` : grupo.length === 1 && pranchetas.length === 1 ? opcoes.nome : `${opcoes.nome} - ${(grupo[0] as Prancheta).nome}`)}.${gravado.extensao}`;
       rel.arquivos.push(nome);
       arquivos.push({ nome, bytes: gravado.bytes });

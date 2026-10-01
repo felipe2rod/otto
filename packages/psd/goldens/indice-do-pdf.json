@@ -1,0 +1,30 @@
+{
+  "forma.pdf": {
+    "bytes": 55885,
+    "sha256": "710638bcccc3d4b80c3a986ea5a60a0b313e12f23a9e24bb8f2c0996ef79bd60"
+  },
+  "texto.pdf": {
+    "bytes": 360871,
+    "sha256": "7156f1584d6ca4767e42c0eecc9b4c6f58d2a7f86d25d8a2ca999967b470bdbf"
+  },
+  "imagem.pdf": {
+    "bytes": 812943,
+    "sha256": "5d8f49cd06617a51877dcb5a72b72d4abed309692f55a9517b5479a52e6e4f03"
+  },
+  "vetor.pdf": {
+    "bytes": 21105,
+    "sha256": "86839eb535a21d64a1a9aa61e1fb050507eccc1a9c0b1ac6123b5217bb66f3b4"
+  },
+  "grupo-e-ajuste.pdf": {
+    "bytes": 280728,
+    "sha256": "922357df7324226607556a920af0ce6d842e07d089e9f8d7e941c8d2a4c07500"
+  },
+  "efeitos.pdf": {
+    "bytes": 158564,
+    "sha256": "bef43e0e303f56b5d1db7fb33b7bb3ce6d28fb1821c78f44323e08ab425e94bb"
+  },
+  "peca.pdf": {
+    "bytes": 299494,
+    "sha256": "2a0d9b568af5afc4021e74666561a1c89d483b476d26b7c6d60559b968af2e1a"
+  }
+}

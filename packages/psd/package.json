@@ -13,13 +13,19 @@
     "exportar:pecas": "tsx src/comandos/exportar-pecas.ts"
   },
   "dependencies": {
+    "@cantoo/fontkit": "^2.0.12",
+    "@cantoo/pdf-lib": "^2.11.1",
     "@otto/documento": "workspace:*",
     "@otto/render": "workspace:*",
     "ag-psd": "^31.0.2",
     "canvaskit-wasm": "^0.42.0"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.9",
+    "@resvg/resvg-js": "^2.6.2",
     "@webtoon/psd": "^0.4.0",
+    "fast-xml-parser": "^5.11.2",
+    "pdfjs-dist": "^6.3.289",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "5.0.3"

@@ -51,6 +51,11 @@ export interface DegradeDoArquivo {
   angulo: number;
   /** em ordem crescente de posição (0 a 1) */
   paradas: { cor: Rgb; posicao: number; opacidade: number }[];
+  /**
+   * Onde o degradê fica, para o formato que precisa de pontos (o vetorial): linear vai de (x0, y0) a (x1, y1);
+   * radial sai de (x0, y0) com raio até (x1, y1). `matriz` é a transformação afim desses pontos (a rotação da camada).
+   */
+  geometria?: { x0: number; y0: number; x1: number; y1: number; matriz?: [number, number, number, number, number, number] };
 }
 
 export type PreenchimentoDoArquivo = { tipo: 'cor'; cor: Rgb } | ({ tipo: 'degrade' } & DegradeDoArquivo);
@@ -86,6 +91,9 @@ export interface EfeitosDoArquivo {
 export interface EstiloDeTextoDoArquivo {
   /** nome PostScript: é por ele que o Photoshop acha a fonte instalada */
   fonte: string;
+  /** família e peso do arquivo de fonte usado, para o formato que procura a fonte assim (o vetorial) */
+  familia?: string;
+  peso?: number;
   tamanho: number;
   cor: Rgb;
   /** entrelinha em pixels */
@@ -105,6 +113,29 @@ export interface TextoDoArquivo {
   estilo: EstiloDeTextoDoArquivo;
   /** estilo por sequência de caracteres, cobrindo o texto inteiro, quando há trechos */
   trechos?: { comprimento: number; estilo: Pick<EstiloDeTextoDoArquivo, 'fonte' | 'tamanho' | 'cor' | 'espacamento' | 'entrelinha'> }[];
+  /**
+   * As linhas como o Otto as quebrou, para o formato que não requebra sozinho (o vetorial): onde cada uma começa,
+   * dentro da caixa do texto (antes de `transformacao`), e os pedaços dela, cada um com o estilo e o texto já como aparece.
+   */
+  linhas?: LinhaDeTextoDoArquivo[];
+}
+
+export interface LinhaDeTextoDoArquivo {
+  /** começo da linha e linha de base, a partir do canto da caixa */
+  x: number;
+  base: number;
+  pedacos: { texto: string; estilo: Pick<EstiloDeTextoDoArquivo, 'fonte' | 'familia' | 'peso' | 'tamanho' | 'cor' | 'espacamento'> }[];
+}
+
+/** Imagem já codificada, para o formato que embute arquivo de imagem (o vetorial). */
+export interface ImagemDoArquivo {
+  tipo: 'png' | 'jpeg';
+  bytes: Uint8Array;
+  /** tamanho da imagem, em pixels dela */
+  largura: number;
+  altura: number;
+  /** matriz afim [a, b, c, d, e, f] que leva o pixel (x, y) da imagem ao arquivo */
+  transformacao: [number, number, number, number, number, number];
 }
 
 export interface ObjetoInteligenteDoArquivo {
@@ -172,28 +203,45 @@ export interface CamadaDoArquivo {
   tracoVetorial?: TracoVetorialDoArquivo;
   texto?: TextoDoArquivo;
   objetoInteligente?: ObjetoInteligenteDoArquivo;
+  /** imagem codificada: a foto original, ou a camada rasterizada (saída vetorial) */
+  imagem?: ImagemDoArquivo;
+  /** caminho que corta a camada inteira (saída vetorial): a máscara de forma sem borda suave */
+  recorteVetorial?: CaminhoDoArquivo[];
 }
 
 export interface ArquivoEmCamadas {
+  /** nome do que o arquivo mostra (a peça e a prancheta), para o formato que guarda título */
+  titulo?: string;
   largura: number;
   altura: number;
-  /** a imagem composta: RGBA de 8 bits, não premultiplicado, do tamanho do arquivo */
-  composta: Uint8Array;
+  /** a imagem composta: RGBA de 8 bits, não premultiplicado, do tamanho do arquivo. O PSD exige; o vetorial não tem. */
+  composta?: Uint8Array;
   /** de baixo para cima */
   camadas: CamadaDoArquivo[];
   embutidos: ArquivoEmbutido[];
+  /** perfil de cor ICC a embutir. Os pixels são sRGB; sem ele o arquivo sai sem perfil. */
+  perfilDeCor?: Uint8Array;
+  /** arquivos das fontes do texto, para o formato que embute fonte (PDF) */
+  fontes?: { postScript: string; bytes: Uint8Array }[];
 }
 
 export interface ArquivoGravado {
   bytes: Uint8Array;
   /** "psb" quando algum lado passa de 30.000 px */
-  extensao: 'psd' | 'psb';
+  extensao: 'psd' | 'psb' | 'svg' | 'pdf';
 }
 
 /** Maior lado que o PSD comum aceita. Acima disso o arquivo é PSB. */
 export const MAIOR_LADO_DO_PSD = 30_000;
 
 export interface FormatoDeArquivoEmCamadas {
-  /** Grava o arquivo. Mesma entrada, mesmos bytes: sem data, sem id aleatório. */
-  escrever(arquivo: ArquivoEmCamadas): ArquivoGravado;
+  /** Grava o arquivo. Mesma entrada, mesmos bytes: sem data, sem id aleatório. Pode ser assíncrono (a biblioteca de PDF é). */
+  escrever(arquivo: ArquivoEmCamadas): ArquivoGravado | Promise<ArquivoGravado>;
+  /** O que o formato vetorial sabe guardar. Quem monta o arquivo pergunta antes de decidir o que vira imagem. */
+  readonly capacidades?: {
+    /** várias pranchetas num arquivo, uma por página */
+    paginas: boolean;
+    /** degradê com parada transparente */
+    degradeTransparente: boolean;
+  };
 }

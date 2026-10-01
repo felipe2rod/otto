@@ -37,6 +37,16 @@ describe('mapeamento Otto → PSD', () => {
     for (const linha of Object.values(MAPEAMENTO)) expect(['Nativo', 'Raster', 'Bloqueado']).toContain(linha.destino);
   });
 
+  it('toda linha que não é bloqueada tem destino vetorial (Nativo, Raster ou Omitido), e a bloqueada não tem', () => {
+    for (const [chave, linha] of Object.entries(MAPEAMENTO)) {
+      if (linha.destino === 'Bloqueado') expect(linha.vetorial, chave).toBeUndefined();
+      else expect(['Nativo', 'Raster', 'Omitido'], chave).toContain(linha.vetorial?.destino);
+    }
+    // os 15 modos que o SVG e o PDF têm, mais normal e atravessar
+    expect(Object.entries(MAPEAMENTO).filter(([chave, l]) => chave.startsWith('modo:') && l.vetorial?.destino === 'Nativo')).toHaveLength(17);
+    expect(Object.entries(MAPEAMENTO).filter(([chave, l]) => chave.startsWith('ajuste:') && l.vetorial?.destino === 'Omitido')).toHaveLength(9);
+  });
+
   it('o que o Otto bloqueia não tem representação no arquivo', () => {
     for (const linha of Object.values(MAPEAMENTO)) if (linha.destino === 'Bloqueado') expect(linha.psd).toBe('—');
   });

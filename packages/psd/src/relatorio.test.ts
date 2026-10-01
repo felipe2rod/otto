@@ -68,7 +68,7 @@ describe('destino de cada camada', () => {
     expect(rel.substituicoes).toEqual([
       { camada: 'Peça / Peso trocado', pedida: { familia: 'IBM Plex Sans', peso: 600 }, usada: { familia: 'IBM Plex Sans', peso: 700, postScript: 'IBMPlexSans-Bold' } },
     ]);
-    expect(rel.avisos.map((a) => a.codigo)).toEqual(['atualizar-texto', 'instalar-fontes', 'fonte-substituida', 'recalculo-do-photoshop', 'sem-perfil-de-cor']);
+    expect(rel.avisos.map((a) => a.codigo)).toEqual(['atualizar-texto', 'instalar-fontes', 'fonte-substituida', 'recalculo-do-photoshop']);
   });
 
   it('texto com fonte que não foi entregue: sai como pixel vazio, e o relatório diz qual fonte falta', () => {

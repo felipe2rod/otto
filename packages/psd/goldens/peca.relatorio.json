@@ -182,10 +182,6 @@
     {
       "codigo": "recalculo-do-photoshop",
       "texto": "Modos de mesclagem, camadas de ajuste e efeitos são recalculados pelo Photoshop quando a camada é editada, e podem variar um pouco do que o Otto mostra."
-    },
-    {
-      "codigo": "sem-perfil-de-cor",
-      "texto": "O arquivo sai em RGB de 8 bits, sem perfil de cor embutido. O Otto trabalha em sRGB: se o Photoshop perguntar, escolha sRGB."
     }
   ]
 }

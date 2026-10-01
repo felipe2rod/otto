@@ -18,6 +18,7 @@ import { criarFormatoPsd } from './adaptadores/biblioteca-de-psd';
 import { recursosDeTeste } from './apoio-de-teste';
 import { type CenaDeGolden, cenasDeGolden } from './cenas-de-golden';
 import { exportarPsd, type RecursosDaExportacao } from './exportar';
+import { perfilSrgb } from './perfil-srgb';
 
 const PASTA = path.resolve(import.meta.dirname, '../goldens');
 const INDICE = path.join(PASTA, 'indice.json');
@@ -161,6 +162,13 @@ describe('goldens da exportação em PSD', () => {
           if (lida[i] !== esperado.rgba[i] || lida[i + 1] !== esperado.rgba[i + 1] || lida[i + 2] !== esperado.rgba[i + 2] || lida[i + 3] !== esperado.rgba[i + 3]) diferentes++;
         }
         expect(diferentes).toBe(0);
+      });
+
+      it('leva o perfil sRGB embutido, e a segunda biblioteca o lê inteiro', async () => {
+        const { bytes } = await exportar(cena);
+        const lido = ler(bytes).icc_profile;
+        expect(lido).toBeDefined();
+        expect(Buffer.compare(Buffer.from(lido as Uint8Array), Buffer.from(perfilSrgb()))).toBe(0);
       });
 
       it('toda camada que desenha leva pixel (ADR 028, item 2)', async () => {

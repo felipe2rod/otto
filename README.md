@@ -76,7 +76,7 @@ docker compose run --rm teste pnpm format                        # Biome, corrig
 |---|---|
 | http://localhost:8080 | Site público, estático |
 | http://localhost:8080/editor | Peças: a lista da conta, com criar, renomear, duplicar e excluir |
-| http://localhost:8080/editor/p/:id | O editor da peça, ligado à API: mover (arraste e setas), redimensionar pela alça, seleção múltipla (Shift+clique), duplicar (Ctrl+J), inserir imagem ou SVG (botão ou soltar no canvas), trocar imagem, painéis de Camadas (com reordenar por arraste) e Propriedades, renomear a peça, desfazer e refazer |
+| http://localhost:8080/editor/p/:id | O editor da peça, ligado à API: mover (arraste e setas), redimensionar pela alça, seleção múltipla (Shift+clique), duplicar (Ctrl+J), inserir imagem ou SVG (botão ou soltar no canvas), trocar imagem, painéis de Camadas (com reordenar por arraste) e Propriedades, renomear a peça, desfazer e refazer, e **Exportar** (relatório antes do botão, PSD ou PNG, escolha de pranchetas, andamento por prancheta e download) |
 | http://localhost:8080/editor/bancada | **Só em desenvolvimento.** O editor com um documento de exemplo fixo, sem API: o motor de render desenhando, clicar seleciona, arrastar move. Não existe no build de produção |
 
 ```bash

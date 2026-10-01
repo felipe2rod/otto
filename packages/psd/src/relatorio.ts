@@ -35,6 +35,7 @@ export type CodigoDeAviso =
   | 'objeto-inteligente'
   | 'recalculo-do-photoshop'
   | 'virou-pixel'
+  /** não é mais emitido: o perfil sRGB vai embutido. Fica no tipo para quem já tem texto para ele. */
   | 'sem-perfil-de-cor';
 
 export interface AvisoDoRelatorio {
@@ -64,6 +65,57 @@ export interface RelatorioDeExportacao {
   /** origem e licença de cada imagem de banco */
   imagens: { camada: string; banco: string; autor: string; licenca: string; url: string }[];
   avisos: AvisoDoRelatorio[];
+}
+
+/** Na saída vetorial (ADR 034) há um destino a mais: o que não vai para o arquivo. */
+export type DestinoVetorial = Destino | 'omitido-com-aviso';
+
+export interface LinhaDoRelatorioVetorial extends Omit<LinhaDoRelatorio, 'destino'> {
+  destino: DestinoVetorial;
+}
+
+export type CodigoDeAvisoVetorial =
+  | 'instalar-fontes'
+  | 'fonte-substituida'
+  | 'fonte-em-falta'
+  | 'imagem-em-falta'
+  | 'tokens-viram-valor'
+  | 'texto-em-linhas'
+  | 'virou-imagem'
+  | 'ficou-de-fora'
+  | 'modo-de-mesclagem-trocado';
+
+/** O relatório da saída vetorial: o mesmo do PSD, com o destino a mais e os avisos dela. */
+export interface RelatorioDeExportacaoVetorial extends Omit<RelatorioDeExportacao, 'camadas' | 'avisos'> {
+  camadas: LinhaDoRelatorioVetorial[];
+  avisos: { codigo: CodigoDeAvisoVetorial; texto: string }[];
+}
+
+const TEXTO_DO_AVISO_VETORIAL: Record<CodigoDeAvisoVetorial, string> = {
+  'instalar-fontes': 'Para editar o texto no Illustrator, as fontes listadas neste relatório precisam estar instaladas.',
+  'fonte-substituida': 'Há texto com um peso de fonte que a conta não tem. Saiu com o peso mais próximo, igual ao que aparece no editor.',
+  'fonte-em-falta': 'Há texto com fonte que não foi encontrada. Essas camadas saíram vazias.',
+  'imagem-em-falta': 'Há foto cujo arquivo não foi encontrado. Essas camadas saíram como um retângulo cinza.',
+  'tokens-viram-valor': 'As cores da identidade viraram valor fixo.',
+  'texto-em-linhas': 'O texto vai como texto, uma linha de cada vez, na quebra que o Otto fez. No Illustrator ele não requebra sozinho ao mudar a largura.',
+  'virou-imagem': 'Algumas camadas saíram como imagem embutida, porque usam recurso que o vetor não tem (sombra, brilho, filtro, máscara suave). A lista de camadas diz quais e por quê.',
+  'ficou-de-fora': 'As camadas de ajuste não vão para o arquivo vetorial. As cores podem ficar diferentes do que o Otto mostra.',
+  'modo-de-mesclagem-trocado': 'Há camada com modo de mesclagem que o formato não tem. Ela saiu em modo normal.',
+};
+
+/** Fecha o relatório da saída vetorial: os avisos gerais saem do que de fato entrou no arquivo. */
+export function fecharRelatorioVetorial(rel: RelatorioDeExportacaoVetorial, modoTrocado: boolean): RelatorioDeExportacaoVetorial {
+  const avisos: CodigoDeAvisoVetorial[] = [];
+  const tem = (f: (l: LinhaDoRelatorioVetorial) => boolean): boolean => rel.camadas.some(f);
+  if (tem((l) => l.tipo === 'texto' && l.destino === 'nativo-editavel')) avisos.push('texto-em-linhas', 'instalar-fontes');
+  if (rel.substituicoes.length > 0) avisos.push('fonte-substituida');
+  if (rel.emFalta.fontes.length > 0) avisos.push('fonte-em-falta');
+  if (rel.emFalta.imagens.length > 0) avisos.push('imagem-em-falta');
+  if (tem((l) => l.destino === 'raster-com-aviso')) avisos.push('virou-imagem');
+  if (tem((l) => l.destino === 'omitido-com-aviso')) avisos.push('ficou-de-fora');
+  if (modoTrocado) avisos.push('modo-de-mesclagem-trocado');
+  if (rel.tokens.length > 0) avisos.push('tokens-viram-valor');
+  return { ...rel, avisos: avisos.map((codigo) => ({ codigo, texto: TEXTO_DO_AVISO_VETORIAL[codigo] })) };
 }
 
 export const nomeDaCamada = (p: Pick<Prancheta, 'nome'>, camada: string): string => `${p.nome} / ${camada}`;
@@ -120,14 +172,14 @@ export function fecharRelatorio(rel: RelatorioDeExportacao): RelatorioDeExportac
   if (tem((l) => l.destino === 'raster-com-aviso')) avisos.push('virou-pixel');
   if (rel.tokens.length > 0) avisos.push('tokens-viram-valor');
   if (tem((l) => l.tipo === 'imagem' && l.destino === 'nativo-editavel')) avisos.push('objeto-inteligente');
-  avisos.push('recalculo-do-photoshop', 'sem-perfil-de-cor');
+  avisos.push('recalculo-do-photoshop');
   return { ...rel, avisos: avisos.map((codigo) => ({ codigo, texto: TEXTO_DO_AVISO[codigo] })) };
 }
 
-const NOME_DO_DESTINO: Record<Destino, string> = { 'nativo-editavel': 'Editável', 'nativo-pixel': 'Pixel', 'raster-com-aviso': 'Virou pixel' };
+const NOME_DO_DESTINO: Record<DestinoVetorial, string> = { 'nativo-editavel': 'Editável', 'nativo-pixel': 'Pixel', 'raster-com-aviso': 'Virou pixel', 'omitido-com-aviso': 'Ficou de fora' };
 
 /** O relatório em texto (markdown), para acompanhar o arquivo. */
-export function relatorioEmTexto(nome: string, rel: RelatorioDeExportacao): string {
+export function relatorioEmTexto(nome: string, rel: RelatorioDeExportacao | RelatorioDeExportacaoVetorial): string {
   const celula = (t: string): string => t.replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const l: string[] = [
     `# Relatório de exportação: ${nome}`,

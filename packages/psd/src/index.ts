@@ -8,7 +8,9 @@
 // - nada entra no documento sem linha em mapeamento.ts e em docs/tecnico/psd.md (o teste confere as duas).
 export const NOME_DO_PACOTE = '@otto/psd' as const;
 
+export { criarFormatoPdf } from './adaptadores/biblioteca-de-pdf';
 export { criarFormatoPsd } from './adaptadores/biblioteca-de-psd';
+export { criarFormatoSvg } from './adaptadores/svg';
 export {
   type ArquivoExportado,
   exportarPng,
@@ -24,7 +26,21 @@ export {
   relatorioDeExportacao,
   tipoDaImagem,
 } from './exportar';
-export { type ChaveDoMapeamento, type DestinoDoMapeamento, type LinhaDoMapeamento, linhaEmMarkdown, MAPEAMENTO } from './mapeamento';
+export { exportarVetorial, type OpcoesDoVetorial, type ResultadoDaExportacaoVetorial, relatorioDeExportacaoVetorial } from './exportar-vetorial';
+export { type ChaveDoMapeamento, type DestinoDoMapeamento, type DestinoVetorialDoMapeamento, type LinhaDoMapeamento, linhaEmMarkdown, MAPEAMENTO } from './mapeamento';
 export type { FonteDisponivel, ImagemDisponivel, TipoDeImagem } from './montar';
+export { perfilSrgb } from './perfil-srgb';
 export * from './porta';
-export { type AvisoDoRelatorio, type CodigoDeAviso, type Destino, type FonteDoRelatorio, type LinhaDoRelatorio, type RelatorioDeExportacao, relatorioEmTexto } from './relatorio';
+export {
+  type AvisoDoRelatorio,
+  type CodigoDeAviso,
+  type CodigoDeAvisoVetorial,
+  type Destino,
+  type DestinoVetorial,
+  type FonteDoRelatorio,
+  type LinhaDoRelatorio,
+  type LinhaDoRelatorioVetorial,
+  type RelatorioDeExportacao,
+  type RelatorioDeExportacaoVetorial,
+  relatorioEmTexto,
+} from './relatorio';

@@ -8,8 +8,8 @@ import { recursosDeTeste } from '../apoio-de-teste';
 import { cenasDeGolden } from '../cenas-de-golden';
 import { exportarPsd, type RecursosDaExportacao } from '../exportar';
 import { idEstavel } from '../montar';
-import type { ArquivoEmCamadas } from '../porta';
-import { criarFormatoPsd } from './biblioteca-de-psd';
+import type { ArquivoEmCamadas, ArquivoGravado } from '../porta';
+import { comRecursoDeImagem, criarFormatoPsd } from './biblioteca-de-psd';
 
 let ck: CanvasKit;
 let recursos: RecursosDaExportacao;
@@ -23,6 +23,9 @@ beforeAll(async () => {
   );
   ({ ck, recursos } = await recursosDeTeste());
 });
+
+/** O adaptador de PSD grava na hora (a porta admite promessa por causa do PDF). */
+const gravar = (arquivo: ArquivoEmCamadas): ArquivoGravado => criarFormatoPsd().escrever(arquivo) as ArquivoGravado;
 
 const lidos = new Map<string, Psd>();
 async function ler(nome: string): Promise<Psd> {
@@ -302,6 +305,33 @@ describe('várias pranchetas num arquivo', () => {
   });
 });
 
+describe('perfil de cor', () => {
+  it('entra como recurso de imagem 1039, sem estragar o resto: o arquivo continua legível, com as mesmas camadas', () => {
+    const arquivo: ArquivoEmCamadas = {
+      largura: 4,
+      altura: 2,
+      composta: new Uint8Array(32).fill(255),
+      camadas: [{ nome: 'Fundo', opacidade: 1, modo: 'normal', oculta: false, recortadaNaDeBaixo: false, bloqueada: false, preenchimento: { tipo: 'cor', cor: { r: 255, g: 0, b: 0 } } }],
+      embutidos: [],
+    };
+    const sem = gravar(arquivo).bytes;
+    // tamanho ímpar: o recurso é completado para ficar par
+    const perfil = Uint8Array.from([1, 2, 3, 4, 5]);
+    const com = gravar({ ...arquivo, perfilDeCor: perfil }).bytes;
+    expect(com.length).toBe(sem.length + 12 + 6);
+    const psd = readPsd(com, { useImageData: true, skipThumbnail: true });
+    expect(psd.children?.map((c) => c.name)).toEqual(['Fundo']);
+    expect(psd.width).toBe(4);
+    const direto = comRecursoDeImagem(sem, 1039, perfil);
+    expect(Buffer.compare(Buffer.from(direto), Buffer.from(com))).toBe(0);
+    // o recurso está no fim da seção de recursos: "8BIM", 1039, nome vazio, tamanho 5
+    const v = new DataView(com.buffer, com.byteOffset, com.byteLength);
+    const inicio = 26 + 4 + v.getUint32(26);
+    const fim = inicio + 4 + v.getUint32(inicio);
+    expect([...com.slice(fim - 18, fim)]).toEqual([0x38, 0x42, 0x49, 0x4d, 0x04, 0x0f, 0, 0, 0, 0, 0, 5, 1, 2, 3, 4, 5, 0]);
+  });
+});
+
 describe('PSB', () => {
   const arquivo = (largura: number): ArquivoEmCamadas => ({
     largura,
@@ -312,11 +342,11 @@ describe('PSB', () => {
   });
 
   it('até 30.000 px de lado é PSD (versão 1 no cabeçalho); acima, PSB (versão 2)', () => {
-    const psd = criarFormatoPsd().escrever(arquivo(30_000));
+    const psd = gravar(arquivo(30_000));
     expect(psd.extensao).toBe('psd');
     expect(new TextDecoder().decode(psd.bytes.slice(0, 4))).toBe('8BPS');
     expect([psd.bytes[4], psd.bytes[5]]).toEqual([0, 1]);
-    const psb = criarFormatoPsd().escrever(arquivo(30_001));
+    const psb = gravar(arquivo(30_001));
     expect(psb.extensao).toBe('psb');
     expect([psb.bytes[4], psb.bytes[5]]).toEqual([0, 2]);
     expect(readPsd(psb.bytes, { skipCompositeImageData: true, skipLayerImageData: true, skipThumbnail: true }).width).toBe(30_001);

@@ -253,9 +253,39 @@ function camada(c: CamadaDoArquivo): Layer {
   return l;
 }
 
+/**
+ * Acrescenta um recurso de imagem ao arquivo já gravado. A biblioteca não grava o perfil de cor (recurso 1039), então
+ * ele entra aqui, direto nos bytes: a seção de recursos vem depois do cabeçalho (26 bytes) e da seção de modo de cor,
+ * e cada recurso é "8BIM", o número, um nome vazio, o tamanho e os dados, com tamanho par. Vale igual para PSD e PSB.
+ */
+export function comRecursoDeImagem(arquivo: Uint8Array, numero: number, dados: Uint8Array): Uint8Array {
+  const v = new DataView(arquivo.buffer, arquivo.byteOffset, arquivo.byteLength);
+  const inicioDosRecursos = 26 + 4 + v.getUint32(26);
+  const tamanhoDosRecursos = v.getUint32(inicioDosRecursos);
+  const preenchimento = dados.length % 2;
+  const recurso = new Uint8Array(4 + 2 + 2 + 4 + dados.length + preenchimento);
+  recurso.set([0x38, 0x42, 0x49, 0x4d], 0);
+  const r = new DataView(recurso.buffer);
+  r.setUint16(4, numero);
+  r.setUint16(6, 0);
+  r.setUint32(8, dados.length);
+  recurso.set(dados, 12);
+  const fim = inicioDosRecursos + 4 + tamanhoDosRecursos;
+  const saida = new Uint8Array(arquivo.length + recurso.length);
+  saida.set(arquivo.subarray(0, fim), 0);
+  saida.set(recurso, fim);
+  saida.set(arquivo.subarray(fim), fim + recurso.length);
+  new DataView(saida.buffer).setUint32(inicioDosRecursos, tamanhoDosRecursos + recurso.length);
+  return saida;
+}
+
+/** Número do recurso de imagem que guarda o perfil ICC. */
+const RECURSO_DO_PERFIL_ICC = 1039;
+
 export function criarFormatoPsd(): FormatoDeArquivoEmCamadas {
   return {
     escrever(arquivo: ArquivoEmCamadas): ArquivoGravado {
+      if (!arquivo.composta) throw new Error('O PSD precisa da imagem composta');
       const psd: Psd = {
         width: arquivo.largura,
         height: arquivo.altura,
@@ -265,7 +295,8 @@ export function criarFormatoPsd(): FormatoDeArquivoEmCamadas {
       if (arquivo.embutidos.length > 0) psd.linkedFiles = arquivo.embutidos.map((e) => ({ id: e.id, name: e.nome, type: e.tipo === 'png' ? 'png ' : 'JPEG', data: e.bytes }));
       const psb = arquivo.largura > MAIOR_LADO_DO_PSD || arquivo.altura > MAIOR_LADO_DO_PSD;
       // sem miniatura (a biblioteca só a gera com canvas) e sem aparar: a área de cada camada já vem justa
-      const bytes = writePsdUint8Array(psd, { generateThumbnail: false, trimImageData: false, noBackground: true, psb });
+      const gravado = writePsdUint8Array(psd, { generateThumbnail: false, trimImageData: false, noBackground: true, psb });
+      const bytes = arquivo.perfilDeCor ? comRecursoDeImagem(gravado, RECURSO_DO_PERFIL_ICC, arquivo.perfilDeCor) : gravado;
       return { bytes, extensao: psb ? 'psb' : 'psd' };
     },
   };
