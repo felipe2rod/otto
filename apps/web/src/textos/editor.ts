@@ -173,7 +173,11 @@ export const editor = {
     conteudo: 'Conteúdo',
     fonte: 'Fonte',
     peso: 'Peso',
-    pesos: { 300: 'Leve', 400: 'Regular', 500: 'Médio', 600: 'Seminegrito', 700: 'Negrito' },
+    pesos: { 100: 'Fino', 200: 'Extraleve', 300: 'Leve', 400: 'Regular', 500: 'Médio', 600: 'Seminegrito', 700: 'Negrito', 800: 'Extranegrito', 900: 'Preto' } as Readonly<Record<number, string>>,
+    /** O nome do peso com o número, para quando o número é o que importa ("Negrito (700)"). */
+    nomeDoPeso: (peso: number, nome: string | undefined): string => (nome ? `${nome} (${peso})` : String(peso)),
+    pesoTrocado: (pedido: number, usado: number): string => `Pedido ${pedido}, usando ${usado}: a biblioteca não tem esse peso desta fonte.`,
+    fonteForaDaBiblioteca: 'A biblioteca não tem esta fonte. O texto não aparece no canvas.',
     tamanho: 'Tamanho px',
     entrelinha: 'Entrelinha',
     tracking: 'Tracking',

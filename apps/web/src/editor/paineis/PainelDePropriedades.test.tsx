@@ -63,6 +63,25 @@ describe('painel de propriedades: o que mostra', () => {
     expect((screen.getByLabelText(p.seletorDeToken(p.cor)) as HTMLSelectElement).value).toBe('token:primaria');
   });
 
+  it('peso que a biblioteca não tem: diz o pedido e o que está sendo usado, o mais próximo', async () => {
+    const a = montar('Título');
+    // Anton só tem 400 na biblioteca de teste
+    act(() => void a.ambiente.aplicar({ descricao: 'peso', operacoes: [{ op: 'alterar', alvo: a.id('Título'), props: { peso: 700 } }] }));
+    expect(await screen.findByText(p.pesoTrocado(700, 400))).toBeDefined();
+    // o peso pedido continua sendo o do campo: é o que está no documento
+    expect((screen.getByLabelText(p.peso) as HTMLSelectElement).value).toBe('700');
+  });
+
+  it('peso que existe não ganha aviso; fonte que a biblioteca não tem, sim', async () => {
+    const a = montar('Título');
+    await screen.findByRole('option', { name: 'IBM Plex Sans' });
+    expect(screen.queryByText(p.pesoTrocado(400, 400))).toBeNull();
+    expect(screen.queryByText(p.fonteForaDaBiblioteca)).toBeNull();
+
+    act(() => void a.ambiente.aplicar({ descricao: 'fonte', operacoes: [{ op: 'alterar', alvo: a.id('Título'), props: { fonte: 'Didot' } }] }));
+    expect(await screen.findByText(p.fonteForaDaBiblioteca)).toBeDefined();
+  });
+
   it('com a prancheta, mostra nome e fundo', () => {
     const { campo } = montar('prancheta');
     expect(campo(p.nome).value).toBe('Feed');

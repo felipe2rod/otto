@@ -76,7 +76,9 @@ describe('criar, renomear, duplicar e arquivar', () => {
 describe('abrir uma peça', () => {
   it('devolve nome, versão e a árvore já validada', async () => {
     const { api, fetch } = montar(() => json(200, aberto));
-    expect(await api.abrir(ID)).toEqual({ estado: 'aberta', peca: { id: ID, nome: 'Lançamento', versao: 14, arvore: documentoVazio() } });
+    expect(await api.abrir(ID)).toEqual({ estado: 'aberta', peca: { id: ID, nome: 'Lançamento', versao: 14, arvore: documentoVazio(), historico: { podeDesfazer: false, podeRefazer: false } } });
+    const comHistorico = await montar(() => json(200, { ...aberto, podeDesfazer: true, podeRefazer: true })).api.abrir(ID);
+    expect(comHistorico).toMatchObject({ peca: { historico: { podeDesfazer: true, podeRefazer: true } } });
     expect(chamada(fetch).url).toBe(`/api/documentos/${ID}`);
   });
 

@@ -19,6 +19,14 @@ const frases: Readonly<Record<string, string>> = {
   corpo_grande_demais: 'Essa alteração é grande demais para enviar de uma vez. Ela não entrou.',
   pedido_invalido: 'Esse nome não foi aceito. Use até 120 caracteres.',
   nao_encontrado: 'Essa peça não existe mais.',
+  // exportação
+  nada_para_exportar: 'Esta peça não tem prancheta para exportar.',
+  prancheta_desconhecida: 'Uma das pranchetas escolhidas não existe mais na peça. Escolha de novo.',
+  limite_de_exportacoes: 'Já há exportações demais na fila desta conta. Espere uma terminar e tente de novo.',
+  fila_indisponivel: 'Não consegui pôr a exportação na fila agora. Tente de novo em instantes.',
+  exportacao_expirada: 'Os arquivos desta exportação já foram apagados. Exporte de novo.',
+  exportacao_nao_pronta: 'O arquivo ainda não está pronto.',
+  exportacao_falhou: 'Não consegui exportar esta peça. Tente de novo.',
 };
 
 export const erros = {

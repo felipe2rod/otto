@@ -17,9 +17,18 @@ export interface LoteDoEditor<Op> {
 
 export type ResultadoDeAplicar<Doc> = { ok: true; doc: Doc; tocados: readonly string[] } | { ok: false; motivo: string };
 
+/** Se há o que desfazer e o que refazer, como a API disse na última resposta. */
+export interface Historico {
+  podeDesfazer: boolean;
+  podeRefazer: boolean;
+}
+
 export type RespostaDoEnvio<Doc> =
-  /** `arvore` vem quando o editor pede a árvore como ficou no servidor (operação que mede texto). */
-  | { tipo: 'confirmado'; versao: number; arvore?: Doc }
+  /**
+   * `arvore` vem quando o editor pede a árvore como ficou no servidor (operação que mede texto).
+   * `historico` é para quem enviou: a sessão não o usa.
+   */
+  | { tipo: 'confirmado'; versao: number; arvore?: Doc; historico?: Historico }
   | { tipo: 'recusado'; codigo: string; detalhe?: Record<string, unknown> }
   | { tipo: 'versao_desatualizada'; versaoAtual: number }
   | { tipo: 'sem_conexao' };

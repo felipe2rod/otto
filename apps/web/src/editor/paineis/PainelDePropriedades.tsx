@@ -8,6 +8,7 @@
 // prancheta. Ficam para depois: máscara, efeitos, filtros, ajuste de cor da foto, camada de ajuste,
 // degradê, cores do vetor, tokens e estilos de texto da identidade.
 import { type Documento, MODOS_DE_MESCLAGEM, type No, type Prancheta } from '@otto/documento';
+import { pesoMaisProximo } from '@otto/shared';
 import { useEffect, useId, useState } from 'react';
 import { editor as textos } from '../../textos/editor';
 import { type FamiliaDeFonte, useAmbiente } from '../ambiente';
@@ -217,7 +218,8 @@ function EscolhaDeFonte({
   aoEscolherPeso: (p: number) => void;
 }) {
   const { listarFontes } = useAmbiente();
-  const [familias, setFamilias] = useState<FamiliaDeFonte[]>([]);
+  // nulo até a biblioteca responder: sem ela não dá para dizer que a fonte falta
+  const [familias, setFamilias] = useState<FamiliaDeFonte[] | null>(null);
   useEffect(() => {
     let desmontado = false;
     void listarFontes().then((lista) => !desmontado && setFamilias(lista));
@@ -225,15 +227,20 @@ function EscolhaDeFonte({
       desmontado = true;
     };
   }, [listarFontes]);
-  const daFamilia = familias.find((f) => f.familia === familia)?.pesos;
-  const pesos = PESOS.filter((n) => n === peso || !daFamilia || daFamilia.includes(n));
+  const daFamilia = familias?.find((f) => f.familia === familia)?.pesos;
+  // os pesos que a família tem; sem saber, os de costume. O peso do documento aparece sempre
+  const pesos = [...new Set([...(daFamilia?.length ? daFamilia : PESOS), peso])].sort((a, b) => a - b);
+  // A mesma regra do servidor e da exportação (@otto/shared): o texto é desenhado com o peso mais
+  // próximo que a biblioteca tem. O campo continua mostrando o pedido, que é o que está no documento.
+  const usado = daFamilia && !daFamilia.includes(peso) ? pesoMaisProximo(daFamilia, peso) : undefined;
+  const foraDaBiblioteca = familias !== null && familias.length > 0 && (daFamilia === undefined || daFamilia.length === 0);
   return (
     <>
       <label className={estilos.campo} data-largo="sim">
         <span>{p.fonte}</span>
         <select value={familia} disabled={desativado} onChange={(e) => aoEscolherFamilia(e.target.value)}>
-          {!familias.some((f) => f.familia === familia) && <option value={familia}>{familia}</option>}
-          {familias.map((f) => (
+          {!familias?.some((f) => f.familia === familia) && <option value={familia}>{familia}</option>}
+          {familias?.map((f) => (
             <option key={f.familia} value={f.familia}>
               {f.familia}
             </option>
@@ -245,11 +252,21 @@ function EscolhaDeFonte({
         <select value={peso} disabled={desativado} onChange={(e) => aoEscolherPeso(Number(e.target.value))}>
           {pesos.map((n) => (
             <option key={n} value={n}>
-              {p.pesos[n]}
+              {p.pesos[n] ?? n}
             </option>
           ))}
         </select>
       </label>
+      {usado !== undefined && (
+        <p className={estilos.avisoDoCampo} role="status">
+          {p.pesoTrocado(peso, usado)}
+        </p>
+      )}
+      {foraDaBiblioteca && (
+        <p className={estilos.avisoDoCampo} role="status">
+          {p.fonteForaDaBiblioteca}
+        </p>
+      )}
     </>
   );
 }

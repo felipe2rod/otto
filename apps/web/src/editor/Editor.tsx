@@ -23,13 +23,15 @@ import { EstadoDaPeca, type SituacaoDaPeca } from './casca/EstadoDaPeca';
 import { Painel } from './casca/Painel';
 import estilos from './Editor.module.css';
 import { type Aviso, criarEnvio } from './envio';
+import { DialogoDeExportar } from './exportar/DialogoDeExportar';
+import { criarExportador } from './exportar/exportador';
 import { criarFonteDaApi, type FonteDaPeca } from './fonteDaPeca';
 import { loteDeDuplicar, loteDeMoverPorSeta, loteDeRemover, loteDeReordenar } from './nucleo/acoes';
 import { criarArmazem, useArmazem } from './nucleo/armazem';
 import { resolverAtalho } from './nucleo/atalhos';
 import { aplicadorDoCatalogo } from './nucleo/catalogo';
 import { criarInterface } from './nucleo/interface';
-import { criarSessaoDoDocumento, type RespostaDoEnvio, type Salvamento, type SessaoDoDocumento } from './nucleo/sessaoDoDocumento';
+import { criarSessaoDoDocumento, type Historico, type RespostaDoEnvio, type Salvamento, type SessaoDoDocumento } from './nucleo/sessaoDoDocumento';
 import { criarVisao } from './nucleo/visao';
 import { PainelDeCamadas } from './paineis/PainelDeCamadas';
 import { PainelDePropriedades } from './paineis/PainelDePropriedades';
@@ -54,6 +56,7 @@ export interface EstadoDaPecaAberta {
 }
 
 const SEM_PECA: EstadoDaPecaAberta = { salvamento: 'salvo', pendentes: 0, versao: 0, somenteLeitura: true };
+const SEM_HISTORICO: Historico = { podeDesfazer: false, podeRefazer: false };
 const INTERVALO_DE_NOVA_TENTATIVA = 5000;
 const DURACAO_DO_AVISO = 7000;
 
@@ -80,6 +83,11 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   const [faltas] = useState(() => criarArmazem<FaltasDoRender>(SEM_FALTAS));
   const [aviso] = useState(() => criarArmazem<Aviso | null>(null));
   const [enviando] = useState(() => criarArmazem<readonly string[]>([]));
+  // se há o que desfazer e refazer: quem sabe é a API, e ela diz em toda resposta que muda a peça
+  const [historico] = useState(() => criarArmazem<Historico>(SEM_HISTORICO));
+  // a exportação em andamento mora aqui, não no diálogo: fechar o diálogo não a interrompe
+  const [exportador] = useState(() => (fonte.exportacoes ? criarExportador({ api: fonte.exportacoes }) : undefined));
+  const [exportando, setExportando] = useState(false);
 
   const [comWebGL] = useState(temWebGL);
   const [situacao, setSituacao] = useState<SituacaoDaPeca>({ estado: 'abrindo' });
@@ -164,10 +172,17 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
         { doc: aberta.peca.arvore, versao: aberta.peca.versao },
         {
           aplicar: aplicadorDoCatalogo(() => medidorRef.current),
-          enviar: lotes ? (lote) => lotes.enviar(lote) : semDestino,
+          enviar: lotes
+            ? async (lote) => {
+                const r = await lotes.enviar(lote);
+                if (r.tipo === 'confirmado' && r.historico) historico.definir(r.historico);
+                return r;
+              }
+            : semDestino,
           recarregar: async () => {
             const atual = await fonte.abrir(pecaId);
             if (atual.estado !== 'aberta') throw new Error(`a peça não reabriu: ${atual.estado}`);
+            historico.definir(atual.peca.historico);
             return { doc: atual.peca.arvore, versao: atual.peca.versao };
           },
           gerarId: () => crypto.randomUUID(),
@@ -175,6 +190,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       );
       if (!lotes) sessao.definirSomenteLeitura(true);
       sessaoRef.current = sessao;
+      historico.definir(aberta.peca.historico);
 
       let docAnterior: Documento | undefined;
       const espelhar = () => {
@@ -206,7 +222,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       pararDeOuvir?.();
       sessaoRef.current = undefined;
     };
-  }, [fonte, pecaId, comWebGL, documento, estado, somenteLeitura, faltas, aviso, tentativa]);
+  }, [fonte, pecaId, comWebGL, documento, estado, somenteLeitura, faltas, aviso, historico, tentativa]);
 
   const nome = situacao.estado === 'aberta' ? situacao.nome : undefined;
   useEffect(() => {
@@ -221,13 +237,20 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
     const e = sessao.obter();
     // com lote por confirmar a versão base ainda não é a do servidor: espera a fila esvaziar
     if (e.somenteLeitura || e.pendentes > 0) return;
+    // a API já disse que não há: o botão está desligado e o atalho não faz a viagem
+    if (!historico.obter()[qual === 'desfazer' ? 'podeDesfazer' : 'podeRefazer']) return;
     revertendo.current = true;
     const r = await lotes[qual](e.versao).finally(() => {
       revertendo.current = false;
     });
-    if (r.ok) sessao.adotar({ doc: r.doc, versao: r.versao });
-    else aviso.definir({ texto: erros.doCodigo(r.codigo), tom: 'erro' });
+    if (r.ok) {
+      sessao.adotar({ doc: r.doc, versao: r.versao });
+      historico.definir(r.historico);
+    } else aviso.definir({ texto: erros.doCodigo(r.codigo), tom: 'erro' });
   });
+
+  // Sair do editor encerra a consulta da exportação (o arquivo continua sendo feito no servidor).
+  useEffect(() => () => exportador?.limpar(), [exportador]);
 
   /** Pede ao motor as fontes e imagens outra vez (o que não chegou é tentado de novo). */
   const tentarRecursosDeNovo = async () => {
@@ -246,6 +269,8 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   // Atalhos. Uma tabela só (nucleo/atalhos.ts); aqui é só a ligação com o teclado.
   useEffect(() => {
     const aoApertar = (e: KeyboardEvent) => {
+      // com um diálogo aberto o teclado é dele: nenhum atalho mexe na peça que está atrás
+      if (document.querySelector('dialog[open]')) return;
       const noCanvas = focoNoCanvas();
       if (e.code === 'Space' && noCanvas && !emCampoDeTexto(e.target)) {
         e.preventDefault();
@@ -356,6 +381,8 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
           {...(fonte.renomear ? { aoRenomear: (novo: string) => void renomearPeca(novo) } : {})}
           nomeDaPeca={nome}
           estado={estado}
+          historico={historico}
+          {...(exportador ? { exportador, aoExportar: () => setExportando(true) } : {})}
           faltas={faltas}
           paineisVisiveis={paineisVisiveis}
           aoAlternarPaineis={iface.alternarPaineis}
@@ -429,6 +456,10 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
             <PainelDePropriedades />
             <PainelDeCamadas />
           </div>
+        )}
+
+        {exportando && nome !== undefined && fonte.exportacoes && exportador && (
+          <DialogoDeExportar nomeDaPeca={nome} api={fonte.exportacoes} exportador={exportador} estado={estado} aoFechar={() => setExportando(false)} />
         )}
       </div>
     </ProvedorDoEditor>

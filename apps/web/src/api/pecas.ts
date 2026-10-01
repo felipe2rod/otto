@@ -2,6 +2,7 @@
 // "Peça" é o nome de tela do documento; na API e no código do núcleo é "documento".
 import type { Documento } from '@otto/documento';
 import { DocumentoAberto, type DocumentoDaLista, DocumentoRenomeado, ListaDeDocumentos } from '@otto/shared';
+import type { Historico } from '../editor/nucleo/sessaoDoDocumento';
 import type { Cliente } from './cliente';
 
 export interface PecaDaLista {
@@ -22,6 +23,8 @@ export interface PecaAberta {
   versao: number;
   /** A árvore do documento, já validada pelo esquema de @otto/documento. */
   arvore: Documento;
+  /** Se há o que desfazer e refazer, como a API disse ao abrir. */
+  historico: Historico;
 }
 
 export type ResultadoDeAbrir = { estado: 'aberta'; peca: PecaAberta } | { estado: 'nao_encontrada' } | { estado: 'erro'; codigo: string };
@@ -69,7 +72,11 @@ export function criarApiDePecas(cliente: Cliente): ApiDePecas {
     },
     async abrir(id) {
       const r = await cliente.ler(DocumentoAberto, caminho(id));
-      if (r.ok) return { estado: 'aberta', peca: { id: r.dados.id, nome: r.dados.nome, versao: r.dados.versao, arvore: r.dados.arvore } };
+      if (r.ok)
+        return {
+          estado: 'aberta',
+          peca: { id: r.dados.id, nome: r.dados.nome, versao: r.dados.versao, arvore: r.dados.arvore, historico: { podeDesfazer: r.dados.podeDesfazer, podeRefazer: r.dados.podeRefazer } },
+        };
       return r.status === 404 ? { estado: 'nao_encontrada' } : { estado: 'erro', codigo: r.codigo };
     },
   };

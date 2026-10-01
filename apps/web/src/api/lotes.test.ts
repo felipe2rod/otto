@@ -21,7 +21,8 @@ describe('enviar lote', () => {
     const { api, fetch } = montar(() => json(200, { versao: 8, lote: { id: LOTE, tocados: ['x'] } }));
     const r = await api.enviar({ id: LOTE, versaoBase: 7, descricao: 'mover Título', operacoes: mover });
 
-    expect(r).toEqual({ tipo: 'confirmado', versao: 8 });
+    // resposta sem os campos do histórico vale como falso (contrato)
+    expect(r).toEqual({ tipo: 'confirmado', versao: 8, historico: { podeDesfazer: false, podeRefazer: false } });
     expect(fetch.mock.calls[0]?.[0]).toBe(`/api/documentos/${PECA}/lotes`);
     expect(corpo(fetch)).toEqual({ id: LOTE, versaoBase: 7, descricao: 'mover Título', operacoes: mover });
   });
@@ -32,7 +33,12 @@ describe('enviar lote', () => {
     const r = await api.enviar({ id: LOTE, versaoBase: 7, descricao: 'alinhar', operacoes: alinhar });
 
     expect(corpo(fetch).devolver).toBe('arvore');
-    expect(r).toEqual({ tipo: 'confirmado', versao: 8, arvore });
+    expect(r).toEqual({ tipo: 'confirmado', versao: 8, arvore, historico: { podeDesfazer: false, podeRefazer: false } });
+  });
+
+  it('a resposta diz se há o que desfazer e refazer depois deste lote', async () => {
+    const { api } = montar(() => json(200, { versao: 8, lote: { id: LOTE, tocados: ['x'] }, podeDesfazer: true, podeRefazer: false }));
+    expect(await api.enviar({ id: LOTE, versaoBase: 7, descricao: 'mover Título', operacoes: mover })).toMatchObject({ historico: { podeDesfazer: true, podeRefazer: false } });
   });
 
   it('descrição longa demais é cortada no limite do contrato', async () => {
@@ -71,9 +77,9 @@ describe('enviar lote', () => {
 describe('desfazer e refazer', () => {
   it('mandam a versão base e devolvem a árvore para o editor adotar', async () => {
     const arvore = documentoVazio();
-    const { api, fetch } = montar(() => json(200, { versao: 9, arvore }));
+    const { api, fetch } = montar(() => json(200, { versao: 9, arvore, podeDesfazer: false, podeRefazer: true }));
 
-    expect(await api.desfazer(8)).toEqual({ ok: true, versao: 9, doc: arvore });
+    expect(await api.desfazer(8)).toEqual({ ok: true, versao: 9, doc: arvore, historico: { podeDesfazer: false, podeRefazer: true } });
     expect(fetch.mock.calls[0]?.[0]).toBe(`/api/documentos/${PECA}/desfazer`);
     expect(corpo(fetch)).toEqual({ versaoBase: 8 });
 

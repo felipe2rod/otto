@@ -31,7 +31,7 @@ export function criarFonteDeExemplo(deps: { gerarImagem(): Promise<ImagemGerada>
     lotes,
     async abrirPeca(id) {
       const arvore = montarDocumentoDeExemplo(await aImagem());
-      return { estado: 'aberta', peca: { id, nome: deps.nomeDaPeca, versao: 1, arvore } };
+      return { estado: 'aberta', peca: { id, nome: deps.nomeDaPeca, versao: 1, arvore, historico: { podeDesfazer: false, podeRefazer: false } } };
     },
     async enviarLote(lote) {
       lotes.push(lote);

@@ -126,3 +126,25 @@
   border-radius: 4px;
   font-weight: 600;
 }
+
+/* o andamento da exportação: discreto enquanto anda, em papel quando há arquivo para baixar */
+.exportacao {
+  padding: 5px 10px;
+  background: none;
+  border: 1px solid var(--grafite-4);
+  border-radius: 4px;
+  color: var(--texto-2);
+  font: 11px var(--mono);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.exportacao[data-fase="terminou"] {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.exportacao[data-fase="falhou"] {
+  border-color: var(--erro);
+  color: var(--erro);
+}

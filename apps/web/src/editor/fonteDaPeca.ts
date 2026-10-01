@@ -3,6 +3,7 @@
 import { ListaDeFontes } from '@otto/shared';
 import { type ApiDeArquivos, criarApiDeArquivos } from '../api/arquivos';
 import { criarCliente } from '../api/cliente';
+import { type ApiDeExportacoes, criarApiDeExportacoes } from '../api/exportacoes';
 import { type ApiDeLotes, criarApiDeLotes } from '../api/lotes';
 import { criarApiDePecas, type ResultadoDeAbrir } from '../api/pecas';
 import type { FamiliaDeFonte } from './ambiente';
@@ -15,6 +16,8 @@ export interface FonteDaPeca {
   lotes?: ApiDeLotes;
   /** Envio de imagem e importação de SVG. Ausente: não dá para inserir arquivo. */
   arquivos?: ApiDeArquivos;
+  /** Relatório, pedido e consulta de exportação. Ausente: o botão Exportar fica desligado. */
+  exportacoes?: ApiDeExportacoes;
   /** Renomear a peça (o nome é do registro, não da árvore). Ausente: o nome não se troca daqui. */
   renomear?(id: string, nome: string): Promise<{ ok: true; nome: string } | { ok: false; codigo: string }>;
   /** Bytes de imagem e de fonte para o motor. */
@@ -30,6 +33,7 @@ export function criarFonteDaApi(pecaId: string): FonteDaPeca {
     abrir: pecas.abrir,
     renomear: pecas.renomear,
     arquivos: criarApiDeArquivos(cliente),
+    exportacoes: criarApiDeExportacoes(cliente, pecaId),
     lotes: criarApiDeLotes(cliente, pecaId),
     recursos: criarRecursosDoRender(),
     listarFontes() {

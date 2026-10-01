@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import { caixaDe } from '@otto/documento';
+import type { Exportacao, RelatorioDeExportacao } from '@otto/shared';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ResultadoDeAbrir } from '../api/pecas';
 import { editor as textos } from '../textos/editor';
 import { erros } from '../textos/erros';
+import { exportar as textosDeExportar } from '../textos/exportar';
 import { montarDocumentoDeExemplo } from './bancada/documentoDeExemplo';
 import type { MotorDeRender, RecursosEmFalta } from './canvas/motor';
 import { Editor } from './Editor';
@@ -54,6 +56,7 @@ function montar(
     motor?: Partial<MotorDeRender>;
     arquivos?: Partial<NonNullable<FonteDaPeca['arquivos']>>;
     renomear?: FonteDaPeca['renomear'];
+    exportacoes?: Partial<NonNullable<FonteDaPeca['exportacoes']>>;
   } = {},
 ) {
   const motor = { ...motorFalso(), ...opcoes.motor };
@@ -81,14 +84,37 @@ function montar(
         }
       : {}),
     ...(opcoes.renomear ? { renomear: opcoes.renomear } : {}),
+    ...(opcoes.exportacoes
+      ? {
+          exportacoes: {
+            relatorio: vi.fn(async () => ({ ok: true as const, relatorio: RELATORIO })),
+            pedir: vi.fn(async () => ({ ok: true as const, exportacao: EXPORTACAO })),
+            consultar: vi.fn(async () => ({ ok: true as const, exportacao: EXPORTACAO })),
+            ...opcoes.exportacoes,
+          },
+        }
+      : {}),
   };
   const tela = render(<Editor pecaId="a1" fonte={fonte} criarMotor={criarMotor} temWebGL={() => opcoes.webgl ?? true} />);
   return { motor, criarMotor, abrirPeca, lotes, tela, fonte };
 }
 
+const RELATORIO: RelatorioDeExportacao = { arquivos: [], camadas: [], tokens: [], fontes: [], substituicoes: [], emFalta: { fontes: [], imagens: [] }, imagens: [], avisos: [] };
+const EXPORTACAO: Exportacao = {
+  id: '0199a000-0000-7000-8000-0000000000e1',
+  documentoId: '0199a000-0000-7000-8000-000000000001',
+  versao: 3,
+  formato: 'psd',
+  estado: 'na_fila',
+  progresso: { pranchetasProntas: 0, pranchetasNoTotal: 2 },
+  arquivos: [],
+  falhas: [],
+  criadaEm: '2026-10-01T12:00:00.000Z',
+};
+
 const aberta: ResultadoDeAbrir = {
   estado: 'aberta',
-  peca: { id: 'a1', nome: 'Lançamento Crové', versao: 3, arvore: EXEMPLO },
+  peca: { id: 'a1', nome: 'Lançamento Crové', versao: 3, arvore: EXEMPLO, historico: { podeDesfazer: true, podeRefazer: true } },
 };
 
 describe('casca do editor: disposição', () => {
@@ -321,8 +347,13 @@ describe('casca do editor: a sessão ligada à API', () => {
   });
 
   it('Ctrl+Z pede desfazer à API com a versão atual e adota a árvore que volta; Ctrl+Shift+Z refaz', async () => {
-    const desfazer = vi.fn<Lotes['desfazer']>(async () => ({ ok: true, versao: 4, doc: { ...EXEMPLO, pranchetas: EXEMPLO.pranchetas.slice(0, 1) } }));
-    const refazer = vi.fn<Lotes['refazer']>(async () => ({ ok: true, versao: 5, doc: EXEMPLO }));
+    const desfazer = vi.fn<Lotes['desfazer']>(async () => ({
+      ok: true,
+      versao: 4,
+      doc: { ...EXEMPLO, pranchetas: EXEMPLO.pranchetas.slice(0, 1) },
+      historico: { podeDesfazer: true, podeRefazer: true },
+    }));
+    const refazer = vi.fn<Lotes['refazer']>(async () => ({ ok: true, versao: 5, doc: EXEMPLO, historico: { podeDesfazer: true, podeRefazer: false } }));
     const { motor } = await abrirESelecionar({ lotes: { desfazer, refazer } });
 
     await act(async () => fireEvent.keyDown(window, { key: 'z', ctrlKey: true }));
@@ -340,6 +371,32 @@ describe('casca do editor: a sessão ligada à API', () => {
 
     expect(lotes?.desfazer).toHaveBeenCalledWith(3);
     expect(screen.getByRole('alert').textContent).toContain(erros.doCodigo('nada_para_desfazer'));
+  });
+
+  it('Desfazer e Refazer ficam desligados quando a API diz que não há o que fazer, e Ctrl+Z nem chama', async () => {
+    const semHistorico: ResultadoDeAbrir = { estado: 'aberta', peca: { ...aberta.peca, historico: { podeDesfazer: false, podeRefazer: false } } };
+    const { lotes } = await abrirESelecionar({ abrir: semHistorico });
+    expect(screen.getByRole('button', { name: textos.topo.desfazer })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: textos.topo.refazer })).toHaveProperty('disabled', true);
+
+    await act(async () => fireEvent.keyDown(window, { key: 'z', ctrlKey: true }));
+    expect(lotes?.desfazer).not.toHaveBeenCalled();
+  });
+
+  it('o lote confirmado liga o Desfazer; desfazer tudo o desliga e liga o Refazer', async () => {
+    const semHistorico: ResultadoDeAbrir = { estado: 'aberta', peca: { ...aberta.peca, historico: { podeDesfazer: false, podeRefazer: false } } };
+    const enviar = vi.fn<Lotes['enviar']>(async (lote) => ({ tipo: 'confirmado', versao: lote.versaoBase + 1, historico: { podeDesfazer: true, podeRefazer: false } }));
+    const desfazer = vi.fn<Lotes['desfazer']>(async () => ({ ok: true, versao: 5, doc: EXEMPLO, historico: { podeDesfazer: false, podeRefazer: true } }));
+    await abrirESelecionar({ abrir: semHistorico, lotes: { enviar, desfazer } });
+    const botao = (nome: string) => screen.getByRole('button', { name: nome });
+
+    await act(async () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+    await waitFor(() => expect(botao(textos.topo.desfazer)).toHaveProperty('disabled', false));
+    expect(botao(textos.topo.refazer)).toHaveProperty('disabled', true);
+
+    await act(async () => fireEvent.click(botao(textos.topo.desfazer)));
+    expect(botao(textos.topo.desfazer)).toHaveProperty('disabled', true);
+    expect(botao(textos.topo.refazer)).toHaveProperty('disabled', false);
   });
 
   it('lote recusado pela API: a camada volta ao lugar e a tela diz a frase dela, não o erro cru', async () => {
@@ -495,5 +552,110 @@ describe('casca do editor: enviar imagem e SVG', () => {
     const m = montar({ abrir: aberta, arquivos: {} });
     await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
     expect((screen.getByLabelText(textos.ferramentas.inserir) as HTMLInputElement).disabled).toBe(true);
+  });
+});
+
+describe('casca do editor: exportar', () => {
+  const camada = EXEMPLO.pranchetas[0]?.filhos.at(-1);
+  const exportarDoTopo = () => screen.getByRole('button', { name: textos.topo.exportar });
+  async function abrir(opcoes: Parameters<typeof montar>[0] = {}) {
+    const m = montar({ abrir: aberta, lotes: {}, exportacoes: {}, ...opcoes });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    return m;
+  }
+
+  /** O botão só liga quando o relatório chega. */
+  async function clicarEmExportarPsd() {
+    const botao = await screen.findByRole('button', { name: textosDeExportar.botao.psd });
+    await waitFor(() => expect(botao).toHaveProperty('disabled', false));
+    await act(async () => fireEvent.click(botao));
+  }
+
+  it('sem ter por onde exportar (a bancada), o botão Exportar fica desligado', async () => {
+    const m = montar({ abrir: aberta, lotes: {} });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    expect(exportarDoTopo()).toHaveProperty('disabled', true);
+  });
+
+  it('Exportar abre o diálogo com o relatório da peça', async () => {
+    const { fonte } = await abrir();
+    expect(exportarDoTopo()).toHaveProperty('disabled', false);
+    fireEvent.click(exportarDoTopo());
+
+    expect(await screen.findByRole('dialog', { name: textosDeExportar.daPeca('Lançamento Crové') })).toBeDefined();
+    await waitFor(() => expect(fonte.exportacoes?.relatorio).toHaveBeenCalledWith({ formato: 'psd', arquivos: 'por-prancheta' }));
+  });
+
+  it('fechar o diálogo devolve o foco a quem o abriu', async () => {
+    await abrir();
+    exportarDoTopo().focus();
+    fireEvent.click(exportarDoTopo());
+    // o diálogo modal leva o foco para dentro dele
+    const fechar = await screen.findByRole('button', { name: textosDeExportar.fechar });
+    fechar.focus();
+    fireEvent.click(fechar);
+    expect(document.activeElement).toBe(exportarDoTopo());
+  });
+
+  it('se quem abriu o diálogo não existe mais (o aviso do topo sumiu), o foco vai para o botão Exportar', async () => {
+    const pronta: Exportacao = { ...EXPORTACAO, estado: 'pronta', progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 } };
+    await abrir({ exportacoes: { pedir: vi.fn(async () => ({ ok: true as const, exportacao: pronta })) } });
+    fireEvent.click(exportarDoTopo());
+    await clicarEmExportarPsd();
+    fireEvent.click(screen.getByRole('button', { name: textosDeExportar.fechar }));
+
+    const aviso = await screen.findByRole('button', { name: textosDeExportar.topo.pronto });
+    aviso.focus();
+    fireEvent.click(aviso);
+    // nova exportação limpa o estado: o aviso do topo deixa de existir
+    const outra = await screen.findByRole('button', { name: textosDeExportar.resultado.outra });
+    outra.focus();
+    fireEvent.click(outra);
+    const fechar = screen.getByRole('button', { name: textosDeExportar.fechar });
+    fechar.focus();
+    fireEvent.click(fechar);
+    expect(document.activeElement).toBe(exportarDoTopo());
+  });
+
+  it('com o diálogo aberto, os atalhos do editor não mexem na peça que está atrás', async () => {
+    const { lotes } = await abrir();
+    fireEvent.click(screen.getByRole('treeitem', { name: new RegExp(`^${camada?.nome}`) }));
+    fireEvent.click(exportarDoTopo());
+    const dialogo = await screen.findByRole('dialog');
+
+    await act(async () => fireEvent.keyDown(dialogo, { key: 'Delete' }));
+    await act(async () => fireEvent.keyDown(dialogo, { key: 'ArrowRight' }));
+    expect(lotes?.enviar).not.toHaveBeenCalled();
+  });
+
+  it('fechar o diálogo não interrompe: o topo diz o andamento e reabre a exportação', async () => {
+    await abrir();
+    fireEvent.click(exportarDoTopo());
+    await clicarEmExportarPsd();
+    fireEvent.click(screen.getByRole('button', { name: textosDeExportar.fechar }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    const andamento = await screen.findByRole('button', { name: textosDeExportar.topo.andando(0, 2) });
+    fireEvent.click(andamento);
+    expect(await screen.findByRole('status', { name: textosDeExportar.andamento.titulo })).toBeDefined();
+  });
+
+  it('exportação pronta com o diálogo fechado: o topo avisa, e o aviso leva aos arquivos', async () => {
+    const pronta: Exportacao = {
+      ...EXPORTACAO,
+      estado: 'pronta',
+      progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 },
+      arquivos: [{ indice: 0, nome: 'Peça - Feed.psd', tipo: 'x', bytes: 2048, baixar: '/api/exportacoes/e1/arquivos/0' }],
+    };
+    let liberar: (() => void) | undefined;
+    const pedir = vi.fn(() => new Promise<{ ok: true; exportacao: Exportacao }>((ok) => (liberar = () => ok({ ok: true, exportacao: pronta }))));
+    await abrir({ exportacoes: { pedir } });
+    fireEvent.click(exportarDoTopo());
+    await clicarEmExportarPsd();
+    fireEvent.click(screen.getByRole('button', { name: textosDeExportar.fechar }));
+
+    await act(async () => liberar?.());
+    fireEvent.click(await screen.findByRole('button', { name: textosDeExportar.topo.pronto }));
+    expect(screen.getByRole('link', { name: textosDeExportar.resultado.baixarArquivo('Peça - Feed.psd') }).getAttribute('href')).toBe('/api/exportacoes/e1/arquivos/0');
   });
 });
