@@ -1,0 +1,21 @@
+{
+  "name": "@otto/documento",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Núcleo: esquema do documento, catálogo de operações, transação, resumo (ADR 027). Dono: especialista-grafico",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}
