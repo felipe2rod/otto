@@ -19,6 +19,39 @@ function etiquetasDaTabela(v: DataView, inicio: number): string[] {
   return [...etiquetas].sort();
 }
 
+/**
+ * Nome PostScript da fonte (registro 6 da tabela "name"). É por ele que o Photoshop procura a fonte instalada
+ * para a camada de texto continuar editável (ADR 028). Arquivo que não é fonte, ou cortado: undefined, nunca exceção.
+ */
+export function nomePostScript(bytes: Uint8Array): string | undefined {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  try {
+    const tabelas = v.getUint16(4);
+    for (let i = 0; i < tabelas; i++) {
+      const p = 12 + i * 16;
+      if (String.fromCharCode(v.getUint8(p), v.getUint8(p + 1), v.getUint8(p + 2), v.getUint8(p + 3)) !== 'name') continue;
+      const inicio = v.getUint32(p + 8);
+      const registros = v.getUint16(inicio + 2);
+      const textos = inicio + v.getUint16(inicio + 4);
+      for (let j = 0; j < registros; j++) {
+        const r = inicio + 6 + j * 12;
+        if (v.getUint16(r + 6) !== 6) continue;
+        const plataforma = v.getUint16(r);
+        const tamanho = v.getUint16(r + 8);
+        const onde = textos + v.getUint16(r + 10);
+        let nome = '';
+        // Unicode e Windows guardam em UTF-16 de ordem alta; Macintosh, um byte por letra
+        if (plataforma === 0 || plataforma === 3) for (let k = 0; k + 1 < tamanho; k += 2) nome += String.fromCharCode(v.getUint16(onde + k));
+        else for (let k = 0; k < tamanho; k++) nome += String.fromCharCode(v.getUint8(onde + k));
+        if (nome) return nome;
+      }
+    }
+  } catch {
+    // leitura fora do arquivo: não é uma fonte bem formada
+  }
+  return undefined;
+}
+
 export function recursosOpenType(bytes: Uint8Array): RecursosOpenType {
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const tabelas = v.getUint16(4);

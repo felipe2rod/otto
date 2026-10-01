@@ -55,7 +55,8 @@ describe('goldens do render de referência', () => {
 
   for (const cena of cenasDeGolden()) {
     it(`${cena.nome}: zero pixel diferente do golden`, () => {
-      const { doc, p } = peca(cena.nos, cena.opcoes);
+      // lote fixo: os ids dos nós saem dele, e o grão do ruído sai do id do nó
+      const { doc, p } = peca(cena.nos, { ...cena.opcoes, lote: `golden-${cena.nome}` });
       // o golden só vale para o que o motor desenha: cena com recurso que ele não desenha é erro da cena
       expect(naoDesenhado(doc)).toEqual([]);
       const r = renderizarPrancheta(sessao, doc, p);
@@ -83,7 +84,8 @@ describe('goldens do render de referência', () => {
     });
 
     it(`${cena.nome}: o cálculo da GPU (shader) fica a no máximo 4 níveis do golden`, () => {
-      const { doc, p } = peca(cena.nos, cena.opcoes);
+      // lote fixo: os ids dos nós saem dele, e o grão do ruído sai do id do nó
+      const { doc, p } = peca(cena.nos, { ...cena.opcoes, lote: `golden-${cena.nome}` });
       const referencia = renderizarPrancheta(sessao, doc, p);
       const shader = renderizarPrancheta(sessao, doc, p, { calculo: 'shader' });
       expect(comparar(referencia.rgba, shader.rgba, p.largura, p.altura).d.maxima).toBeLessThanOrEqual(4);

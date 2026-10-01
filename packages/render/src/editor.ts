@@ -80,7 +80,7 @@ export function fabricaNaCpu(sessao: Sessao): FabricaDeImagens {
       canvas.scale(escala, escala);
       canvas.translate(-r.x, -r.y);
       desenharNosEmCpu(sessao, cpu, doc, p, nos, { fundo, semRecorte: regiao !== undefined });
-      const imagem = cpu.superficie.makeImageSnapshot();
+      const imagem = cpu.imagem();
       cpu.destruir();
       return imagem;
     },

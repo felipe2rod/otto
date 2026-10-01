@@ -30,6 +30,8 @@ function motorFalso() {
     prepararRecursos: vi.fn(async () => undefined),
     medidor: { tinta: () => ({ x: 0, y: 0, w: 0, h: 0 }) },
     emFalta: { fontes: [], imagens: [] },
+    aoMudarEmFalta: vi.fn(() => () => {}),
+    sentinela: 'motor-de-teste',
     contadores: { composicoesDePrancheta: 0, partes: 0, quadros: 0 },
     renderizarReferencia: vi.fn(),
     aoPerderContexto: vi.fn((aviso: () => void) => {

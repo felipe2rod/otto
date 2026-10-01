@@ -7,7 +7,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./node": "./src/node.ts",
-    "./navegador": "./src/navegador.ts"
+    "./navegador": "./src/navegador.ts",
+    "./sentinela": "./src/sentinela.ts",
+    "./apoio-de-teste": "./src/apoio-de-teste.ts"
   },
   "scripts": {
     "test": "vitest run",

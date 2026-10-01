@@ -5,6 +5,7 @@ import { type Caixa, type Documento, type Medidor, todasAsCamadas } from '@otto/
 import type { CanvasKit, Surface } from 'canvaskit-wasm';
 import { type RecursosEmFalta, type RenderEmPixels, recursosEmFalta, renderizarPrancheta } from './compositor';
 import { CenaDoEditor, type FabricaDeImagens, fabricaNaCpu, type PreviaDeGesto } from './editor';
+import { SENTINELA_DO_MOTOR } from './sentinela';
 import { criarSessao, type Sessao } from './sessao';
 import { criarMedidor } from './verificacao';
 
@@ -37,6 +38,13 @@ export interface MotorDeRender {
   readonly contadores: { composicoesDePrancheta: number; partes: number; quadros: number };
   /** Fontes e imagens do documento corrente que a porta de recursos não entregou. O texto sem fonte não é desenhado. */
   readonly emFalta: RecursosEmFalta;
+  /**
+   * Avisa quando `emFalta` muda: ao receber um documento (definirDocumento) e ao terminar de buscar recursos
+   * (prepararRecursos). Não avisa sem mudança. Devolve a função que cancela o aviso.
+   */
+  aoMudarEmFalta(aviso: (emFalta: RecursosEmFalta) => void): () => void;
+  /** Marca do código do motor, para o teste do pacote público (ADR 019). */
+  readonly sentinela: string;
   /** O render de referência (CPU), igual ao do servidor. Para "ver como exporta" e para o lint local. */
   renderizarReferencia(idDaPrancheta: string, opcoes?: { escala?: number; regiao?: Caixa }): Promise<RenderEmPixels>;
   /** O WebGL pode perder o contexto; o editor precisa saber para avisar e recriar o motor. */
@@ -80,8 +88,18 @@ export function telaDeCpu(ck: CanvasKit, largura: number, altura: number): Tela 
 export interface OpcoesDoMotor {
   /** Como pedir o próximo quadro. Padrão: requestAnimationFrame. Os testes passam um agendador próprio. */
   agendar?: (quadro: () => void) => void;
-  /** Cor da área de trabalho, atrás das pranchetas, em #rrggbb. */
+  /**
+   * Cor da área de trabalho, atrás das pranchetas, em #rrggbb, ou "transparente": aí o canvas fica vazado fora das
+   * pranchetas e o editor põe o próprio fundo por baixo dele (o alfa do canvas é premultiplicado).
+   */
   fundo?: string;
+}
+
+function corDoFundo(ck: CanvasKit, fundo: string): Float32Array {
+  if (fundo === 'transparente') return ck.TRANSPARENT;
+  if (!/^#[0-9a-fA-F]{6}$/.test(fundo)) throw new Error(`O fundo do motor precisa ser uma cor em #rrggbb ou "transparente"; veio "${fundo}"`);
+  const cor = Number.parseInt(fundo.slice(1), 16);
+  return ck.Color((cor >> 16) & 255, (cor >> 8) & 255, cor & 255, 1);
 }
 
 const bytesDe = (dados: ArrayBuffer | Uint8Array): Uint8Array => (dados instanceof Uint8Array ? dados : new Uint8Array(dados));
@@ -90,8 +108,18 @@ export function criarMotorSobreTela(ck: CanvasKit, tela: Tela, recursos: Recurso
   const sessao = criarSessao(ck, { fontes: [], imagens: [] });
   const cena = new CenaDoEditor(sessao, tela.fabrica(sessao));
   const agendar = opcoes.agendar ?? ((quadro: () => void) => void (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(quadro) : setTimeout(quadro, 16)));
-  const corDeFundo = Number.parseInt((opcoes.fundo ?? '#262422').slice(1), 16);
-  const fundo = ck.Color((corDeFundo >> 16) & 255, (corDeFundo >> 8) & 255, corDeFundo & 255, 1);
+  const fundo = corDoFundo(ck, opcoes.fundo ?? '#262422');
+  const ouvintesDeFalta = new Set<(emFalta: RecursosEmFalta) => void>();
+  /** A última falta avisada, como texto: a comparação custa uma passada pelas camadas, só quando há quem ouça. */
+  let faltaAvisada = JSON.stringify({ fontes: [], imagens: [] });
+  const conferirFalta = (): void => {
+    if (ouvintesDeFalta.size === 0 || !doc || destruido) return;
+    const emFalta = recursosEmFalta(sessao, doc);
+    const chave = JSON.stringify(emFalta);
+    if (chave === faltaAvisada) return;
+    faltaAvisada = chave;
+    for (const aviso of [...ouvintesDeFalta]) aviso(emFalta);
+  };
   const entregues = new Set<string>();
   let doc: Documento | undefined;
   let camera: Camera = { x: 0, y: 0, zoom: 1 };
@@ -133,9 +161,11 @@ export function criarMotorSobreTela(ck: CanvasKit, tela: Tela, recursos: Recurso
     },
     definirDocumento(novo) {
       if (destruido) return;
+      const mesmo = doc === novo;
       doc = novo;
       cena.definirDocumento(novo);
       pedirQuadro(true);
+      if (!mesmo) conferirFalta();
     },
     definirPrevia(previa) {
       if (destruido) return;
@@ -187,6 +217,7 @@ export function criarMotorSobreTela(ck: CanvasKit, tela: Tela, recursos: Recurso
         // o que estava em cache foi desenhado sem o recurso que acabou de chegar
         cena.invalidarTudo();
         pedirQuadro(true);
+        conferirFalta();
       }
     },
     medidor: criarMedidor(sessao),
@@ -196,6 +227,11 @@ export function criarMotorSobreTela(ck: CanvasKit, tela: Tela, recursos: Recurso
     get emFalta() {
       return doc ? recursosEmFalta(sessao, doc) : { fontes: [], imagens: [] };
     },
+    aoMudarEmFalta(aviso) {
+      ouvintesDeFalta.add(aviso);
+      return () => void ouvintesDeFalta.delete(aviso);
+    },
+    sentinela: SENTINELA_DO_MOTOR,
     async renderizarReferencia(idDaPrancheta, o = {}) {
       const p = doc?.pranchetas.find((x) => x.id === idDaPrancheta);
       if (!doc || !p) throw new Error(`a prancheta "${idDaPrancheta}" não existe no documento que o motor tem`);

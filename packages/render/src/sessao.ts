@@ -3,6 +3,7 @@
 // a conta dona do arquivo é quem chama. Não há cache global entre sessões.
 import type { CanvasKit, Image } from 'canvaskit-wasm';
 import { type Ajustador, criarAjustador } from './ajustes';
+import { criarFiltrador, type Filtrador } from './filtros';
 import { criarMesclador, type Mesclador } from './mesclagem';
 import { criarMotorDeTexto, type FonteDeArquivo, type MotorDeTexto } from './texto';
 
@@ -25,6 +26,7 @@ export interface Sessao {
   readonly texto: MotorDeTexto;
   readonly mesclador: Mesclador;
   readonly ajustador: Ajustador;
+  readonly filtrador: Filtrador;
   imagem(arquivo: string): Image | undefined;
   /** Entrega mais uma fonte. Repetir a mesma família e peso não faz nada. */
   adicionarFonte(fonte: FonteDeArquivo): void;
@@ -37,6 +39,7 @@ export function criarSessao(ck: CanvasKit, recursos: RecursosDaSessao): Sessao {
   const texto = criarMotorDeTexto(ck, recursos.fontes);
   const mesclador = criarMesclador(ck);
   const ajustador = criarAjustador(ck);
+  const filtrador = criarFiltrador(ck);
   const imagens = new Map<string, Image>();
   const adicionarImagem = (i: ImagemDeArquivo): void => {
     if (imagens.has(i.arquivo)) return;
@@ -53,6 +56,7 @@ export function criarSessao(ck: CanvasKit, recursos: RecursosDaSessao): Sessao {
     texto,
     mesclador,
     ajustador,
+    filtrador,
     imagem: (arquivo) => imagens.get(arquivo),
     adicionarFonte: (f) => texto.registrar(f),
     adicionarImagem,
@@ -62,6 +66,7 @@ export function criarSessao(ck: CanvasKit, recursos: RecursosDaSessao): Sessao {
       texto.destruir();
       mesclador.destruir();
       ajustador.destruir();
+      filtrador.destruir();
     },
   };
 }

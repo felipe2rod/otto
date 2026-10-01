@@ -22,11 +22,13 @@ import {
   resolverCor,
   todasAsCamadas,
 } from '@otto/documento';
-import type { Canvas, ImageFilter, Paint, Path, Shader, Surface } from 'canvaskit-wasm';
+import type { Canvas, Image, ImageFilter, Paint, Path, Shader, Surface } from 'canvaskit-wasm';
 import type { AjusteResolvido } from './ajustes';
+import { type GeometriaDoPasse, movimentoNoPixel, nitidezNoPixel, passosDoMovimento, ruidoNoPixel, uniformesDoMovimento, uniformesDoRuido } from './filtros';
 import { filtroDeCorDaFoto } from './foto';
 import { ehModoNativo } from './mesclagem';
 import { ajustarPremultiplicado, mesclarPremultiplicado } from './pixel';
+import { sementeDe } from './ruido';
 import type { Sessao } from './sessao';
 
 export { referenciaDeAjusteDeCor } from './foto';
@@ -126,7 +128,30 @@ function desfoqueDoNo(n: NoVisual): number {
   return Math.sqrt(raios.reduce((soma, r) => soma + r * r, 0));
 }
 
-/** Caixa que contém tudo o que o nó pinta, com rotação, sombra e desfoque. Limita o tamanho da camada temporária. */
+/** A camada tem filtro que mexe no pixel já desenhado (ruído, nitidez, desfoque de movimento)? */
+const temFiltroDePixel = (n: NoVisual): boolean => (n.filtros ?? []).some((f) => f.tipo !== 'desfoque');
+const temEfeitos = (n: NoVisual): boolean => Boolean(n.efeitos && Object.values(n.efeitos).some(Boolean));
+/** Camada cujo conteúdo é montado numa imagem à parte antes de entrar na composição: tem filtro de pixel ou efeito de camada. */
+const montadaAParte = (n: NoVisual): boolean => temFiltroDePixel(n) || temEfeitos(n);
+
+/** Quanto os filtros e efeitos alcançam além do desenho da camada, em unidades do documento. */
+function alcanceDeFiltrosEEfeitos(n: NoVisual): number {
+  let alcance = 0;
+  for (const f of n.filtros ?? []) {
+    if (f.tipo === 'desfoque' || f.tipo === 'nitidez') alcance += f.raio * 3;
+    if (f.tipo === 'desfoque-de-movimento') alcance += f.distancia / 2 + 1;
+  }
+  const e = n.efeitos;
+  // o tamanho do brilho é o dobro do desvio padrão; o desfoque alcança três desvios
+  const efeitos = [
+    e?.brilhoExterno ? e.brilhoExterno.tamanho * 1.5 : 0,
+    e?.brilhoInterno ? e.brilhoInterno.tamanho * 1.5 : 0,
+    e?.sombraInterna ? e.sombraInterna.desfoque * 1.5 + e.sombraInterna.distancia : 0,
+  ];
+  return alcance + Math.max(...efeitos);
+}
+
+/** Caixa que contém tudo o que o nó pinta, com rotação, sombra, filtros e efeitos. Limita o tamanho da camada temporária. */
 export function limitesDoNo(sessao: Sessao, n: NoVisual): Caixa {
   let c: Caixa = { x: n.x, y: n.y, w: n.largura, h: n.altura };
   if (n.tipo === 'texto') {
@@ -144,7 +169,7 @@ export function limitesDoNo(sessao: Sessao, n: NoVisual): Caixa {
     c = { x: c.x - folga, y: c.y - folga, w: c.w + 2 * folga, h: c.h + 2 * folga };
   }
   c = girarCaixa(c, n.x + n.largura / 2, n.y + n.altura / 2, n.rotacao);
-  const borrao = desfoqueDoNo(n) * 3;
+  const borrao = alcanceDeFiltrosEEfeitos(n);
   let esq = 1 + borrao;
   let topo = 1 + borrao;
   let dir = 1 + borrao;
@@ -331,14 +356,24 @@ function shaderDaMascaraEmDegrade(sessao: Sessao, m: MascaraDeDegrade, caixa: Ca
   return ck.Shader.MakeLinearGradient([e.x0, e.y0], [e.x1, e.y1], cores, [0, a, Math.max(a + 0.0001, b), 1], ck.TileMode.Clamp);
 }
 
-/** Máscaras que o motor desenha. A de sujeito (recorte da foto) ainda não: a camada sai sem máscara. */
-const mascaraDesenhada = (m: Mascara | undefined): Exclude<Mascara, { tipo: 'sujeito' }> | undefined => (m && m.tipo !== 'sujeito' ? m : undefined);
+type MascaraGeometrica = Exclude<Mascara, { tipo: 'sujeito' }>;
+
+/**
+ * A máscara do nó, se o motor tem como desenhá-la. A de sujeito só vale em foto, e só com o arquivo da máscara
+ * e o da foto entregues: fora disso a camada sai sem máscara (recursosEmFalta e naoDesenhado avisam).
+ */
+function mascaraDoNo(cx: Contexto, n: No): Mascara | undefined {
+  const m = n.mascara;
+  if (m?.tipo !== 'sujeito') return m;
+  return n.tipo === 'imagem' && cx.sessao.imagem(m.arquivo) && cx.sessao.imagem(n.arquivo) ? m : undefined;
+}
+const geometrica = (m: Mascara | undefined): MascaraGeometrica | undefined => (m && m.tipo !== 'sujeito' ? m : undefined);
 
 /**
  * Pinta a cobertura da máscara com a tinta dada. A tinta decide o efeito: preto comum dentro de uma camada
  * "destino dentro" corta a camada; com o shader de um ajuste, limita o ajuste à máscara.
  */
-function pintarCobertura(cx: Contexto, canvas: Canvas, m: Exclude<Mascara, { tipo: 'sujeito' }> | undefined, caixa: Caixa, tinta: Paint, inverter: boolean): void {
+function pintarCobertura(cx: Contexto, canvas: Canvas, m: MascaraGeometrica | undefined, caixa: Caixa, tinta: Paint, inverter: boolean): void {
   const { ck } = cx.sessao;
   if (!m) {
     canvas.drawPaint(tinta);
@@ -366,20 +401,40 @@ function pintarCobertura(cx: Contexto, canvas: Canvas, m: Exclude<Mascara, { tip
   caminho.delete();
 }
 
+/** Desenha o recorte do sujeito: a imagem da máscara, com o mesmo enquadramento e a mesma rotação da foto. O alfa dela é a cobertura. */
+function pintarSujeito(cx: Contexto, canvas: Canvas, no: NoImagem, arquivo: string): void {
+  const { ck } = cx.sessao;
+  const foto = cx.sessao.imagem(no.arquivo);
+  const mascara = cx.sessao.imagem(arquivo);
+  if (!foto || !mascara) return;
+  const e = enquadrar(foto.width(), foto.height(), no.x, no.y, no.largura, no.altura, no.ajuste, no.foco, no.zoom);
+  // a máscara tem a proporção da foto, mas pode ter outra resolução
+  const kx = mascara.width() / foto.width();
+  const ky = mascara.height() / foto.height();
+  canvas.save();
+  if (no.rotacao) canvas.rotate(no.rotacao, no.x + no.largura / 2, no.y + no.altura / 2);
+  canvas.drawImageRectOptions(mascara, ck.XYWHRect(e.sx * kx, e.sy * ky, e.sw * kx, e.sh * ky), ck.XYWHRect(e.dx, e.dy, e.dw, e.dh), ck.FilterMode.Linear, ck.MipmapMode.Nearest);
+  canvas.restore();
+}
+
 /** Corta a camada corrente pela máscara. Chamar com a camada do nó aberta. */
-function aplicarMascara(cx: Contexto, canvas: Canvas, m: Exclude<Mascara, { tipo: 'sujeito' }>, caixa: Caixa): void {
+function aplicarMascara(cx: Contexto, canvas: Canvas, n: No, m: Mascara, caixa: Caixa): void {
   const { ck } = cx.sessao;
   const corte = new ck.Paint();
-  const invertida = m.tipo === 'forma' && m.inverter;
-  // invertida: apaga onde a forma está, em vez de manter só onde ela está
+  const invertida = m.tipo !== 'degrade' && m.inverter;
+  // invertida: apaga onde a máscara cobre, em vez de manter só onde ela cobre
   corte.setBlendMode(invertida ? ck.BlendMode.DstOut : ck.BlendMode.DstIn);
   canvas.saveLayer(corte);
-  const preto = new ck.Paint();
-  preto.setAntiAlias(true);
-  preto.setColor(ck.BLACK);
-  pintarCobertura(cx, canvas, m, caixa, preto, false);
+  if (m.tipo === 'sujeito') {
+    if (n.tipo === 'imagem') pintarSujeito(cx, canvas, n, m.arquivo);
+  } else {
+    const preto = new ck.Paint();
+    preto.setAntiAlias(true);
+    preto.setColor(ck.BLACK);
+    pintarCobertura(cx, canvas, m, caixa, preto, false);
+    preto.delete();
+  }
   canvas.restore();
-  preto.delete();
   corte.delete();
 }
 
@@ -392,6 +447,11 @@ export interface SuperficieDeCpu {
   readonly altura: number;
   /** RGBA premultiplicado. Pedir de novo a cada uso: a vista muda quando a memória do WebAssembly cresce. */
   pixels(): Uint8Array;
+  /**
+   * Imagem com uma cópia dos pixels de agora. Não se usa makeImageSnapshot aqui: o Skia guarda o último instantâneo
+   * e o devolve de novo enquanto ele próprio não desenhar, sem saber do que o laço de pixel escreveu direto na memória.
+   */
+  imagem(): Image;
   destruir(): void;
 }
 
@@ -414,6 +474,15 @@ export function criarSuperficieDeCpu(sessao: Sessao, largura: number, altura: nu
     largura,
     altura,
     pixels: () => memoria.toTypedArray() as Uint8Array,
+    imagem() {
+      const img = ck.MakeImage(
+        { width: largura, height: altura, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Premul, colorSpace: ck.ColorSpace.SRGB },
+        (memoria.toTypedArray() as Uint8Array).slice(),
+        largura * 4,
+      );
+      if (!img) throw new Error(`O motor não conseguiu copiar a superfície de ${largura} × ${altura} px`);
+      return img;
+    },
     destruir() {
       superficie.delete();
       ck.Free(memoria);
@@ -428,6 +497,11 @@ export function criarSuperficieDeCpu(sessao: Sessao, largura: number, altura: nu
 interface Alvo {
   canvas: Canvas;
   cpu: SuperficieDeCpu | undefined;
+  /**
+   * O render é o de referência (CPU)? Vale mesmo dentro de uma camada temporária do Skia, onde "cpu" some:
+   * os filtros de pixel, que montam a própria superfície, continuam pelo laço.
+   */
+  lacoDePixel: boolean;
   x: number;
   y: number;
 }
@@ -456,7 +530,7 @@ function alvoTemporario(cx: Contexto, alvo: Alvo, regiao?: Caixa): (Alvo & { cpu
   canvas.translate(-x0, -y0);
   canvas.concat(matriz);
   if (!cx.semRecorte) canvas.clipRect(ck.XYWHRect(0, 0, cx.p.largura, cx.p.altura), ck.ClipOp.Intersect, false);
-  return { canvas, cpu, x: x0, y: y0 };
+  return { canvas, cpu, lacoDePixel: true, x: x0, y: y0 };
 }
 
 /** Junta a superfície temporária no alvo, com modo e opacidade. Nativo: o Skia desenha. Não nativo: laço de pixel. */
@@ -464,7 +538,7 @@ function fundir(cx: Contexto, alvo: Alvo, temporario: Alvo & { cpu: SuperficieDe
   const { ck } = cx.sessao;
   const origem = temporario.cpu;
   if (ehModoNativo(modo)) {
-    const imagem = origem.superficie.makeImageSnapshot();
+    const imagem = origem.imagem();
     const tinta = tintaDaCamada(cx, opacidade, modo);
     alvo.canvas.save();
     // a temporária já está em pixel do alvo: desfaz a transformação para desenhar 1:1
@@ -499,13 +573,17 @@ function tintaDaCamada(cx: Contexto, opacidade: number, modo: ModoDeMesclagem, f
   return tinta;
 }
 
-/** Desfoque da camada e sombra projetada, como filtros de imagem do Skia. */
-function filtroDoNo(cx: Contexto, n: NoVisual): ImageFilter | null {
+/**
+ * Desfoque da camada e sombra projetada, como filtros de imagem do Skia. Quando a camada é montada à parte
+ * (filtro de pixel ou efeito), o desfoque já foi aplicado lá, na ordem dos filtros: aqui fica só a sombra.
+ * Com máscara, o desfoque vem antes dela e a sombra depois, e por isso se pede um de cada vez.
+ */
+function filtroDoNo(cx: Contexto, n: NoVisual, partes: { desfoque: boolean; sombra: boolean } = { desfoque: true, sombra: true }): ImageFilter | null {
   const { ck } = cx.sessao;
   let filtro: ImageFilter | null = null;
-  const sigma = desfoqueDoNo(n);
+  const sigma = montadaAParte(n) || !partes.desfoque ? 0 : desfoqueDoNo(n);
   if (sigma > 0) filtro = ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Decal, null);
-  if (n.sombra) {
+  if (n.sombra && partes.sombra) {
     const s = deslocamentoDaSombra(n.sombra);
     const comSombra = ck.ImageFilter.MakeDropShadow(s.dx, s.dy, s.sigma, s.sigma, corDoSkia(cx, n.sombra.cor, n.sombra.opacidade), filtro);
     filtro?.delete();
@@ -526,7 +604,7 @@ function caixaDoGrupo(g: No): Caixa | undefined {
 
 /** Modo com que um nó (ou a base de um conjunto de recorte) entra no que está abaixo. */
 export function modoDe(n: No): ModoDeMesclagem {
-  // camada de ajuste com modo próprio ainda não é desenhada com o modo: entra como normal (ver naoDesenhado)
+  // o modo da camada de ajuste é aplicado por desenharAjuste, entre o ajustado e o original
   if (n.tipo === 'ajuste') return 'normal';
   if (n.tipo === 'grupo') return n.modoDeMesclagem === 'atravessar' ? 'normal' : n.modoDeMesclagem;
   return n.modoDeMesclagem;
@@ -555,7 +633,7 @@ function ajusteResolvido(doc: Documento, n: NoAjuste): AjusteResolvido {
 function desenharAjuste(cx: Contexto, alvo: Alvo, n: NoAjuste, opacidade: number): void {
   const { ck } = cx.sessao;
   const pranchetaInteira: Caixa = { x: 0, y: 0, w: cx.p.largura, h: cx.p.altura };
-  const mascara = mascaraDesenhada(n.mascara);
+  const mascara = geometrica(mascaraDoNo(cx, n));
   const invertida = mascara?.tipo === 'forma' && mascara.inverter;
   const ajuste = ajusteResolvido(cx.doc, n);
   const tinta = new ck.Paint();
@@ -566,12 +644,32 @@ function desenharAjuste(cx: Contexto, alvo: Alvo, n: NoAjuste, opacidade: number
     if (cobertura) {
       tinta.setColor(ck.BLACK);
       pintarCobertura(cx, cobertura.canvas, mascara, pranchetaInteira, tinta, invertida);
-      ajustarPremultiplicado(alvo.cpu.pixels(), cobertura.cpu.pixels(), ajuste, opacidade);
+      if (n.modoDeMesclagem === 'normal') ajustarPremultiplicado(alvo.cpu.pixels(), cobertura.cpu.pixels(), ajuste, opacidade);
+      else {
+        // com modo de mesclagem: o ajuste vai para uma cópia, que é cortada pela cobertura e mesclada com o original
+        const copia = alvoTemporario(cx, alvo);
+        if (copia) {
+          copia.cpu.pixels().set(alvo.cpu.pixels());
+          ajustarPremultiplicado(copia.cpu.pixels(), undefined, ajuste, 1);
+          const corte = new ck.Paint();
+          corte.setBlendMode(ck.BlendMode.DstIn);
+          const imagemDaCobertura = cobertura.cpu.imagem();
+          copia.canvas.save();
+          copia.canvas.concat(ck.Matrix.invert(copia.canvas.getTotalMatrix()) ?? ck.Matrix.identity());
+          copia.canvas.drawImage(imagemDaCobertura, 0, 0, corte);
+          copia.canvas.restore();
+          imagemDaCobertura.delete();
+          corte.delete();
+          fundir(cx, alvo, copia, n.modoDeMesclagem, opacidade);
+          copia.cpu.destruir();
+        }
+      }
       cobertura.cpu.destruir();
     }
   } else {
-    // GPU: o shader do ajuste lê o que já está pintado; o que se desenha com ele é só a cobertura
-    const mesclador = cx.sessao.ajustador.mesclador(ajuste);
+    // GPU: o shader do ajuste lê o que já está pintado, ajusta, mescla com o modo da camada;
+    // o que se desenha com ele é só a cobertura
+    const mesclador = cx.sessao.ajustador.mesclador(ajuste, n.modoDeMesclagem);
     tinta.setColor(ck.Color(0, 0, 0, opacidade));
     tinta.setBlender(mesclador);
     pintarCobertura(cx, alvo.canvas, mascara, pranchetaInteira, tinta, invertida);
@@ -580,13 +678,292 @@ function desenharAjuste(cx: Contexto, alvo: Alvo, n: NoAjuste, opacidade: number
   tinta.delete();
 }
 
+// ---------- camada montada à parte: filtros de pixel e efeitos de camada ----------
+
+interface ConteudoComoImagem {
+  imagem: Image;
+  /** canto da imagem, em pixel do alvo */
+  x: number;
+  y: number;
+  /** pixels do alvo por unidade do documento */
+  escala: number;
+  /** transformação do documento para o alvo */
+  matriz: number[];
+}
+
+/**
+ * Desenha o conteúdo da camada numa superfície própria, na resolução do alvo, e aplica os filtros na ordem em que
+ * estão no documento. No render de referência os filtros de pixel são laço em TypeScript; na GPU, shader.
+ */
+function conteudoComoImagem(cx: Contexto, canvas: Canvas, n: NoVisual, lacoDePixel: boolean): ConteudoComoImagem | undefined {
+  const { ck } = cx.sessao;
+  const matriz = canvas.getTotalMatrix();
+  const escala = Math.hypot(matriz[0] as number, matriz[3] as number);
+  const alcance = alcanceDeFiltrosEEfeitos(n);
+  const limites = limitesDoNo(cx.sessao, n);
+  const cantos = ck.Matrix.mapPoints(matriz, [limites.x, limites.y, limites.x + limites.w, limites.y, limites.x + limites.w, limites.y + limites.h, limites.x, limites.y + limites.h]);
+  const xs = [0, 2, 4, 6].map((i) => cantos[i] as number);
+  const ys = [1, 3, 5, 7].map((i) => cantos[i] as number);
+  // só o que pode aparecer: o recorte corrente, com a folga que os filtros precisam para enxergar a vizinhança
+  const recorte = canvas.getDeviceClipBounds();
+  const folga = Math.ceil(alcance * escala) + 2;
+  const x0 = Math.max(Math.floor(Math.min(...xs)) - 1, (recorte[0] as number) - folga);
+  const y0 = Math.max(Math.floor(Math.min(...ys)) - 1, (recorte[1] as number) - folga);
+  const x1 = Math.min(Math.ceil(Math.max(...xs)) + 1, (recorte[2] as number) + folga);
+  const y1 = Math.min(Math.ceil(Math.max(...ys)) + 1, (recorte[3] as number) + folga);
+  const largura = x1 - x0;
+  const altura = y1 - y0;
+  if (largura <= 0 || altura <= 0) return undefined;
+  if (largura * altura > LIMITE_DE_PIXELS) throw new ErroDeAreaDoRender(largura, altura);
+
+  interface Passe {
+    superficie: Surface;
+    cpu: SuperficieDeCpu | undefined;
+    destruir(): void;
+  }
+  const novoPasse = (): Passe => {
+    if (lacoDePixel) {
+      const cpu = criarSuperficieDeCpu(cx.sessao, largura, altura);
+      return { superficie: cpu.superficie, cpu, destruir: () => cpu.destruir() };
+    }
+    const superficie = canvas.makeSurface({ width: largura, height: altura, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Premul, colorSpace: ck.ColorSpace.SRGB });
+    if (!superficie) throw new Error(`O motor não conseguiu alocar a superfície de ${largura} × ${altura} px para os filtros da camada "${n.nome}"`);
+    superficie.getCanvas().clear(ck.TRANSPARENT);
+    return { superficie, cpu: undefined, destruir: () => superficie.delete() };
+  };
+  /** Desenha a imagem de um passe em outro, com um filtro de imagem do Skia ou com um shader. */
+  const imagemDe = (passe: Passe): Image => (passe.cpu ? passe.cpu.imagem() : passe.superficie.makeImageSnapshot());
+  const passar = (de: Passe, tinta: Paint, comImagem: boolean): Passe => {
+    const para = novoPasse();
+    const imagem = imagemDe(de);
+    if (comImagem) para.superficie.getCanvas().drawImage(imagem, 0, 0, tinta);
+    else para.superficie.getCanvas().drawPaint(tinta);
+    imagem.delete();
+    return para;
+  };
+  const comoShader = (passe: Passe): { shader: Shader; soltar: () => void } => {
+    const imagem = imagemDe(passe);
+    const shader = imagem.makeShaderOptions(ck.TileMode.Decal, ck.TileMode.Decal, ck.FilterMode.Nearest, ck.MipmapMode.None);
+    return {
+      shader,
+      soltar: () => {
+        shader.delete();
+        imagem.delete();
+      },
+    };
+  };
+  const borrar = (de: Passe, sigma: number): Passe => {
+    const tinta = new ck.Paint();
+    const filtro = ck.ImageFilter.MakeBlur(sigma * escala, sigma * escala, ck.TileMode.Decal, null);
+    tinta.setImageFilter(filtro);
+    const para = passar(de, tinta, true);
+    filtro.delete();
+    tinta.delete();
+    return para;
+  };
+
+  let atual = novoPasse();
+  const c = atual.superficie.getCanvas();
+  c.translate(-x0, -y0);
+  c.concat(matriz);
+  desenharConteudo(cx, c, n);
+
+  const geometria: GeometriaDoPasse = {
+    x0,
+    y0,
+    escala,
+    tx: matriz[2] as number,
+    ty: matriz[5] as number,
+    rotacao: n.rotacao,
+    cx: n.x + n.largura / 2,
+    cy: n.y + n.altura / 2,
+    origemX: n.x,
+    origemY: n.y,
+  };
+  for (const f of n.filtros ?? []) {
+    const anterior = atual;
+    if (f.tipo === 'desfoque') {
+      if (f.raio <= 0) continue;
+      atual = borrar(anterior, f.raio);
+      anterior.destruir();
+      continue;
+    }
+    if (f.tipo === 'ruido') {
+      if (anterior.cpu) {
+        ruidoNoPixel(anterior.cpu.pixels(), largura, altura, geometria, f.quantidade, f.monocromatico, sementeDe(n.id));
+        continue;
+      }
+      const entrada = comoShader(anterior);
+      const tinta = new ck.Paint();
+      const shader = cx.sessao.filtrador.shader('ruido', uniformesDoRuido(geometria, f.quantidade, f.monocromatico, sementeDe(n.id)), [entrada.shader]);
+      tinta.setShader(shader);
+      tinta.setBlendMode(ck.BlendMode.Src);
+      atual = passar(anterior, tinta, false);
+      shader.delete();
+      tinta.delete();
+      entrada.soltar();
+      anterior.destruir();
+      continue;
+    }
+    if (f.tipo === 'nitidez') {
+      const borrada = borrar(anterior, f.raio);
+      if (anterior.cpu && borrada.cpu) nitidezNoPixel(anterior.cpu.pixels(), borrada.cpu.pixels(), f.quantidade);
+      else {
+        const original = comoShader(anterior);
+        const desfocada = comoShader(borrada);
+        const tinta = new ck.Paint();
+        const shader = cx.sessao.filtrador.shader('nitidez', [f.quantidade], [original.shader, desfocada.shader]);
+        tinta.setShader(shader);
+        tinta.setBlendMode(ck.BlendMode.Src);
+        atual = passar(anterior, tinta, false);
+        shader.delete();
+        tinta.delete();
+        original.soltar();
+        desfocada.soltar();
+        anterior.destruir();
+      }
+      borrada.destruir();
+      continue;
+    }
+    // desfoque de movimento
+    const passos = passosDoMovimento(f.distancia);
+    if (f.distancia * escala < 1) continue;
+    if (anterior.cpu) {
+      movimentoNoPixel(anterior.cpu.pixels(), largura, altura, f.angulo, f.distancia * escala, passos);
+      continue;
+    }
+    const entrada = comoShader(anterior);
+    const tinta = new ck.Paint();
+    const shader = cx.sessao.filtrador.shader('movimento', uniformesDoMovimento(f.angulo, f.distancia * escala, passos), [entrada.shader]);
+    tinta.setShader(shader);
+    tinta.setBlendMode(ck.BlendMode.Src);
+    atual = passar(anterior, tinta, false);
+    shader.delete();
+    tinta.delete();
+    entrada.soltar();
+    anterior.destruir();
+  }
+  // a máscara entra depois dos filtros e antes dos efeitos, como no Photoshop: brilho e sombra contornam o que a máscara deixou
+  const mascara = mascaraDoNo(cx, n);
+  if (mascara) {
+    const k = atual.superficie.getCanvas();
+    k.save();
+    k.concat(ck.Matrix.invert(k.getTotalMatrix()) ?? ck.Matrix.identity());
+    k.translate(-x0, -y0);
+    k.concat(matriz);
+    aplicarMascara(cx, k, n, mascara, { x: n.x, y: n.y, w: n.largura, h: n.altura });
+    k.restore();
+  }
+  const imagem = imagemDe(atual);
+  atual.destruir();
+  return { imagem, x: x0, y: y0, escala, matriz };
+}
+
+/**
+ * Desenha a camada montada à parte: o conteúdo (já com os filtros) e os efeitos de camada em volta dele.
+ * Os efeitos usam só operações do Skia (desfoque, filtro de cor, modos de mesclagem), o mesmo código na CPU e na GPU.
+ * Ordem, de baixo para cima: brilho externo, conteúdo, sobreposição de degradê, sobreposição de cor, brilho interno, sombra interna.
+ */
+function desenharMontada(cx: Contexto, canvas: Canvas, n: NoVisual, lacoDePixel: boolean): void {
+  const { ck } = cx.sessao;
+  const c = conteudoComoImagem(cx, canvas, n, lacoDePixel);
+  if (!c) return;
+  const e = n.efeitos;
+  const s = c.escala;
+  canvas.save();
+  // a imagem do conteúdo já está em pixel do alvo: daqui em diante se desenha 1:1
+  canvas.concat(ck.Matrix.invert(c.matriz) ?? ck.Matrix.identity());
+  if (!e || !temEfeitos(n)) {
+    canvas.drawImage(c.imagem, c.x, c.y);
+    canvas.restore();
+    c.imagem.delete();
+    return;
+  }
+  const area = ck.XYWHRect(c.x, c.y, c.imagem.width(), c.imagem.height());
+  const dentro = new ck.Paint();
+  dentro.setBlendMode(ck.BlendMode.DstIn);
+  const fora = new ck.Paint();
+  fora.setBlendMode(ck.BlendMode.DstOut);
+
+  if (e.brilhoExterno) {
+    // a silhueta da camada, tingida e desfocada, atrás dela
+    const tingir = ck.ColorFilter.MakeBlend(corDoSkia(cx, e.brilhoExterno.cor), ck.BlendMode.SrcIn);
+    const tingida = ck.ImageFilter.MakeColorFilter(tingir, null);
+    const halo = ck.ImageFilter.MakeBlur((e.brilhoExterno.tamanho / 2) * s, (e.brilhoExterno.tamanho / 2) * s, ck.TileMode.Decal, tingida);
+    const tinta = new ck.Paint();
+    tinta.setImageFilter(halo);
+    tinta.setAlphaf(e.brilhoExterno.opacidade);
+    canvas.drawImage(c.imagem, c.x, c.y, tinta);
+    for (const o of [tinta, halo, tingida, tingir]) o.delete();
+  }
+
+  // conteúdo e o que pinta por cima dele, numa camada só; no fim o alfa volta a ser o do conteúdo
+  canvas.saveLayer(undefined, area);
+  canvas.clipRect(area, ck.ClipOp.Intersect, false);
+  canvas.drawImage(c.imagem, c.x, c.y);
+  if (e.sobreposicaoDeDegrade) {
+    const g = e.sobreposicaoDeDegrade;
+    const tinta = new ck.Paint();
+    canvas.save();
+    canvas.concat(c.matriz);
+    if (n.rotacao) canvas.rotate(n.rotacao, n.x + n.largura / 2, n.y + n.altura / 2);
+    const shader = shaderDoDegrade(cx, g.degrade, n.x, n.y, n.largura, n.altura);
+    tinta.setShader(shader);
+    tinta.setAlphaf(g.opacidade);
+    cx.sessao.mesclador.aplicar(tinta, g.modoDeMesclagem);
+    canvas.drawPaint(tinta);
+    canvas.restore();
+    shader.delete();
+    tinta.delete();
+  }
+  if (e.sobreposicaoDeCor) {
+    const tinta = new ck.Paint();
+    tinta.setColor(corDoSkia(cx, e.sobreposicaoDeCor.cor, e.sobreposicaoDeCor.opacidade));
+    cx.sessao.mesclador.aplicar(tinta, e.sobreposicaoDeCor.modoDeMesclagem);
+    canvas.drawPaint(tinta);
+    tinta.delete();
+  }
+  /** Cor em tudo, menos na silhueta (deslocada), desfocada e cortada pela silhueta: a borda que "entra" na camada. */
+  const bordaInterna = (cor: string, opacidade: number, sigma: number, dx: number, dy: number, modo: 'Screen' | 'Multiply'): void => {
+    const tinta = new ck.Paint();
+    tinta.setBlendMode(ck.BlendMode[modo]);
+    tinta.setAlphaf(opacidade);
+    canvas.saveLayer(tinta, area);
+    const borrada = new ck.Paint();
+    const filtro = sigma > 0 ? ck.ImageFilter.MakeBlur(sigma * s, sigma * s, ck.TileMode.Decal, null) : null;
+    if (filtro) borrada.setImageFilter(filtro);
+    canvas.saveLayer(borrada, area);
+    const chapada = new ck.Paint();
+    chapada.setColor(corDoSkia(cx, cor));
+    canvas.drawPaint(chapada);
+    canvas.drawImage(c.imagem, c.x + dx * s, c.y + dy * s, fora);
+    canvas.restore();
+    canvas.drawImage(c.imagem, c.x, c.y, dentro);
+    canvas.restore();
+    for (const o of [tinta, borrada, chapada]) o.delete();
+    filtro?.delete();
+  };
+  if (e.brilhoInterno) bordaInterna(e.brilhoInterno.cor, e.brilhoInterno.opacidade, e.brilhoInterno.tamanho / 2, 0, 0, 'Screen');
+  if (e.sombraInterna) {
+    const d = deslocamentoDaSombra(e.sombraInterna);
+    bordaInterna(e.sombraInterna.cor, e.sombraInterna.opacidade, d.sigma, d.dx, d.dy, 'Multiply');
+  }
+  canvas.drawImage(c.imagem, c.x, c.y, dentro);
+  canvas.restore();
+
+  canvas.restore();
+  dentro.delete();
+  fora.delete();
+  c.imagem.delete();
+}
+
 function desenharNo(cx: Contexto, alvo: Alvo, n: No, forcarNormal = false): void {
   const { ck } = cx.sessao;
   const canvas = alvo.canvas;
   const opacidade = forcarNormal ? 1 : n.opacidade;
   const modo = forcarNormal ? 'normal' : modoDe(n);
   const porPixel = alvo.cpu !== undefined;
-  const mascara = mascaraDesenhada(n.mascara);
+  const mascara = mascaraDoNo(cx, n);
 
   if (n.tipo === 'ajuste') {
     desenharAjuste(cx, alvo, n, opacidade);
@@ -604,7 +981,7 @@ function desenharNo(cx: Contexto, alvo: Alvo, n: No, forcarNormal = false): void
       const temporario = alvoTemporario(cx, alvo);
       if (!temporario) return;
       desenharLista(cx, temporario, n.filhos);
-      if (mascara) aplicarMascara(cx, temporario.canvas, mascara, caixa);
+      if (mascara) aplicarMascara(cx, temporario.canvas, n, mascara, caixa);
       fundir(cx, alvo, temporario, modo, opacidade);
       temporario.cpu.destruir();
       return;
@@ -612,15 +989,20 @@ function desenharNo(cx: Contexto, alvo: Alvo, n: No, forcarNormal = false): void
     const tinta = tintaDaCamada(cx, opacidade, modo);
     canvas.saveLayer(tinta);
     desenharLista(cx, { ...alvo, cpu: undefined }, n.filhos);
-    if (mascara) aplicarMascara(cx, canvas, mascara, caixa);
+    if (mascara) aplicarMascara(cx, canvas, n, mascara, caixa);
     canvas.restore();
     tinta.delete();
     return;
   }
 
-  const filtro = filtroDoNo(cx, n);
-  if (!mascara && !filtro && opacidade >= 1 && modo === 'normal') {
-    desenharConteudo(cx, canvas, n);
+  // Ordem do Photoshop: conteúdo, filtros, máscara, efeitos (sombra projetada entre eles), e só então opacidade e modo.
+  // A camada montada à parte aplica a máscara ela mesma, entre os filtros e os efeitos.
+  const aParte = montadaAParte(n);
+  const mascaraAqui = aParte ? undefined : mascara;
+  const desenhar = (): void => (aParte ? desenharMontada(cx, canvas, n, alvo.lacoDePixel) : desenharConteudo(cx, canvas, n));
+  const filtro = mascaraAqui ? filtroDoNo(cx, n, { desfoque: false, sombra: true }) : filtroDoNo(cx, n);
+  if (!mascaraAqui && !filtro && opacidade >= 1 && modo === 'normal') {
+    desenhar();
     return;
   }
   const c = limitesDoNo(cx.sessao, n);
@@ -635,25 +1017,27 @@ function desenharNo(cx: Contexto, alvo: Alvo, n: No, forcarNormal = false): void
     return;
   }
   const limites = ck.XYWHRect(Math.floor(c.x), Math.floor(c.y), Math.ceil(c.w) + 1, Math.ceil(c.h) + 1);
-  if (mascara) {
-    // a máscara corta o conteúdo já com sombra e desfoque, e o modo e a opacidade valem para o resultado
-    const externa = tintaDaCamada(cx, opacidade, modo);
+  if (mascaraAqui) {
+    // a máscara corta o conteúdo já desfocado; a sombra sai do que a máscara deixou; o modo e a opacidade valem para o resultado
+    const externa = tintaDaCamada(cx, opacidade, modo, filtro);
     canvas.saveLayer(externa, limites);
-    if (filtro) {
+    const desfoque = filtroDoNo(cx, n, { desfoque: true, sombra: false });
+    if (desfoque) {
       const interna = new ck.Paint();
-      interna.setImageFilter(filtro);
+      interna.setImageFilter(desfoque);
       canvas.saveLayer(interna, limites);
-      desenharConteudo(cx, canvas, n);
+      desenhar();
       canvas.restore();
       interna.delete();
-    } else desenharConteudo(cx, canvas, n);
-    aplicarMascara(cx, canvas, mascara, { x: n.x, y: n.y, w: n.largura, h: n.altura });
+      desfoque.delete();
+    } else desenhar();
+    aplicarMascara(cx, canvas, n, mascaraAqui, { x: n.x, y: n.y, w: n.largura, h: n.altura });
     canvas.restore();
     externa.delete();
   } else {
     const tinta = tintaDaCamada(cx, opacidade, modo, filtro);
     canvas.saveLayer(tinta, limites);
-    desenharConteudo(cx, canvas, n);
+    desenhar();
     canvas.restore();
     tinta.delete();
   }
@@ -683,7 +1067,7 @@ function desenharLista(cx: Contexto, alvo: Alvo, lista: readonly No[]): void {
       const conjunto = alvoTemporario(cx, alvo);
       if (soABase && conjunto) {
         desenharNo(cx, soABase, base, true);
-        const alfaDaBase = soABase.cpu.superficie.makeImageSnapshot();
+        const alfaDaBase = soABase.cpu.imagem();
         const umParaUm = (tinta: Paint | null): void => {
           conjunto.canvas.save();
           conjunto.canvas.concat(ck.Matrix.invert(conjunto.canvas.getTotalMatrix()) ?? ck.Matrix.identity());
@@ -739,12 +1123,12 @@ export function desenharPrancheta(sessao: Sessao, canvas: Canvas, doc: Documento
 
 /** Como desenharPrancheta, mas com uma lista de nós do nível de cima: é o que as partes do cache do editor usam. */
 export function desenharNos(sessao: Sessao, canvas: Canvas, doc: Documento, p: Prancheta, nos: readonly No[], opcoes: OpcoesDeDesenho = {}): void {
-  desenharNoAlvo(sessao, { canvas, cpu: undefined, x: 0, y: 0 }, doc, p, nos, opcoes);
+  desenharNoAlvo(sessao, { canvas, cpu: undefined, lacoDePixel: false, x: 0, y: 0 }, doc, p, nos, opcoes);
 }
 
 /** Desenha numa superfície de CPU com o cálculo por laço de pixel. A transformação já deve estar no canvas dela. */
 export function desenharNosEmCpu(sessao: Sessao, cpu: SuperficieDeCpu, doc: Documento, p: Prancheta, nos: readonly No[], opcoes: OpcoesDeDesenho = {}): void {
-  desenharNoAlvo(sessao, { canvas: cpu.superficie.getCanvas(), cpu, x: 0, y: 0 }, doc, p, nos, opcoes);
+  desenharNoAlvo(sessao, { canvas: cpu.superficie.getCanvas(), cpu, lacoDePixel: true, x: 0, y: 0 }, doc, p, nos, opcoes);
 }
 
 /** O render de referência: raster de CPU, com os pixels de volta. Mesmo documento, mesmas fontes, mesma versão do motor: mesmos bytes. */
@@ -766,6 +1150,62 @@ export function renderizarPrancheta(sessao: Sessao, doc: Documento, p: Prancheta
     return { largura, altura, rgba };
   } finally {
     cpu.destruir();
+  }
+}
+
+/** A caixa a que a máscara de um nó se refere: a da camada, a do conteúdo do grupo, ou a prancheta inteira (camada de ajuste). */
+function caixaDaMascara(p: Prancheta, n: No): Caixa {
+  if (ehVisual(n)) return { x: n.x, y: n.y, w: n.largura, h: n.altura };
+  return (n.tipo === 'grupo' ? caixaDoGrupo(n) : undefined) ?? { x: 0, y: 0, w: p.largura, h: p.altura };
+}
+
+export interface MascaraEmPixels {
+  largura: number;
+  altura: number;
+  /** um byte por pixel: 255 mostra a camada, 0 esconde */
+  cobertura: Uint8Array;
+}
+
+/**
+ * A máscara de um nó como imagem de cobertura, do tamanho da prancheta: é a máscara de camada que a exportação grava.
+ * Sai do mesmo código que corta a camada no render. Nó sem máscara (ou com máscara que o motor não tem como desenhar): undefined.
+ */
+export function renderizarMascara(sessao: Sessao, doc: Documento, p: Prancheta, n: No): MascaraEmPixels | undefined {
+  const { ck } = sessao;
+  const cx: Contexto = { sessao, doc, p, apenas: undefined, excluir: undefined, semRecorte: false };
+  const m = mascaraDoNo(cx, n);
+  if (!m) return undefined;
+  const cpu = criarSuperficieDeCpu(sessao, p.largura, p.altura);
+  try {
+    const canvas = cpu.superficie.getCanvas();
+    canvas.clear(ck.WHITE);
+    aplicarMascara(cx, canvas, n, m, caixaDaMascara(p, n));
+    cpu.superficie.flush();
+    // branco premultiplicado: qualquer canal é a própria cobertura
+    const pixels = cpu.pixels();
+    const cobertura = new Uint8Array(p.largura * p.altura);
+    for (let i = 0; i < cobertura.length; i++) cobertura[i] = pixels[i * 4 + 3] as number;
+    return { largura: p.largura, altura: p.altura, cobertura };
+  } finally {
+    cpu.destruir();
+  }
+}
+
+/** PNG de pixels RGBA de 8 bits, não premultiplicados (o que renderizarPrancheta devolve), codificado pelo próprio motor. */
+export function codificarPng(sessao: Sessao, render: RenderEmPixels): Uint8Array {
+  const { ck } = sessao;
+  const img = ck.MakeImage(
+    { width: render.largura, height: render.altura, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: ck.ColorSpace.SRGB },
+    render.rgba,
+    render.largura * 4,
+  );
+  if (!img) throw new Error(`O motor não conseguiu montar a imagem de ${render.largura} × ${render.altura} px para codificar`);
+  try {
+    const bytes = img.encodeToBytes(ck.ImageFormat.PNG, 100);
+    if (!bytes) throw new Error('O motor não conseguiu codificar o PNG');
+    return bytes;
+  } finally {
+    img.delete();
   }
 }
 
@@ -811,28 +1251,19 @@ export interface RecursoNaoDesenhado {
   /** "Prancheta/Camada" */
   camada: string;
   no: string;
-  /** o que o esquema aceita e este motor ainda não desenha */
-  recurso: 'efeitos de camada' | 'desfoque de movimento' | 'ruído' | 'nitidez' | 'máscara de sujeito' | 'modo de mesclagem em camada de ajuste';
+  /** o que o esquema aceita e este motor não desenha */
+  recurso: 'máscara de sujeito fora de foto';
 }
 
 /**
- * O que o documento usa e este motor ainda não desenha (a camada sai sem o recurso). É a lista viva da distância
- * até o motor da POC: quando ela devolver vazio para todo documento válido, o porte acabou.
+ * O que o documento usa e este motor não desenha (a camada sai sem o recurso). Todo recurso do esquema é desenhado;
+ * sobra o uso que não faz sentido: a máscara de sujeito é o recorte de uma foto, e só vale em camada de imagem.
  */
 export function naoDesenhado(doc: Documento): RecursoNaoDesenhado[] {
   const lista: RecursoNaoDesenhado[] = [];
   for (const p of doc.pranchetas) {
     for (const n of todasAsCamadas(p.filhos)) {
-      const add = (recurso: RecursoNaoDesenhado['recurso']) => lista.push({ camada: `${p.nome}/${n.nome}`, no: n.id, recurso });
-      if (n.mascara?.tipo === 'sujeito') add('máscara de sujeito');
-      if (n.tipo === 'ajuste' && n.modoDeMesclagem !== 'normal') add('modo de mesclagem em camada de ajuste');
-      if (!ehVisual(n)) continue;
-      if (n.efeitos && Object.values(n.efeitos).some(Boolean)) add('efeitos de camada');
-      for (const f of n.filtros ?? []) {
-        if (f.tipo === 'desfoque-de-movimento') add('desfoque de movimento');
-        if (f.tipo === 'ruido') add('ruído');
-        if (f.tipo === 'nitidez') add('nitidez');
-      }
+      if (n.mascara?.tipo === 'sujeito' && n.tipo !== 'imagem') lista.push({ camada: `${p.nome}/${n.nome}`, no: n.id, recurso: 'máscara de sujeito fora de foto' });
     }
   }
   return lista;

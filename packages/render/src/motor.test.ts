@@ -1,11 +1,15 @@
 // A porta MotorDeRender, que o editor consome. Aqui ela roda sobre uma tela de CPU: o WebGL só existe no navegador,
 // e o que muda lá é a tela (navegador.ts), não o motor.
+
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { aplicarLote, type Documento, type NoTexto, type Prancheta } from '@otto/documento';
 import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { canvasKitDeTeste, diferencaMaxima, FOTO, fontesDeTeste, forma, idDe, imagem, imagensDeTeste, peca, pixel, texto } from './apoio-de-teste';
 import { renderizarPrancheta } from './compositor';
-import { criarMotorSobreTela, type MotorDeRender, type RecursosDoRender, telaDeCpu } from './motor';
+import { criarMotorSobreTela, type MotorDeRender, type OpcoesDoMotor, type RecursosDoRender, telaDeCpu } from './motor';
+import { SENTINELA_DO_MOTOR } from './sentinela';
 import { criarSessao } from './sessao';
 
 let ck: CanvasKit;
@@ -33,11 +37,11 @@ function recursosDeTeste(): RecursosDoRender & { pedidos: string[] } {
   };
 }
 
-function montar(largura = 400, altura = 300) {
+function montar(largura = 400, altura = 300, opcoes: OpcoesDoMotor = {}) {
   const quadros: (() => void)[] = [];
   const recursos = recursosDeTeste();
   const tela = telaDeCpu(ck, largura, altura);
-  const motor: MotorDeRender = criarMotorSobreTela(ck, tela, recursos, { agendar: (quadro) => quadros.push(quadro) });
+  const motor: MotorDeRender = criarMotorSobreTela(ck, tela, recursos, { ...opcoes, agendar: (quadro) => quadros.push(quadro) });
   const rodar = (): number => {
     const pendentes = quadros.splice(0);
     for (const q of pendentes) q();
@@ -194,5 +198,80 @@ describe('MotorDeRender', () => {
   it('a prancheta do teste existe (sanidade do apoio)', () => {
     const p: Prancheta = cena().p;
     expect(p.filhos).toHaveLength(3);
+  });
+
+  it('fundo: a cor pedida atrás das pranchetas, ou transparente, para o editor pôr o próprio fundo por baixo do canvas', async () => {
+    const { doc } = cena();
+    for (const [fundo, esperado] of [
+      ['#102030', [16, 32, 48, 255]],
+      ['transparente', [0, 0, 0, 0]],
+    ] as const) {
+      const { motor, rodar, em } = montar(400, 300, { fundo });
+      await motor.prepararRecursos(doc);
+      motor.redimensionar(400, 300, 1);
+      motor.definirDocumento(doc);
+      motor.definirCamera({ x: 100, y: 50, zoom: 0.5 });
+      rodar();
+      expect(em(50, 100)).toEqual(esperado);
+      expect(em(150, 140)).toEqual([255, 0, 0, 255]);
+      // arrastar com fundo transparente não deixa rastro: a região suja é limpa antes de redesenhar
+      motor.definirPrevia({ ids: [idDe(doc, 'foto')], dx: 0, dy: 0 });
+      rodar();
+      motor.definirPrevia({ ids: [idDe(doc, 'foto')], dx: 300, dy: 0 });
+      rodar();
+      expect(em(50, 100)).toEqual(esperado);
+      expect(em(300, 100)).toEqual(esperado);
+      motor.destruir();
+    }
+  });
+
+  it('fundo que não é cor nem "transparente" é erro de quem chama, dito na hora', () => {
+    expect(() => montar(10, 10, { fundo: 'vermelho' })).toThrow(/fundo/);
+  });
+
+  it('carrega a sentinela do motor, que o teste do pacote público procura nos scripts das páginas públicas', () => {
+    const { motor } = montar();
+    expect(motor.sentinela).toBe(SENTINELA_DO_MOTOR);
+    expect(SENTINELA_DO_MOTOR).toMatch(/^otto-sentinela-do-motor-[0-9a-f]{8}$/);
+    // o arquivo não importa nada: o script de conferência o lê sem empacotador
+    expect(readFileSync(path.resolve(import.meta.dirname, 'sentinela.ts'), 'utf8')).not.toMatch(/\bimport\b/);
+    motor.destruir();
+  });
+
+  describe('aviso quando o que está em falta muda', () => {
+    it('avisa ao receber um documento com recurso em falta, e de novo quando o recurso chega; não repete sem mudança', async () => {
+      const { motor } = montar();
+      const { doc } = cena();
+      const avisos: number[] = [];
+      motor.aoMudarEmFalta((emFalta) => avisos.push(emFalta.fontes.length + emFalta.imagens.length));
+      motor.definirDocumento(doc);
+      // duas fontes e uma imagem ainda não foram entregues
+      expect(avisos).toEqual([3]);
+      motor.definirDocumento(doc);
+      motor.definirCamera({ x: 1, y: 1, zoom: 1 });
+      expect(avisos).toEqual([3]);
+      await motor.prepararRecursos(doc);
+      expect(avisos).toEqual([3, 0]);
+      await motor.prepararRecursos(doc);
+      expect(avisos).toEqual([3, 0]);
+      motor.destruir();
+    });
+
+    it('a mudança pode vir do documento: uma camada nova com fonte que o motor não tem', async () => {
+      const { motor } = montar();
+      const { doc } = cena();
+      await motor.prepararRecursos(doc);
+      motor.definirDocumento(doc);
+      const avisos: string[][] = [];
+      const cancelar = motor.aoMudarEmFalta((emFalta) => avisos.push(emFalta.fontes.map((f) => f.familia)));
+      const r = aplicarLote(doc, [{ op: 'alterar', alvo: 'P/titulo', props: { fonte: 'Helvetica', trechos: [] } }], { autoria: { tipo: 'designer' }, idDoLote: 'troca-de-fonte' });
+      if (!r.ok) throw new Error(r.erro.mensagem);
+      motor.definirDocumento(r.doc);
+      expect(avisos).toEqual([['Helvetica']]);
+      cancelar();
+      motor.definirDocumento(doc);
+      expect(avisos).toHaveLength(1);
+      motor.destruir();
+    });
   });
 });

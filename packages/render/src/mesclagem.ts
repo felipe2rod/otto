@@ -94,11 +94,67 @@ export function referenciaDeMesclagem(fundo: Uint8Array | Uint8ClampedArray, cim
 
 // ---------- shaders (SkSL) ----------
 
-/** Corpo comum: tira o premultiplicado, chama B(b, s) e compõe como o Photoshop. */
-function sksl(funcaoB: string): string {
-  return `
+/** Funções de apoio comuns a todo shader de mesclagem. */
+export const PRELUDIO_SKSL = `
 float nivel(float v) { return floor(v * 255.0 + 0.5); }
 float lum(vec3 c) { return dot(c, vec3(0.3, 0.59, 0.11)); }
+float sat(vec3 c) { return max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b)); }
+vec3 cortarCor(vec3 c) {
+  float l = lum(c);
+  float n = min(c.r, min(c.g, c.b));
+  float x = max(c.r, max(c.g, c.b));
+  if (n < 0.0) c = l + (c - l) * l / (l - n);
+  if (x > 1.0) c = l + (c - l) * (1.0 - l) / (x - l);
+  return c;
+}
+vec3 definirLum(vec3 c, float l) { return cortarCor(c + (l - lum(c))); }
+vec3 definirSat(vec3 c, float s) {
+  float mx = max(c.r, max(c.g, c.b));
+  float mn = min(c.r, min(c.g, c.b));
+  return mx > mn ? (c - mn) * s / (mx - mn) : vec3(0.0);
+}`;
+
+const porCanal = (expressao: string): string => `
+float canal(float b, float s) { return ${expressao}; }
+vec3 B(vec3 b, vec3 s) { return vec3(canal(b.r, s.r), canal(b.g, s.g), canal(b.b, s.b)); }`;
+
+/**
+ * B(fundo, cima) de cada modo, em SkSL: a mesma fórmula da referência em TypeScript (POR_CANAL e POR_COR).
+ * Os modos que o Skia tem pronto também estão aqui: a camada de ajuste com modo de mesclagem calcula tudo num shader só.
+ */
+export const B_SKSL: Record<ModoDeMesclagem, string> = {
+  normal: 'vec3 B(vec3 b, vec3 s) { return s; }',
+  escurecer: 'vec3 B(vec3 b, vec3 s) { return min(b, s); }',
+  multiplicacao: 'vec3 B(vec3 b, vec3 s) { return b * s; }',
+  'subexposicao-de-cores': porCanal('b >= 1.0 ? 1.0 : (s <= 0.0 ? 0.0 : 1.0 - min(1.0, (1.0 - b) / s))'),
+  'subexposicao-linear': 'vec3 B(vec3 b, vec3 s) { return b + s - 1.0; }',
+  'cor-mais-escura': 'vec3 B(vec3 b, vec3 s) { return lum(s) < lum(b) ? s : b; }',
+  clarear: 'vec3 B(vec3 b, vec3 s) { return max(b, s); }',
+  tela: 'vec3 B(vec3 b, vec3 s) { return b + s - b * s; }',
+  'superexposicao-de-cores': porCanal('b <= 0.0 ? 0.0 : (s >= 1.0 ? 1.0 : min(1.0, b / (1.0 - s)))'),
+  // o "Plus" do Skia soma os premultiplicados: com opacidade abaixo de 100% clareia mais que o Photoshop
+  'superexposicao-linear': 'vec3 B(vec3 b, vec3 s) { return b + s; }',
+  'cor-mais-clara': 'vec3 B(vec3 b, vec3 s) { return lum(s) > lum(b) ? s : b; }',
+  sobrepor: porCanal('b <= 0.5 ? 2.0 * b * s : 1.0 - 2.0 * (1.0 - b) * (1.0 - s)'),
+  'luz-suave': porCanal('s <= 0.5 ? b - (1.0 - 2.0 * s) * b * (1.0 - b) : b + (2.0 * s - 1.0) * ((b <= 0.25 ? ((16.0 * b - 12.0) * b + 4.0) * b : sqrt(b)) - b)'),
+  'luz-direta': porCanal('s <= 0.5 ? 2.0 * b * s : 1.0 - 2.0 * (1.0 - b) * (1.0 - s)'),
+  'luz-intensa': porCanal('s <= 0.5 ? (s <= 0.0 ? 0.0 : 1.0 - (1.0 - b) / (2.0 * s)) : (s >= 1.0 ? 1.0 : b / (2.0 * (1.0 - s)))'),
+  'luz-linear': 'vec3 B(vec3 b, vec3 s) { return b + 2.0 * s - 1.0; }',
+  'luz-do-ponto': porCanal('s <= 0.5 ? min(b, 2.0 * s) : max(b, 2.0 * s - 1.0)'),
+  'mistura-solida': porCanal('nivel(b) + nivel(s) >= 255.0 ? 1.0 : 0.0'),
+  diferenca: 'vec3 B(vec3 b, vec3 s) { return abs(b - s); }',
+  exclusao: 'vec3 B(vec3 b, vec3 s) { return b + s - 2.0 * b * s; }',
+  subtrair: 'vec3 B(vec3 b, vec3 s) { return b - s; }',
+  dividir: porCanal('s <= 0.0 ? (b <= 0.0 ? 0.0 : 1.0) : b / s'),
+  matiz: 'vec3 B(vec3 b, vec3 s) { return definirLum(definirSat(s, sat(b)), lum(b)); }',
+  saturacao: 'vec3 B(vec3 b, vec3 s) { return definirLum(definirSat(b, sat(s)), lum(b)); }',
+  cor: 'vec3 B(vec3 b, vec3 s) { return definirLum(s, lum(b)); }',
+  luminosidade: 'vec3 B(vec3 b, vec3 s) { return definirLum(b, lum(s)); }',
+};
+
+/** Shader de mesclagem completo: tira o premultiplicado, chama B(b, s) e compõe como o Photoshop. */
+function sksl(funcaoB: string): string {
+  return `${PRELUDIO_SKSL}
 ${funcaoB}
 vec4 main(vec4 src, vec4 dst) {
   vec3 s = src.a > 0.0 ? src.rgb / src.a : vec3(0.0);
@@ -109,32 +165,28 @@ vec4 main(vec4 src, vec4 dst) {
 }`;
 }
 
-const porCanal = (expressao: string): string => `
-float canal(float b, float s) { return ${expressao}; }
-vec3 B(vec3 b, vec3 s) { return vec3(canal(b.r, s.r), canal(b.g, s.g), canal(b.b, s.b)); }`;
-
-/** Modos que o Skia não tem (ou tem com outra composição, caso da superexposição linear). */
-const SKSL = {
-  'subexposicao-linear': sksl(`vec3 B(vec3 b, vec3 s) { return b + s - 1.0; }`),
-  // o "Plus" do Skia soma os premultiplicados: com opacidade abaixo de 100% clareia mais que o Photoshop
-  'superexposicao-linear': sksl(`vec3 B(vec3 b, vec3 s) { return b + s; }`),
-  'luz-intensa': sksl(porCanal(`s <= 0.5 ? (s <= 0.0 ? 0.0 : 1.0 - (1.0 - b) / (2.0 * s)) : (s >= 1.0 ? 1.0 : b / (2.0 * (1.0 - s)))`)),
-  'luz-linear': sksl(`vec3 B(vec3 b, vec3 s) { return b + 2.0 * s - 1.0; }`),
-  'luz-do-ponto': sksl(porCanal(`s <= 0.5 ? min(b, 2.0 * s) : max(b, 2.0 * s - 1.0)`)),
-  'mistura-solida': sksl(porCanal(`nivel(b) + nivel(s) >= 255.0 ? 1.0 : 0.0`)),
-  'cor-mais-escura': sksl(`vec3 B(vec3 b, vec3 s) { return lum(s) < lum(b) ? s : b; }`),
-  'cor-mais-clara': sksl(`vec3 B(vec3 b, vec3 s) { return lum(s) > lum(b) ? s : b; }`),
-  subtrair: sksl(`vec3 B(vec3 b, vec3 s) { return b - s; }`),
-  dividir: sksl(porCanal(`s <= 0.0 ? (b <= 0.0 ? 0.0 : 1.0) : b / s`)),
-} as const satisfies Partial<Record<ModoDeMesclagem, string>>;
+/** Modos que o Skia não tem (ou tem com outra composição, caso da superexposição linear): saem por shader próprio. */
+const POR_SHADER = [
+  'subexposicao-linear',
+  'superexposicao-linear',
+  'luz-intensa',
+  'luz-linear',
+  'luz-do-ponto',
+  'mistura-solida',
+  'cor-mais-escura',
+  'cor-mais-clara',
+  'subtrair',
+  'dividir',
+] as const satisfies readonly ModoDeMesclagem[];
+const SKSL = Object.fromEntries(POR_SHADER.map((modo) => [modo, sksl(B_SKSL[modo])])) as Record<(typeof POR_SHADER)[number], string>;
 
 /**
  * Luz suave com a fórmula atribuída ao Photoshop (sqrt em toda a faixa). Difere da do W3C, que o Skia usa, em até 17 níveis.
  * Fica fora do documento até conferir contra uma referência exportada do Photoshop (docs/tecnico/spike-render.md, seção 5).
  */
-export const SKSL_LUZ_SUAVE_DO_PHOTOSHOP = sksl(porCanal(`s <= 0.5 ? b - (1.0 - 2.0 * s) * b * (1.0 - b) : b + (2.0 * s - 1.0) * (sqrt(b) - b)`));
+export const SKSL_LUZ_SUAVE_DO_PHOTOSHOP = sksl(porCanal('s <= 0.5 ? b - (1.0 - 2.0 * s) * b * (1.0 - b) : b + (2.0 * s - 1.0) * (sqrt(b) - b)'));
 
-export const MODOS_POR_SHADER = Object.keys(SKSL) as (keyof typeof SKSL)[];
+export const MODOS_POR_SHADER: readonly (typeof POR_SHADER)[number][] = POR_SHADER;
 
 type NomeNativo =
   | 'SrcOver'

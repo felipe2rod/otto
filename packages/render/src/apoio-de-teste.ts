@@ -12,6 +12,25 @@ const PASTA = path.resolve(import.meta.dirname, '../recursos-de-teste');
 /** Imagens de teste, pela chave que o documento usa: o sha256 do conteúdo. */
 export const FOTO = 'd2770bffcd3f26ad30260ac7f24b522ac422bf2b3cd92cec53a012f41cfb3945';
 export const RECORTE = '8274e4a26323a2405a823e2d19521c84a43b17b52a9245e272e1966f3cf15d0f';
+/** Máscara de sujeito da FOTO, gerada aqui: branca, com alfa em elipse suave à direita do centro (o "sujeito"). */
+export const SUJEITO_DA_FOTO = 'a1'.padStart(64, '0');
+
+/** O PNG da máscara de sujeito de teste (chave SUJEITO_DA_FOTO). */
+export function mascaraDeSujeito(ck: CanvasKit): Uint8Array {
+  const largura = 320;
+  const altura = 213;
+  const rgba = new Uint8Array(largura * altura * 4);
+  for (let y = 0; y < altura; y++) {
+    for (let x = 0; x < largura; x++) {
+      const d = Math.hypot((x - 190) / 90, (y - 120) / 80);
+      const i = (y * largura + x) * 4;
+      rgba[i] = rgba[i + 1] = rgba[i + 2] = 255;
+      // inteiro até 0,9 do raio, e some em rampa linear até 1: conta só com inteiros e divisão, igual em toda máquina
+      rgba[i + 3] = d <= 0.9 ? 255 : d >= 1 ? 0 : Math.round(((1 - d) / 0.1) * 255);
+    }
+  }
+  return pngDe(ck, rgba, largura, altura);
+}
 
 export function fontesDeTeste(): FonteDeArquivo[] {
   const fonte = (familia: string, peso: number, arquivo: string): FonteDeArquivo => ({ familia, peso, bytes: new Uint8Array(readFileSync(path.join(PASTA, 'fontes', arquivo))) });
@@ -39,14 +58,14 @@ export function canvasKitDeTeste(): Promise<CanvasKit> {
 
 export async function novaSessao(imagensExtras: ImagemDeArquivo[] = []): Promise<{ ck: CanvasKit; sessao: Sessao }> {
   const ck = await canvasKitDeTeste();
-  return { ck, sessao: criarSessao(ck, { fontes: fontesDeTeste(), imagens: [...imagensDeTeste(), ...imagensExtras] }) };
+  return { ck, sessao: criarSessao(ck, { fontes: fontesDeTeste(), imagens: [...imagensDeTeste(), { arquivo: SUJEITO_DA_FOTO, bytes: mascaraDeSujeito(ck) }, ...imagensExtras] }) };
 }
 
 type NoLiteral = Record<string, unknown> & { nome: string; tipo: string; filhos?: NoLiteral[] };
 
 let lotes = 0;
-function aplicar(doc: Documento, operacoes: unknown[]): Documento {
-  const r = aplicarLote(doc, operacoes, { autoria: { tipo: 'designer' }, idDoLote: `lote-de-teste-do-render-${++lotes}` });
+function aplicar(doc: Documento, operacoes: unknown[], lote?: string): Documento {
+  const r = aplicarLote(doc, operacoes, { autoria: { tipo: 'designer' }, idDoLote: lote ?? `lote-de-teste-do-render-${++lotes}` });
   if (!r.ok) throw new Error(`${r.erro.op} ${r.erro.alvo ?? ''} ${r.erro.campo ?? ''}: ${r.erro.mensagem}`);
   return r.doc;
 }
@@ -63,15 +82,21 @@ export interface OpcoesDaPeca {
   altura?: number;
   fundo?: string;
   tokens?: Record<string, string>;
+  /** Id do lote que cria a peça. Os ids dos nós saem dele, e a semente do ruído sai do id do nó: golden com ruído precisa de lote fixo. */
+  lote?: string;
 }
 
 /** Documento de uma prancheta ("P") com os nós dados, de baixo para cima. Grupo aceita "filhos". */
 export function peca(nos: NoLiteral[], opcoes: OpcoesDaPeca = {}): { doc: Documento; p: Prancheta } {
-  const doc = aplicar(documentoVazio(), [
-    ...Object.entries(opcoes.tokens ?? {}).map(([nome, valor]) => ({ op: 'definirToken', nome, valor })),
-    { op: 'criarPrancheta', nome: 'P', largura: opcoes.largura ?? 200, altura: opcoes.altura ?? 200, fundo: opcoes.fundo ?? '#ffffff' },
-    ...operacoesDe(nos),
-  ]);
+  const doc = aplicar(
+    documentoVazio(),
+    [
+      ...Object.entries(opcoes.tokens ?? {}).map(([nome, valor]) => ({ op: 'definirToken', nome, valor })),
+      { op: 'criarPrancheta', nome: 'P', largura: opcoes.largura ?? 200, altura: opcoes.altura ?? 200, fundo: opcoes.fundo ?? '#ffffff' },
+      ...operacoesDe(nos),
+    ],
+    opcoes.lote,
+  );
   return { doc, p: doc.pranchetas[0] as Prancheta };
 }
 

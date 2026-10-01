@@ -1,4 +1,4 @@
-import type { Ajuste, Documento, Prancheta } from '@otto/documento';
+import { type Ajuste, type Documento, MODOS_DE_MESCLAGEM, type Prancheta } from '@otto/documento';
 import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { referenciaDeAjuste } from './ajustes';
@@ -15,6 +15,7 @@ const LADO = 64;
 const ruido = pixelsAleatorios(LADO * LADO, 5, 'opaco');
 const QUADRANTES = chaveDeTeste(1);
 const RUIDO = chaveDeTeste(2);
+const MEIA = chaveDeTeste(3);
 
 beforeAll(async () => {
   const quadrantes = new Uint8Array(200 * 100 * 4);
@@ -25,12 +26,15 @@ beforeAll(async () => {
     [255, 255, 0],
   ];
   for (let y = 0; y < 100; y++) for (let x = 0; x < 200; x++) quadrantes.set([...(cores[(y < 50 ? 0 : 2) + (x < 100 ? 0 : 1)] as number[]), 255], (y * 200 + x) * 4);
+  const meia = new Uint8Array(200 * 100 * 4);
+  for (let y = 0; y < 100; y++) for (let x = 0; x < 200; x++) meia.set([255, 255, 255, x < 100 ? 255 : 0], (y * 200 + x) * 4);
   const base = await novaSessao();
   ck = base.ck;
   base.sessao.destruir();
   ({ sessao } = await novaSessao([
     { arquivo: QUADRANTES, bytes: pngDe(ck, quadrantes, 200, 100) },
     { arquivo: RUIDO, bytes: pngDe(ck, ruido, LADO, LADO) },
+    { arquivo: MEIA, bytes: pngDe(ck, meia, 200, 100) },
   ]));
 });
 
@@ -172,6 +176,47 @@ describe.each(['pixel', 'shader'] as const)('compositor, cálculo por %s', (calc
     expect(recursosEmFalta(sessao, r.doc).imagens).toEqual([{ arquivo: chaveDeTeste(999), camadas: ['P/Foto'] }]);
   });
 
+  describe('máscara de sujeito (recorte da foto)', () => {
+    // a máscara é um PNG branco, do tamanho da foto, cujo alfa é o sujeito: aqui, a metade esquerda da foto
+    const foto = (extra: object = {}, mascara: object = {}) =>
+      imagem('foto', QUADRANTES, 0, 0, 200, 200, { larguraOriginal: 200, alturaOriginal: 100, mascara: { tipo: 'sujeito', arquivo: MEIA, ...mascara }, ...extra });
+
+    it('corta a foto pelo alfa da máscara, com o mesmo enquadramento da foto', () => {
+      // em "cobrir", a foto 2:1 mostra só o miolo: a fronteira da máscara (meio da foto) cai no meio da caixa
+      const r = render([foto()]);
+      expect(r.em(50, 50)).toEqual([255, 0, 0, 255]);
+      expect(r.em(150, 50)).toEqual([255, 255, 255, 255]);
+      // com o foco na esquerda da foto, a caixa inteira fica dentro do sujeito
+      const focada = render([foto({ foco: { x: 0, y: 0.5 } })]);
+      expect(focada.em(150, 50)).not.toEqual([255, 255, 255, 255]);
+    });
+
+    it('invertida, mostra o que não é o sujeito', () => {
+      const r = render([foto({}, { inverter: true })]);
+      expect(r.em(50, 50)).toEqual([255, 255, 255, 255]);
+      expect(r.em(150, 50)).toEqual([0, 255, 0, 255]);
+    });
+
+    it('acompanha a rotação da foto', () => {
+      const r = render([foto({ rotacao: 180 })]);
+      expect(r.em(50, 50)).toEqual([255, 255, 255, 255]);
+      expect(r.em(150, 150)).toEqual([255, 0, 0, 255]);
+    });
+
+    it('máscara que não foi entregue não corta nada, e o motor avisa qual falta', () => {
+      const r = render([foto({}, { arquivo: chaveDeTeste(404) })]);
+      expect(r.em(150, 50)).toEqual([0, 255, 0, 255]);
+      expect(recursosEmFalta(sessao, r.doc).imagens).toEqual([{ arquivo: chaveDeTeste(404), camadas: ['P/foto'] }]);
+    });
+
+    it('em camada que não é foto, a máscara de sujeito não vale, e o motor diz', () => {
+      const r = render([forma('f', 0, 0, 200, 200, '#ff0000', { mascara: { tipo: 'sujeito', arquivo: MEIA } })]);
+      expect(r.em(150, 50)).toEqual([255, 0, 0, 255]);
+      expect(naoDesenhado(r.doc).map((x) => x.recurso)).toEqual(['máscara de sujeito fora de foto']);
+      expect(naoDesenhado(render([foto()]).doc)).toEqual([]);
+    });
+  });
+
   it('vetor: caminho aberto só com traço, na espessura escalada pela caixa', () => {
     const r = render(
       [{ tipo: 'vetor', nome: 'Fio', x: 0, y: 40, largura: 100, altura: 20, moldura: [50, 10], caminhos: [{ d: 'M0 5C0 5 50 5 50 5', traco: { cor: '#ffffff', espessura: 5 } }] }],
@@ -291,6 +336,32 @@ describe.each(['pixel', 'shader'] as const)('compositor, cálculo por %s', (calc
         expect(r.em(x, y)).toEqual([...ruido.slice((y * LADO + x) * 4, (y * LADO + x) * 4 + 4)]);
     });
 
+    describe('com modo de mesclagem: o resultado do ajuste é mesclado com o que estava abaixo', () => {
+      const a: Ajuste = { tipo: 'brilho-contraste', brilho: 25, contraste: 30 };
+      for (const modo of MODOS_DE_MESCLAGEM) {
+        it(`${modo}: no máximo 2 níveis da fórmula, com opacidade`, () => {
+          const r = render(
+            [imagem('i', RUIDO, 0, 0, LADO, LADO, { larguraOriginal: LADO, alturaOriginal: LADO }), ajuste('aj', a, { modoDeMesclagem: modo, opacidade: 0.8 })],
+            {},
+            { largura: LADO, altura: LADO },
+          );
+          expect(diferencaMaxima(r.rgba, referenciaDeMesclagem(ruido, referenciaDeAjuste(ruido, a), modo, 0.8))).toBeLessThanOrEqual(2);
+        });
+      }
+
+      it('respeita a máscara', () => {
+        const mascara = { tipo: 'forma', forma: 'retangulo', x: 0, y: 0, largura: 32, altura: LADO };
+        const r = render(
+          [imagem('i', RUIDO, 0, 0, LADO, LADO, { larguraOriginal: LADO, alturaOriginal: LADO }), ajuste('aj', { tipo: 'preto-e-branco' }, { modoDeMesclagem: 'multiplicacao', mascara })],
+          {},
+          { largura: LADO, altura: LADO },
+        );
+        const esperado = referenciaDeMesclagem(ruido, referenciaDeAjuste(ruido, { tipo: 'preto-e-branco' }), 'multiplicacao', 1);
+        expect(diferencaMaxima(new Uint8Array(r.em(10, 10)), esperado.slice((10 * LADO + 10) * 4, (10 * LADO + 10) * 4 + 4))).toBeLessThanOrEqual(2);
+        expect(r.em(50, 10)).toEqual([...ruido.slice((10 * LADO + 50) * 4, (10 * LADO + 50) * 4 + 4)]);
+      });
+    });
+
     it('recortado na camada de baixo, só muda aquela camada', () => {
       const r = render([forma('fundo', 0, 0, 200, 200, '#ff0000'), forma('base', 50, 50, 100, 100, '#00ff00'), ajuste('aj', { tipo: 'preto-e-branco' }, { recortadaNaDeBaixo: true })]);
       expect(r.em(10, 10)).toEqual([255, 0, 0, 255]);
@@ -338,7 +409,7 @@ describe('fórmula do ajuste de cor da foto', () => {
 });
 
 describe('o motor diz o que ainda não desenha', () => {
-  it('lista, por camada, o recurso do documento que sai sem efeito', () => {
+  it('efeitos, filtros e ajuste com modo de mesclagem são desenhados: a lista fica vazia', () => {
     const { doc } = peca([
       forma('Selo', 0, 0, 50, 50, '#000000', {
         efeitos: { brilhoExterno: { cor: '#ffffff' } },
@@ -348,9 +419,8 @@ describe('o motor diz o que ainda não desenha', () => {
         ],
       }),
       ajuste('Curvas', { tipo: 'curvas' }, { modoDeMesclagem: 'luminosidade' }),
-      forma('Limpa', 60, 0, 50, 50, '#000000', { sombra: SOMBRA }),
     ]);
-    expect(naoDesenhado(doc).map((x) => `${x.camada}: ${x.recurso}`)).toEqual(['P/Selo: efeitos de camada', 'P/Selo: ruído', 'P/Curvas: modo de mesclagem em camada de ajuste']);
+    expect(naoDesenhado(doc)).toEqual([]);
   });
 });
 

@@ -79,10 +79,10 @@ export function mesclarPremultiplicado(
 }
 
 /**
- * Aplica o ajuste ao destino (RGBA premultiplicado). A cobertura é uma superfície do mesmo tamanho:
+ * Aplica o ajuste ao destino (RGBA premultiplicado). A cobertura, quando há, é uma superfície do mesmo tamanho:
  * o alfa dela é a máscara já recortada pela prancheta; a opacidade da camada multiplica.
  */
-export function ajustarPremultiplicado(destino: Uint8Array, cobertura: Uint8Array, ajuste: AjusteResolvido, opacidade: number): void {
+export function ajustarPremultiplicado(destino: Uint8Array, cobertura: Uint8Array | undefined, ajuste: AjusteResolvido, opacidade: number): void {
   const f = funcaoDoAjuste(ajuste);
   let tabelas: [Uint8Array, Uint8Array, Uint8Array] | undefined;
   if (ajustePorCanal(ajuste)) {
@@ -93,7 +93,8 @@ export function ajustarPremultiplicado(destino: Uint8Array, cobertura: Uint8Arra
     }
   }
   for (let i = 0; i < destino.length; i += 4) {
-    const c8 = cobertura[i + 3] as number;
+    // sem cobertura, o ajuste vale em tudo
+    const c8 = cobertura ? (cobertura[i + 3] as number) : 255;
     if (c8 === 0) continue;
     const a8 = destino[i + 3] as number;
     if (a8 === 0) continue;

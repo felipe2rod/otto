@@ -46,7 +46,12 @@ motor.redimensionar(larguraCss, alturaCss, devicePixelRatio);
 motor.definirDocumento(doc);
 motor.definirCamera({ x, y, zoom });          // x, y: pixels de tela da origem do plano; zoom: pixels de tela por unidade
 motor.definirPrevia({ ids, dx, dy });         // arrastar; null encerra
+const cancelar = motor.aoMudarEmFalta((emFalta) => { /* fonte ou imagem que faltava chegou, ou passou a faltar */ });
 ```
+
+- `criarMotor(canvas, recursos, { fundo })`: `fundo` é a cor da área de trabalho em `#rrggbb`, ou `'transparente'` (o canvas fica vazado fora das pranchetas, com alfa premultiplicado, e o editor põe o próprio fundo por baixo).
+- `aoMudarEmFalta` avisa ao receber um documento e ao terminar `prepararRecursos`, só quando a lista muda. Custa uma passada pelas camadas, e só quando há quem ouça.
+- `SENTINELA_DO_MOTOR` (também em `@otto/render/sentinela`, arquivo sem nenhum import) é a marca que o teste do pacote público procura: está em `motor.sentinela`, então vai em todo pacote que carrega o motor.
 
 **Carga do WebAssembly (ADR 019).** O pacote não embute o CanvasKit. `criarMotor` insere `<script src="/motor/0.42.0/canvaskit.js">` e o script busca `canvaskit.wasm` da mesma pasta. O app web copia esses dois arquivos para a pasta estática no build; `arquivosDoMotor()` (de `@otto/render/node`) diz a versão e os caminhos de origem. Outro endereço: `criarMotor(canvas, recursos, { enderecoDoMotor })`.
 
@@ -54,12 +59,16 @@ motor.definirPrevia({ ids, dx, dy });         // arrastar; null encerra
 
 - Mesmo documento, mesmas fontes, mesma versão do motor: mesmos bytes (duas instâncias, duas sessões).
 - Goldens de CPU com tolerância zero (`goldens/*.png` e `goldens/indice.json`), uma cena por recurso e uma peça inteira.
-- Os dois cálculos presos à mesma fórmula: os 26 modos de mesclagem e as 9 camadas de ajuste, por shader (GPU) e por laço de pixel (CPU), contra a referência, a 1 nível (2 com alfa nos dois). Cada cena de golden no cálculo da GPU fica a no máximo 4 níveis do golden.
+- Os dois cálculos presos à mesma fórmula: os 26 modos de mesclagem e as 9 camadas de ajuste (com qualquer modo), por shader (GPU) e por laço de pixel (CPU), contra a referência, a 1 nível (2 com alfa nos dois). Os filtros de ruído, nitidez e desfoque de movimento, shader contra laço, a 1 ou 2 níveis. Cada cena de golden no cálculo da GPU fica a no máximo 4 níveis do golden.
+- O ruído é função da posição na camada e do id dela: mesmo grão sempre, e o grão anda e gira com a camada.
+- A ordem de montagem de uma camada é a do Photoshop: conteúdo, filtros (na ordem do documento), máscara, efeitos (a sombra e o brilho contornam o que a máscara deixou), opacidade e modo.
 - Cache do editor: imagem em cache idêntica ao render de referência; zero recomposição durante o arraste; ao soltar, só a prancheta que mudou.
 
 O WebGL em si não roda no Node: `navegador.ts` (a tela WebGL) não tem teste automático aqui. Foi conferido à mão no Chrome com a placa de vídeo, pela entrada pública do pacote.
 
-## O que o motor desenha, e o que falta para alcançar o da POC
+**Prévia em GPU contra a referência, medida no Chrome com placa de vídeo (Radeon RX 5500 XT, 2026-10-01), nas cenas de golden.** Ruído: 1 a 2 níveis (o grão é o mesmo). Desfoque de movimento: até 4. Máscara de sujeito: 3 pixels acima de 8 níveis em 180 mil. Nitidez: até 9 com quantidade 1,5, e até 17 (2,4% dos pixels acima de 8) com quantidade 4, porque ela multiplica a diferença que o desfoque do Skia já tem entre GPU e CPU. Efeitos com desfoque (brilho externo e interno, sombra interna): até 20 a 40 níveis em 1% a 2% dos pixels, na borda, a mesma ordem de diferença da sombra projetada e do filtro de desfoque. É diferença de prévia; o que o agente vê, o lint confere e a exportação grava é sempre a referência em CPU.
+
+## O que o motor desenha
 
 | Recurso do esquema | Estado | O que falta | Tamanho |
 |---|---|---|---|
@@ -73,16 +82,22 @@ O WebGL em si não roda no Node: `navegador.ts` (a tela WebGL) não tem teste au
 | 26 modos de mesclagem | desenha | Luz suave usa a fórmula do W3C; a do Photoshop espera referência | — |
 | Sombra projetada; filtro de desfoque | desenha | O desfoque é o gaussiano do Skia; a POC usava três caixas e, em foto, aplicava na resolução de origem | — |
 | Camada de ajuste: curvas, níveis, matiz e saturação, brilho e contraste, vibração, equilíbrio de cor, filtro de foto, preto e branco, mapa de degradê; com máscara, opacidade e recorte | desenha | — | — |
-| Camada de ajuste com modo de mesclagem diferente de normal | **não** | Aplicar o ajuste numa cópia e mesclar; na GPU precisa copiar o fundo | médio |
-| Efeitos de camada: sombra interna, brilho externo, brilho interno, sobreposição de cor, sobreposição de degradê | **não** | Cinco efeitos, com os parâmetros do descritor do Photoshop, em shader e em laço | grande |
-| Filtro de desfoque de movimento | **não** | Não há filtro pronto no Skia: shader e laço | médio |
-| Filtro de ruído | **não** | Ruído por posição, igual em shader e em laço (o da POC é sequencial e não serve à GPU) | médio |
-| Filtro de nitidez | **não** | Desfoque e diferença: shader e laço | médio |
-| Máscara de sujeito (recorte da foto) | **não** | Desenhar a imagem da máscara com o enquadramento da foto | pequeno |
+| Camada de ajuste com modo de mesclagem diferente de normal | desenha | Na CPU o ajuste vai para uma cópia, que é mesclada; na GPU, um shader só ajusta e mescla | — |
+| Efeitos de camada: sombra interna, brilho externo, brilho interno, sobreposição de cor, sobreposição de degradê | desenha | Só com operações do Skia (desfoque, filtro de cor, modos), o mesmo código na CPU e na GPU. Tamanho do Photoshop = desvio padrão × 2: **conferir no Photoshop** | — |
+| Filtro de desfoque de movimento | desenha | Média de até 64 amostras ao longo da reta. No laço de pixel custa de 1 a 3 s por render em camada grande a 1080 px | — |
+| Filtro de ruído | desenha | Uniforme, por posição. O ruído do Photoshop é outro: ao reaplicar o filtro lá, o desenho do grão muda | — |
+| Filtro de nitidez | desenha | Máscara de nitidez: original + quantidade × (original − desfocado), sem limiar | — |
+| Máscara de sujeito (recorte da foto) | desenha | Só em foto; fora dela a camada sai sem máscara e `naoDesenhado` avisa | — |
 
-`naoDesenhado(doc)` devolve essa lista para um documento dado: a camada sai sem o recurso, e quem chama pode avisar.
+Em foto, os filtros são aplicados na resolução do documento (a POC aplicava na resolução do arquivo de origem).
 
-Do motor da POC, não vieram por serem de outras fatias: `mascaraEmAlfa` e `cantosDaFoto` (PSD), `tracarCaminho` (SVG), as texturas geradas, e a biblioteca de fontes com nome PostScript.
+`naoDesenhado(doc)` lista o que o documento usa e o motor não desenha. Hoje só um caso: máscara de sujeito em camada que não é foto.
+
+## O que a exportação usa
+
+`renderizarMascara(sessao, doc, prancheta, no)` devolve a máscara do nó como cobertura (um byte por pixel), pelo mesmo código que corta a camada no render. `codificarPng(sessao, render)` grava PNG. `limitesDoNo` é a área que a camada ocupa. `nomePostScript(bytes)` lê o nome que o Photoshop procura, e `escolherFonte(fontes, familia, peso)` é a regra do motor para o arquivo de fonte (peso mais próximo da família; sem a família, nada). `@otto/render/apoio-de-teste` expõe as fontes e imagens de teste para os testes de outros pacotes.
+
+Do motor da POC, não vieram: `tracarCaminho` (SVG, de outra fatia) e as texturas geradas.
 
 ## O que o editor ainda não tem no motor
 

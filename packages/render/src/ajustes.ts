@@ -4,8 +4,9 @@
 //   de 10 a 150 vezes mais (docs/tecnico/spike-render.md).
 // As fórmulas vieram de poc/src/render/pixel.ts e aproximam as do Photoshop; o PSD guarda o ajuste editável
 // e o Photoshop recalcula ao abrir.
-import type { Ajuste } from '@otto/documento';
+import type { Ajuste, ModoDeMesclagem } from '@otto/documento';
 import type { Blender, CanvasKit, RuntimeEffect } from 'canvaskit-wasm';
+import { B_SKSL, PRELUDIO_SKSL } from './mesclagem';
 
 /** Ajuste com as cores já resolvidas em #rrggbb (token resolvido por quem chama). */
 export type AjusteResolvido = Ajuste;
@@ -198,16 +199,21 @@ export function referenciaDeAjuste(dados: Uint8Array | Uint8ClampedArray, a: Aju
  * O que é desenhado com este shader só carrega cobertura: src.a = opacidade × máscara.
  * Saída = fundo + (ajustado − fundo) × cobertura, mantendo o alfa do fundo.
  */
-function sksl(uniformes: string, funcao: string): string {
-  return `
+function sksl(uniformes: string, funcao: string): (funcaoB: string, comModo: boolean) => string {
+  // com modo de mesclagem, o ajustado entra sobre o original pelo modo. Ele é arredondado para 8 bits antes,
+  // como no laço de pixel (que ajusta uma cópia de 8 bits e depois mescla): modo com degrau não pode divergir por fração.
+  return (funcaoB, comModo) => `
 ${uniformes}
-float luma(vec3 c) { return dot(c, vec3(0.3, 0.59, 0.11)); }
-float nivel(float v) { return floor(clamp(v, 0.0, 1.0) * 255.0 + 0.5); }
+${PRELUDIO_SKSL}
+float luma(vec3 c) { return lum(c); }
+float nivelLimitado(float v) { return floor(clamp(v, 0.0, 1.0) * 255.0 + 0.5); }
 ${funcao}
+${funcaoB}
 vec4 main(vec4 src, vec4 dst) {
   if (dst.a <= 0.0) return dst;
   vec3 c = dst.rgb / dst.a;
   vec3 a = clamp(ajustar(c), 0.0, 1.0);
+  ${comModo ? 'a = clamp(B(c, floor(a * 255.0 + 0.5) / 255.0), 0.0, 1.0);' : ''}
   return vec4(mix(c, a, src.a) * dst.a, dst.a);
 }`;
 }
@@ -247,7 +253,7 @@ float curva_${nome}(float x) {
   return floor(clamp(v, 0.0, 255.0) + 0.5);
 }`;
 
-const SKSL: Record<Ajuste['tipo'], string> = {
+const SKSL: Record<Ajuste['tipo'], (funcaoB: string, comModo: boolean) => string> = {
   curvas: sksl(
     `uniform vec2 mestre[${MAXIMO_DE_PONTOS}];
 uniform vec2 vermelho[${MAXIMO_DE_PONTOS}];
@@ -256,7 +262,7 @@ uniform vec2 azul[${MAXIMO_DE_PONTOS}];
 uniform vec4 quantos;`,
     `${curvaEmSksl('mestre', 0)}${curvaEmSksl('vermelho', 1)}${curvaEmSksl('verde', 2)}${curvaEmSksl('azul', 3)}
 vec3 ajustar(vec3 c) {
-  return vec3(curva_vermelho(curva_mestre(nivel(c.r))), curva_verde(curva_mestre(nivel(c.g))), curva_azul(curva_mestre(nivel(c.b)))) / 255.0;
+  return vec3(curva_vermelho(curva_mestre(nivelLimitado(c.r))), curva_verde(curva_mestre(nivelLimitado(c.g))), curva_azul(curva_mestre(nivelLimitado(c.b)))) / 255.0;
 }`,
   ),
   niveis: sksl(
@@ -395,24 +401,25 @@ function uniformes(a: AjusteResolvido): number[] {
 }
 
 export interface Ajustador {
-  /** Shader de mesclagem do ajuste. Quem chama apaga depois de desenhar. */
-  mesclador(ajuste: AjusteResolvido): Blender;
+  /** Shader de mesclagem do ajuste, com o modo com que o resultado entra sobre o fundo. Quem chama apaga depois de desenhar. */
+  mesclador(ajuste: AjusteResolvido, modo?: ModoDeMesclagem): Blender;
   destruir(): void;
 }
 
 export function criarAjustador(ck: CanvasKit): Ajustador {
-  const efeitos = new Map<Ajuste['tipo'], RuntimeEffect>();
+  const efeitos = new Map<string, RuntimeEffect>();
   return {
-    mesclador(ajuste) {
-      let efeito = efeitos.get(ajuste.tipo);
+    mesclador(ajuste, modo = 'normal') {
+      const chave = `${ajuste.tipo}/${modo}`;
+      let efeito = efeitos.get(chave);
       if (!efeito) {
         let erroDeCompilacao = '';
-        const novo = ck.RuntimeEffect.MakeForBlender(SKSL[ajuste.tipo], (erro) => {
+        const novo = ck.RuntimeEffect.MakeForBlender(SKSL[ajuste.tipo](B_SKSL[modo], modo !== 'normal'), (erro) => {
           erroDeCompilacao = erro;
         });
-        if (!novo) throw new Error(`O shader do ajuste "${ajuste.tipo}" não compilou: ${erroDeCompilacao}`);
+        if (!novo) throw new Error(`O shader do ajuste "${ajuste.tipo}" em modo "${modo}" não compilou: ${erroDeCompilacao}`);
         efeito = novo;
-        efeitos.set(ajuste.tipo, efeito);
+        efeitos.set(chave, efeito);
       }
       return efeito.makeBlender(uniformes(ajuste));
     },

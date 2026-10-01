@@ -55,6 +55,16 @@ function rgb(cor: string): [number, number, number] {
   return Number.isNaN(n) ? [0, 0, 0] : [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+/**
+ * O arquivo que o motor usa para uma família e um peso: o da família com o peso mais próximo (empate fica com o primeiro).
+ * Sem arquivo da família, não há substituto. A exportação usa a mesma regra para dizer ao Photoshop qual fonte procurar.
+ */
+export function escolherFonte<T extends { familia: string; peso: number }>(fontes: readonly T[], familia: string, peso: number): T | undefined {
+  const daFamilia = fontes.filter((f) => f.familia === familia);
+  if (daFamilia.length === 0) return undefined;
+  return daFamilia.reduce((melhor, f) => (Math.abs(f.peso - peso) < Math.abs(melhor.peso - peso) ? f : melhor));
+}
+
 export function textoExibido(no: NoTexto): string {
   return no.caixaAlta || no.versalete ? no.conteudo.toLocaleUpperCase('pt-BR') : no.conteudo;
 }
@@ -77,11 +87,7 @@ export function criarMotorDeTexto(ck: CanvasKit, fontes: readonly FonteDeArquivo
   for (const f of fontes) registrar(f);
 
   /** Mesmo critério da POC: o arquivo da família com o peso mais próximo. Sem família, não há substituta. */
-  const achar = (familia: string, peso: number): FonteRegistrada | undefined => {
-    const daFamilia = registradas.filter((f) => f.familia === familia);
-    if (daFamilia.length === 0) return undefined;
-    return daFamilia.reduce((melhor, f) => (Math.abs(f.peso - peso) < Math.abs(melhor.peso - peso) ? f : melhor));
-  };
+  const achar = (familia: string, peso: number): FonteRegistrada | undefined => escolherFonte(registradas, familia, peso);
 
   const estiloDoSkia = (no: NoTexto, e: Estilo, fonte: FonteRegistrada, cor: (c: string) => string): TextStyle => {
     const [r, g, b] = rgb(cor(e.cor));

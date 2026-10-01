@@ -18,11 +18,14 @@ export const DEPENDE_DE = [DOCUMENTO] as const;
 
 export { type AjusteResolvido, funcaoDoAjuste, referenciaDeAjuste } from './ajustes';
 export {
+  codificarPng,
   desenharNos,
   desenharPrancheta,
   ErroDeAreaDoRender,
   enquadrar,
   LIMITE_DE_PIXELS,
+  limitesDoNo,
+  type MascaraEmPixels,
   naoDesenhado,
   type OpcoesDeDesenho,
   type OpcoesDeRender,
@@ -30,14 +33,17 @@ export {
   type RecursosEmFalta,
   type RenderEmPixels,
   recursosEmFalta,
+  renderizarMascara,
   renderizarPrancheta,
 } from './compositor';
 export { comparar, type Diferenca } from './diferenca';
 export { type CameraEmPixels, CenaDoEditor, type ContadoresDoCache, type FabricaDeImagens, fabricaNaCpu, fabricaNaGpu, type PreviaDeGesto } from './editor';
 export { MODOS_POR_SHADER, referenciaDeMesclagem } from './mesclagem';
 export { type Camera, criarMotorSobreTela, type MotorDeRender, type OpcoesDoMotor, type RecursosDoRender, type Tela, telaDeCpu } from './motor';
-export { type RecursosOpenType, recursosOpenType } from './opentype';
+export { nomePostScript, type RecursosOpenType, recursosOpenType } from './opentype';
+export { sementeDe } from './ruido';
+export { SENTINELA_DO_MOTOR } from './sentinela';
 export { criarSessao, type FonteDeArquivo, type ImagemDeArquivo, type RecursosDaSessao, type Sessao } from './sessao';
-export type { MotorDeTexto, TextoDoMotor } from './texto';
+export { escolherFonte, type MotorDeTexto, type TextoDoMotor } from './texto';
 export { criarMedidor, criarMeiosDeVerificacao } from './verificacao';
 export { MOTOR, VERSAO_DO_CANVASKIT } from './versao';

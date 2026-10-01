@@ -50,6 +50,26 @@
       "largura": 540,
       "altura": 675,
       "sha256": "d0a16f1aad194a2c98211207b93d5bb40377d5f7d5be43374249a5c9e4aa0b58"
+    },
+    "filtros": {
+      "largura": 600,
+      "altura": 400,
+      "sha256": "47fdb710e146143dafa2f40003a7ca1e005f86d83184ee8dbf1f7d7010eae237"
+    },
+    "efeitos": {
+      "largura": 600,
+      "altura": 400,
+      "sha256": "5379028e7d33201217aab829bcfaf692a02fc9f301814be36fab396fd9a0e514"
+    },
+    "sujeito": {
+      "largura": 600,
+      "altura": 300,
+      "sha256": "c7f65d894233938af373ecd98e367d7dad61ce84d55e2438839cfd1345906a60"
+    },
+    "ajustes-com-modo": {
+      "largura": 540,
+      "altura": 200,
+      "sha256": "27c1ce82692dff2b86f23d0c223f6860a59f339a5a0a432decbd71ebea02d081"
     }
   }
 }

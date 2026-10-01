@@ -1,7 +1,7 @@
 // Cenas dos goldens: uma por recurso que o motor desenha, mais uma peça inteira.
 // Pequenas de propósito: o golden é o PNG versionado, e o teste compara pixel a pixel, com tolerância zero.
 import { MODOS_DE_MESCLAGEM } from '@otto/documento';
-import { ajuste, FOTO, forma, grupo, imagem, type OpcoesDaPeca, peca, RECORTE, texto } from './apoio-de-teste';
+import { ajuste, FOTO, forma, grupo, imagem, type OpcoesDaPeca, peca, RECORTE, SUJEITO_DA_FOTO, texto } from './apoio-de-teste';
 
 type Nos = Parameters<typeof peca>[0];
 
@@ -236,6 +236,158 @@ export function cenasDeGolden(): CenaDeGolden[] {
         ),
         forma('veu', 0, 0, 540, 675, '#3b2f2f', { modoDeMesclagem: 'luz-suave', opacidade: 0.5 }),
         ajuste('niveis', { tipo: 'niveis', pretoDeEntrada: 8, brancoDeEntrada: 240, gama: 1.08 }),
+      ],
+    },
+    {
+      nome: 'filtros',
+      opcoes: { largura: 600, altura: 400, fundo: '#e7e5e4' },
+      nos: [
+        // ruído: de um tom e colorido, sobre cor chapada, sobre foto e em camada girada (o grão gira junto)
+        forma('ruido-de-um-tom', 10, 10, 135, 110, '#64748b', { filtros: [{ tipo: 'ruido', quantidade: 0.25 }] }),
+        forma('ruido-colorido', 155, 10, 135, 110, '#64748b', { filtros: [{ tipo: 'ruido', quantidade: 0.25, monocromatico: false }] }),
+        imagem('ruido-na-foto', FOTO, 300, 10, 145, 110, { filtros: [{ tipo: 'ruido', quantidade: 0.12 }] }),
+        forma('ruido-girado', 475, 25, 100, 80, linear(90, ['#0f172a', 0], ['#38bdf8', 1]), { raio: 14, rotacao: 20, filtros: [{ tipo: 'ruido', quantidade: 0.4 }] }),
+        // nitidez: a mesma foto sem e com o filtro, e com exagero
+        imagem('sem-nitidez', FOTO, 10, 135, 185, 120),
+        imagem('nitidez', FOTO, 205, 135, 185, 120, { filtros: [{ tipo: 'nitidez', quantidade: 1.5, raio: 2 }] }),
+        imagem('nitidez-forte', FOTO, 400, 135, 185, 120, { filtros: [{ tipo: 'nitidez', quantidade: 4, raio: 6 }] }),
+        // desfoque de movimento: na horizontal, na diagonal e em texto
+        forma('movimento-horizontal', 40, 290, 60, 60, '#dc2626', { forma: 'elipse', filtros: [{ tipo: 'desfoque-de-movimento', angulo: 0, distancia: 50 }] }),
+        forma('movimento-diagonal', 170, 290, 60, 60, '#16a34a', { raio: 8, filtros: [{ tipo: 'desfoque-de-movimento', angulo: 45, distancia: 40 }] }),
+        texto('movimento-no-texto', 'VELOZ', {
+          x: 280,
+          y: 275,
+          largura: 180,
+          altura: 60,
+          fonte: 'Anton',
+          tamanho: 54,
+          cor: '#1c1917',
+          filtros: [{ tipo: 'desfoque-de-movimento', angulo: 0, distancia: 24 }],
+        }),
+        // em sequência, na ordem do documento: desfoca e depois granula (o grão fica nítido por cima do borrão)
+        forma('desfoque-depois-ruido', 490, 280, 90, 90, '#7c3aed', {
+          forma: 'elipse',
+          filtros: [
+            { tipo: 'desfoque', raio: 8 },
+            { tipo: 'ruido', quantidade: 0.3, monocromatico: false },
+          ],
+        }),
+      ],
+    },
+    {
+      nome: 'efeitos',
+      opcoes: { largura: 600, altura: 400, fundo: '#292524' },
+      nos: [
+        forma('brilho-externo', 30, 30, 110, 90, '#fafaf9', { raio: 16, efeitos: { brilhoExterno: { cor: '#f59e0b', opacidade: 0.9, tamanho: 18 } } }),
+        forma('brilho-interno', 180, 30, 110, 90, '#1e3a8a', { forma: 'elipse', efeitos: { brilhoInterno: { cor: '#7dd3fc', opacidade: 0.9, tamanho: 16 } } }),
+        forma('sombra-interna', 330, 30, 110, 90, '#e7e5e4', { raio: 16, efeitos: { sombraInterna: { cor: '#000000', opacidade: 0.6, angulo: 120, distancia: 8, desfoque: 10 } } }),
+        forma('sobreposicao-de-cor', 480, 30, 90, 90, linear(90, ['#000000', 0], ['#ffffff', 1]), {
+          efeitos: { sobreposicaoDeCor: { cor: '#e11d48', opacidade: 0.8, modoDeMesclagem: 'multiplicacao' } },
+        }),
+        texto('degrade-no-texto', 'OTTO', {
+          x: 30,
+          y: 150,
+          largura: 330,
+          altura: 130,
+          fonte: 'Anton',
+          tamanho: 120,
+          entrelinha: 1,
+          cor: '#ffffff',
+          efeitos: {
+            sobreposicaoDeDegrade: { degrade: linear(90, ['#f97316', 0], ['#fde047', 1]) },
+            brilhoExterno: { cor: '#f97316', opacidade: 0.7, tamanho: 14 },
+            sombraInterna: { cor: '#7c2d12', opacidade: 0.8, angulo: 90, distancia: 4, desfoque: 4 },
+          },
+        }),
+        imagem('efeitos-na-foto', FOTO, 390, 150, 180, 120, {
+          efeitos: {
+            sombraInterna: { cor: '#000000', opacidade: 0.8, angulo: 135, distancia: 0, desfoque: 24 },
+            sobreposicaoDeDegrade: { degrade: linear(0, ['#1d4ed8', 0], ['#be123c', 1]), opacidade: 0.7, modoDeMesclagem: 'luz-suave' },
+          },
+        }),
+        // com traço, sombra projetada, opacidade e máscara: o efeito sai do conteúdo, a máscara corta tudo depois
+        forma('tudo-junto', 30, 300, 160, 80, '#0f766e', {
+          raio: 20,
+          traco: { cor: '#f0fdfa', espessura: 4 },
+          sombra: SOMBRA,
+          opacidade: 0.9,
+          efeitos: { brilhoInterno: { cor: '#99f6e4', opacidade: 0.8, tamanho: 12 }, brilhoExterno: { cor: '#2dd4bf', opacidade: 0.6, tamanho: 10 } },
+        }),
+        imagem('efeito-em-recorte', RECORTE, 230, 290, 80, 100, {
+          larguraOriginal: 600,
+          alturaOriginal: 800,
+          ajuste: 'conter',
+          efeitos: { brilhoExterno: { cor: '#ffffff', opacidade: 1, tamanho: 8 } },
+        }),
+        forma('efeito-girado-com-mascara', 360, 300, 200, 70, '#f5f5f4', {
+          rotacao: -6,
+          efeitos: { brilhoExterno: { cor: '#a78bfa', opacidade: 0.9, tamanho: 12 }, sobreposicaoDeCor: { cor: '#4c1d95', opacidade: 0.5 } },
+          mascara: { tipo: 'degrade', angulo: 0, inicio: 0.2, fim: 1 },
+        }),
+      ],
+    },
+    {
+      nome: 'sujeito',
+      opcoes: { largura: 600, altura: 300, fundo: '#0c0a09' },
+      nos: [
+        // o uso que as peças fazem: a foto, o texto por cima, e o sujeito da mesma foto por cima do texto
+        imagem('fundo', FOTO, 0, 0, 300, 300),
+        texto('titulo-atras', 'SERRA', { x: 0, y: 70, largura: 300, altura: 140, fonte: 'Anton', tamanho: 120, entrelinha: 1, alinhamento: 'centro', cor: '#fde047' }),
+        imagem('sujeito', FOTO, 0, 0, 300, 300, { mascara: { tipo: 'sujeito', arquivo: SUJEITO_DA_FOTO } }),
+        // só o sujeito, com sombra; invertida; girada, com a foto deslocada pelo foco e pelo zoom
+        imagem('so-o-sujeito', FOTO, 310, 10, 135, 135, { mascara: { tipo: 'sujeito', arquivo: SUJEITO_DA_FOTO }, sombra: { cor: '#f97316', opacidade: 0.9, angulo: 135, distancia: 6, desfoque: 6 } }),
+        imagem('invertida', FOTO, 455, 10, 135, 135, { mascara: { tipo: 'sujeito', arquivo: SUJEITO_DA_FOTO, inverter: true } }),
+        imagem('girada', FOTO, 330, 165, 110, 110, { rotacao: 15, foco: { x: 0.7, y: 0.6 }, zoom: 1.4, mascara: { tipo: 'sujeito', arquivo: SUJEITO_DA_FOTO } }),
+        imagem('com-efeito', FOTO, 455, 155, 135, 135, {
+          mascara: { tipo: 'sujeito', arquivo: SUJEITO_DA_FOTO },
+          filtros: [{ tipo: 'ruido', quantidade: 0.2 }],
+          efeitos: { brilhoExterno: { cor: '#38bdf8', opacidade: 1, tamanho: 10 } },
+        }),
+      ],
+    },
+    {
+      nome: 'ajustes-com-modo',
+      opcoes: { largura: 540, altura: 200, fundo: '#000000' },
+      nos: [
+        imagem('foto', FOTO, 0, 0, 540, 200),
+        ...(
+          [
+            ['multiplicacao', { tipo: 'preto-e-branco' }],
+            ['tela', { tipo: 'niveis', pretoDeEntrada: 40, brancoDeEntrada: 200, gama: 1 }],
+            ['sobrepor', { tipo: 'preto-e-branco' }],
+            ['luz-suave', { tipo: 'brilho-contraste', brilho: 0, contraste: 80 }],
+            [
+              'luminosidade',
+              {
+                tipo: 'curvas',
+                rgb: [
+                  [0, 0],
+                  [128, 190],
+                  [255, 255],
+                ],
+              },
+            ],
+            ['cor', { tipo: 'matiz-saturacao', matiz: 120, saturacao: 40 }],
+            ['diferenca', { tipo: 'filtro-de-foto', cor: '#ec8a00', densidade: 80 }],
+            [
+              'luz-direta',
+              {
+                tipo: 'mapa-de-degrade',
+                paradas: [
+                  { cor: '#1b1f4b', posicao: 0 },
+                  { cor: '#e9b44c', posicao: 1 },
+                ],
+              },
+            ],
+            ['cor-mais-escura', { tipo: 'vibracao', vibracao: 100, saturacao: 40 }],
+          ] as [string, object][]
+        ).map(([modo, a], i) =>
+          ajuste(`ajuste-${modo}`, a, {
+            modoDeMesclagem: modo,
+            mascara: { tipo: 'forma', forma: 'retangulo', x: i * 60, y: i % 2 ? 16 : 0, largura: 56, altura: 184 },
+            ...(i === 3 ? { opacidade: 0.7 } : {}),
+          }),
+        ),
       ],
     },
   ];
