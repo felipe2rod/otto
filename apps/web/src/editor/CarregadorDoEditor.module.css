@@ -1,0 +1,8 @@
+.carregando {
+  display: grid;
+  place-items: center;
+  height: 100dvh;
+  margin: 0;
+  font: 11px var(--mono);
+  color: var(--texto-3);
+}

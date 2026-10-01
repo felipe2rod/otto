@@ -1,0 +1,67 @@
+.pagina {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: var(--altura-do-topo) 1fr;
+}
+
+.topo {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 12px;
+  background: var(--grafite-1);
+  border-bottom: 1px solid var(--linha);
+}
+
+.marca {
+  /* bloco, não flex: ::first-letter só vale em bloco */
+  display: block;
+  height: 100%;
+  padding-right: 12px;
+  border-right: 1px solid var(--linha);
+  font: 26px / var(--altura-do-topo) var(--serif);
+  letter-spacing: -0.01em;
+  color: var(--papel);
+  text-decoration: none;
+}
+
+.marca::first-letter {
+  color: var(--ambar);
+  font-style: italic;
+}
+
+.secao {
+  font-weight: 600;
+  text-decoration: none;
+  padding: 4px 0;
+  border-bottom: 2px solid var(--laranja);
+}
+
+.conteudo {
+  padding: 28px clamp(16px, 4vw, 48px) 48px;
+}
+
+.titulo {
+  margin: 0 0 22px;
+  font: 400 40px / 1 var(--serif);
+  color: var(--papel);
+}
+
+.carregando {
+  margin: 0 0 16px;
+  font: 11px var(--mono);
+  color: var(--texto-3);
+}
+
+.esqueletos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 18px;
+}
+
+.esqueletos span {
+  aspect-ratio: 4 / 6;
+  background: var(--grafite-1);
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+}

@@ -1,0 +1,41 @@
+{
+  "name": "@otto/web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Site público e editor (Next.js, ADR 019). Dono: especialista-react",
+  "scripts": {
+    "dev": "tsx scripts/copiar-motor.ts && next dev --hostname 0.0.0.0 --port 3000",
+    "build": "tsx scripts/copiar-motor.ts && next build && node scripts/conferir-pacote-publico.ts",
+    "start": "next start --hostname 0.0.0.0 --port 3000",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "motor:copiar": "tsx scripts/copiar-motor.ts",
+    "conferir:pacote": "node scripts/conferir-pacote-publico.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/schibsted-grotesk": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
+    "@otto/documento": "workspace:*",
+    "@otto/render": "workspace:*",
+    "@otto/shared": "workspace:*",
+    "next": "^16.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@babel/parser": "^7.29.9",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/node": "^24.0.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "jsdom": "^30.1.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

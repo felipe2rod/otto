@@ -1,0 +1,102 @@
+.topo {
+  grid-area: topo;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--grafite-1);
+  border-bottom: 1px solid var(--linha);
+  min-width: 0;
+}
+
+.marca {
+  /* bloco, não flex: ::first-letter só vale em bloco */
+  display: block;
+  height: 100%;
+  padding-right: 12px;
+  border-right: 1px solid var(--linha);
+  font: 26px / var(--altura-do-topo) var(--serif);
+  letter-spacing: -0.01em;
+  color: var(--papel);
+  text-decoration: none;
+}
+
+.marca::first-letter {
+  color: var(--ambar);
+  font-style: italic;
+}
+
+.caminho {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.caminho li + li::before {
+  content: "›";
+  margin-right: 8px;
+  color: var(--texto-3);
+}
+
+.caminho a {
+  color: var(--texto-2);
+  text-decoration: none;
+}
+
+.caminho a:hover {
+  color: var(--texto);
+}
+
+.caminho [aria-current="page"] {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.salvamento {
+  font: 11px var(--mono);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+.salvamento[data-estado="sem-conexao"] {
+  color: var(--erro);
+}
+
+.espaco {
+  flex: 1;
+}
+
+.botao,
+.botaoPrincipal {
+  background: var(--grafite-3);
+  border: 1px solid var(--grafite-4);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.botao:hover:not(:disabled) {
+  background: var(--grafite-4);
+}
+
+.botao[aria-pressed="true"] {
+  border-color: var(--texto-3);
+}
+
+.botaoPrincipal {
+  background: var(--papel);
+  border-color: var(--papel);
+  color: var(--grafite-0);
+  font-weight: 600;
+}
+
+.botaoPrincipal:hover:not(:disabled) {
+  background: #fff;
+}

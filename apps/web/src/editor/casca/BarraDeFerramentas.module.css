@@ -1,0 +1,34 @@
+.barra {
+  grid-area: ferramentas;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  background: var(--grafite-1);
+  border-right: 1px solid var(--linha);
+}
+
+.ferramenta {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  font: 600 12px var(--mono);
+  color: var(--texto-2);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.ferramenta:hover {
+  background: var(--grafite-3);
+  color: var(--texto);
+}
+
+/* a ferramenta ligada não depende só da cor: ganha moldura e fundo */
+.ferramenta[aria-pressed="true"] {
+  color: var(--laranja);
+  background: var(--laranja-fundo);
+  border-color: var(--laranja);
+}

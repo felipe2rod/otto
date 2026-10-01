@@ -1,0 +1,157 @@
+/* Disposição do editor (docs/mvp/experiencia.md, 4.1):
+   44 ferramentas · 320 Otto · canvas flexível · 280 Propriedades em cima, Camadas embaixo. */
+
+.editor {
+  display: grid;
+  grid-template:
+    "topo topo topo topo" var(--altura-do-topo)
+    "ferramentas esquerda centro direita" minmax(0, 1fr)
+    / var(--largura-das-ferramentas) var(--largura-do-otto) minmax(0, 1fr) var(--largura-da-direita);
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* Tab esconde ferramentas e painéis: fica o topo e o canvas */
+.editor[data-paineis="ocultos"] {
+  grid-template:
+    "topo" var(--altura-do-topo)
+    "centro" minmax(0, 1fr)
+    / minmax(0, 1fr);
+}
+
+.esquerda,
+.direita {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--grafite-1);
+}
+
+.esquerda {
+  grid-area: esquerda;
+  border-right: 1px solid var(--linha);
+}
+
+.direita {
+  grid-area: direita;
+  border-left: 1px solid var(--linha);
+}
+
+.centro {
+  grid-area: centro;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.telaEstreita {
+  display: none;
+  grid-area: aviso;
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--ambar-fundo);
+  border-bottom: 1px solid var(--linha);
+  color: var(--ambar);
+  font-weight: 500;
+}
+
+.semWebGL {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100% - 32px));
+  padding: 20px 22px;
+  background: var(--grafite-1);
+  border: 1px solid var(--grafite-4);
+  border-left: 3px solid var(--ambar);
+  border-radius: 6px;
+}
+
+.semWebGL strong {
+  display: block;
+  font: 22px / 1.2 var(--serif);
+  color: var(--papel);
+}
+
+.semWebGL p {
+  margin: 10px 0 0;
+  color: var(--texto-2);
+}
+
+.semConexao {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 7px 12px;
+  background: var(--erro-fundo);
+  border-bottom: 1px solid var(--erro);
+  color: #ffd9d3;
+  text-align: center;
+}
+
+.aviso {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 560px;
+  padding: 10px 12px 10px 14px;
+  background: var(--erro-fundo);
+  border: 1px solid var(--erro);
+  border-radius: 6px;
+  color: #ffd9d3;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.aviso p {
+  margin: 0;
+}
+
+.aviso button {
+  background: none;
+  border: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Abaixo de 1280 px a coluna direita recolhe. */
+@media (max-width: 1279px) {
+  .editor {
+    grid-template:
+      "topo topo topo" var(--altura-do-topo)
+      "ferramentas esquerda centro" minmax(0, 1fr)
+      / var(--largura-das-ferramentas) var(--largura-do-otto) minmax(0, 1fr);
+  }
+
+  .direita {
+    display: none;
+  }
+}
+
+/* Abaixo de 1024 px a peça abre só para olhar: canvas com a mão e o zoom, e uma linha dizendo por quê. */
+@media (max-width: 1023px) {
+  .editor,
+  .editor[data-paineis="ocultos"] {
+    grid-template:
+      "topo" var(--altura-do-topo)
+      "aviso" auto
+      "centro" minmax(0, 1fr)
+      / minmax(0, 1fr);
+  }
+
+  .telaEstreita {
+    display: block;
+  }
+
+  .esquerda,
+  .editor > [role="toolbar"] {
+    display: none;
+  }
+}

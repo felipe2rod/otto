@@ -1,0 +1,218 @@
+/* O site fala a mesma língua visual do editor: grafite, pontilhado do canvas, serifa no que é voz,
+   mono no que é medida, âmbar no que é do Otto. */
+
+.pagina {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  padding: 0 clamp(20px, 5vw, 72px);
+  background-color: var(--grafite-0);
+  background-image: radial-gradient(circle at 1px 1px, #1f1f1c 1px, transparent 0);
+  background-size: 22px 22px;
+  font-size: 15px;
+}
+
+.topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 0;
+}
+
+.marca {
+  font: 34px / 1 var(--serif);
+  letter-spacing: -0.01em;
+  color: var(--papel);
+}
+
+.marca::first-letter {
+  color: var(--ambar);
+  font-style: italic;
+}
+
+.entrada {
+  font-weight: 500;
+  color: var(--texto-2);
+  text-decoration: none;
+  border-bottom: 1px solid var(--grafite-4);
+  padding-bottom: 2px;
+}
+
+.entrada:hover {
+  color: var(--papel);
+  border-color: var(--papel);
+}
+
+.palco {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  align-items: center;
+  gap: clamp(24px, 5vw, 80px);
+  padding: clamp(32px, 7vh, 96px) 0;
+}
+
+.slogan {
+  margin: 0;
+  font: 400 clamp(44px, 7.2vw, 108px) / 0.98 var(--serif);
+  letter-spacing: -0.02em;
+  color: var(--papel);
+  text-wrap: balance;
+}
+
+.slogan span {
+  display: block;
+}
+
+.slogan em {
+  display: block;
+  color: var(--ambar);
+}
+
+.apoio {
+  max-width: 46ch;
+  margin: 28px 0 32px;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--texto-2);
+}
+
+.chamada {
+  display: inline-block;
+  padding: 12px 22px;
+  background: var(--papel);
+  border-radius: 4px;
+  color: var(--grafite-0);
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.12s;
+}
+
+.chamada:hover {
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+/* ---------- pranchetas ---------- */
+
+.pranchetas {
+  position: relative;
+  justify-self: center;
+  width: min(100%, 360px);
+  aspect-ratio: 4 / 5;
+}
+
+.prancheta {
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  box-shadow: 10px 14px 0 rgba(0, 0, 0, 0.35);
+}
+
+.prancheta[data-ordem="1"] {
+  background: var(--verde);
+  transform: translate(-9%, 7%) rotate(-5deg);
+  animation-delay: 0.1s;
+}
+
+.prancheta[data-ordem="2"] {
+  background: var(--papel);
+  transform: translate(2%, -1%) rotate(1.5deg);
+  outline: 2px dashed var(--ambar);
+  outline-offset: 6px;
+  animation-delay: 0.22s;
+}
+
+.prancheta[data-ordem="3"] {
+  inset: 46% 8% 12% 38%;
+  background: var(--laranja);
+  transform: translate(12%, 6%) rotate(6deg);
+  animation-delay: 0.34s;
+}
+
+.etiqueta {
+  position: absolute;
+  top: -34px;
+  left: -6px;
+  padding: 3px 8px;
+  background: var(--ambar);
+  border-radius: 2px;
+  color: var(--grafite-0);
+  font: 500 11px var(--mono);
+  white-space: nowrap;
+}
+
+/* ---------- pontos ---------- */
+
+.pontos {
+  list-style: none;
+  margin: 0;
+  padding: 28px 0 36px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(20px, 4vw, 56px);
+  border-top: 1px solid var(--linha);
+}
+
+.pontos h2 {
+  margin: 6px 0 6px;
+  font: 400 26px / 1.1 var(--serif);
+  color: var(--papel);
+}
+
+.pontos p {
+  margin: 0;
+  max-width: 38ch;
+  color: var(--texto-2);
+  line-height: 1.5;
+}
+
+.numero {
+  font: 500 11px var(--mono);
+  color: var(--texto-3);
+}
+
+.rodape {
+  padding: 16px 0 24px;
+  font: 11px var(--mono);
+  color: var(--texto-3);
+}
+
+/* movimento só para quem não pediu menos movimento (experiencia.md, 5.6) */
+@media (prefers-reduced-motion: no-preference) {
+  .fala {
+    animation: sobe 0.5s ease-out both;
+  }
+
+  .prancheta {
+    animation: assenta 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+}
+
+@keyframes sobe {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
+@keyframes assenta {
+  from {
+    opacity: 0;
+    translate: 0 -18px;
+  }
+}
+
+@media (max-width: 820px) {
+  .palco {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pranchetas {
+    width: min(70%, 280px);
+    margin: 24px 0 32px;
+  }
+
+  .pontos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

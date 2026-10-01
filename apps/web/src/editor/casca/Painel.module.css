@@ -1,0 +1,50 @@
+.painel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+
+.painel[data-cresce="sim"] {
+  flex: 1 1 0;
+  border-top: 1px solid var(--linha);
+}
+
+.cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--linha);
+  background: var(--grafite-1);
+}
+
+.titulo {
+  margin: 0;
+  font: 600 11px / 1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-2);
+}
+
+.tituloEmDestaque {
+  margin: 0;
+  font: 22px / 1 var(--serif);
+  color: var(--papel);
+}
+
+.tituloEmDestaque::first-letter {
+  color: var(--ambar);
+  font-style: italic;
+}
+
+.corpo {
+  min-height: 0;
+  overflow: auto;
+}
+
+.vazio {
+  margin: 0;
+  padding: 14px 12px;
+  color: var(--texto-3);
+}

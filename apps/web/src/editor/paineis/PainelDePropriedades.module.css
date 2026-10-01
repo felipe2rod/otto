@@ -1,0 +1,125 @@
+.painel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 120px;
+  max-height: 62%;
+}
+
+.cabecalho {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--linha);
+}
+
+.titulo {
+  margin: 0;
+  font: 600 11px / 1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-2);
+}
+
+.corpo {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.vazio,
+.nota {
+  margin: 0;
+  padding: 12px;
+  color: var(--texto-3);
+}
+
+.nota {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.grupo {
+  margin: 0;
+  padding: 8px 12px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--linha);
+}
+
+.grupo legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font: 600 10px / 1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--texto-3);
+}
+
+.grade {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 8px;
+}
+
+.campo {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.campo[data-largo="sim"] {
+  grid-column: 1 / -1;
+}
+
+.campo > span {
+  font-size: 11px;
+  color: var(--texto-2);
+}
+
+.campo input[type="text"],
+.campo select,
+.campo textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  background: var(--grafite-0);
+  border: 1px solid var(--grafite-4);
+  border-radius: 3px;
+  font: 12px var(--mono);
+}
+
+.campo textarea {
+  font-family: var(--sans);
+  resize: vertical;
+}
+
+.cor {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 6px;
+}
+
+.cor input[type="color"] {
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--grafite-4);
+  border-radius: 3px;
+}
+
+.segmentado {
+  display: flex;
+  gap: 1px;
+}
+
+.segmentado button {
+  flex: 1;
+  padding: 4px 6px;
+  background: var(--grafite-3);
+  border: 1px solid var(--grafite-4);
+  font-size: 11px;
+}
+
+.segmentado button[aria-pressed="true"] {
+  border-color: var(--laranja);
+  color: var(--laranja);
+  background: var(--laranja-fundo);
+}

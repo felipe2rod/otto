@@ -1,0 +1,39 @@
+/* Otto: oficina escura e densa, como as ferramentas que o designer já usa.
+   Papel e verde-garrafa vêm da marca; laranja é a mão do designer; âmbar é o que o Otto propôs.
+   Variáveis trazidas de poc/src/web/estilo.css. As fontes agora são arquivos locais (pacotes de
+   fonte no node_modules), não o CDN de terceiros que a POC usava. */
+
+:root {
+  --grafite-0: #0f0f0e;
+  --grafite-1: #161614;
+  --grafite-2: #1d1d1a;
+  --grafite-3: #262622;
+  --grafite-4: #33332e;
+  --linha: #2c2c28;
+  --papel: #f4efe3;
+  --texto: #e6e1d4;
+  --texto-2: #a8a397;
+  /* a POC usava #6d6a62, que dá cerca de 3,4:1 sobre o grafite-1; este dá cerca de 4,7:1 (experiencia.md, 5.6) */
+  --texto-3: #85827a;
+  --verde: #0f3b2c;
+  --verde-claro: #2f7a5c;
+  --ambar: #f4c430;
+  --ambar-fundo: rgba(244, 196, 48, 0.1);
+  --laranja: #ff5b1f;
+  --laranja-fundo: rgba(255, 91, 31, 0.14);
+  --erro: #ff6b5a;
+  --erro-fundo: #3a1a15;
+  --ok: #7fc8a0;
+
+  --sans: "Schibsted Grotesk Variable", system-ui, sans-serif;
+  --serif: "Instrument Serif", Georgia, serif;
+  --mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  /* medidas da casca do editor (experiencia.md, 4.1) */
+  --altura-do-topo: 46px;
+  --largura-das-ferramentas: 44px;
+  --largura-do-otto: 320px;
+  --largura-da-direita: 280px;
+
+  color-scheme: dark;
+}
