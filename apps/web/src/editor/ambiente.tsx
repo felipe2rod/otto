@@ -24,6 +24,8 @@ export interface AmbienteDoEditor {
   somenteLeitura: Pick<Armazem<boolean>, 'obter' | 'assinar'>;
   /** Todo gesto vira lote do catálogo e passa por aqui. Devolve false se não aplicou. */
   aplicar(lote: LoteParaAplicar | null): boolean;
+  /** Diz ao designer por que um comando não foi feito (a frase já vem de textos/). */
+  avisar(texto: string): void;
   /** O que o canvas deixou de mostrar (fonte ou imagem que não chegou). */
   faltas: Pick<Armazem<FaltasDoRender>, 'obter' | 'assinar'>;
   /** Envia o arquivo e troca a imagem da camada de foto, por operação do catálogo. */

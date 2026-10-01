@@ -1,6 +1,5 @@
 // Tabela de atalhos do editor (docs/mvp/experiencia.md, seção 4.3). Função pura: tecla → ação.
-// Entram aqui só os atalhos que já têm o que fazer. Duplicar (Ctrl+J) e agrupar (Ctrl+G) entram
-// com a seleção múltipla.
+// Entram aqui só os atalhos que já têm o que fazer.
 import type { Ferramenta } from './interface';
 
 export interface Tecla {
@@ -31,6 +30,10 @@ export type Acao =
   | { tipo: 'mover'; dx: number; dy: number }
   | { tipo: 'remover' }
   | { tipo: 'duplicar' }
+  | { tipo: 'agrupar' }
+  | { tipo: 'desagrupar' }
+  /** Enter com o foco no canvas: edita o texto da camada selecionada, no lugar. */
+  | { tipo: 'editar-texto' }
   /** Um passo na pilha: 1 traz para a frente, -1 envia para trás. */
   | { tipo: 'reordenar'; sentido: 1 | -1 }
   /** Tecla que no Photoshop é ferramenta e aqui não é. Não faz nada; serve para o evento de uso. */
@@ -53,6 +56,7 @@ export function resolverAtalho(tecla: Tecla, contexto: Contexto): Acao | null {
     if (tecla.key === '-') return { tipo: 'zoom', sentido: -1 };
     if (letra === 'z') return tecla.shiftKey ? { tipo: 'refazer' } : { tipo: 'desfazer' };
     if (letra === 'j') return { tipo: 'duplicar' };
+    if (letra === 'g') return tecla.shiftKey ? { tipo: 'desagrupar' } : { tipo: 'agrupar' };
     if (tecla.key === ']') return { tipo: 'reordenar', sentido: 1 };
     if (tecla.key === '[') return { tipo: 'reordenar', sentido: -1 };
     return null;
@@ -63,6 +67,8 @@ export function resolverAtalho(tecla: Tecla, contexto: Contexto): Acao | null {
   // Na árvore de camadas a seta navega; no canvas, move a seleção.
   const seta = SETAS[tecla.key];
   if (seta) return contexto.focoNoCanvas ? { tipo: 'mover', dx: seta[0] * (tecla.shiftKey ? 10 : 1), dy: seta[1] * (tecla.shiftKey ? 10 : 1) } : null;
+
+  if (tecla.key === 'Enter') return contexto.focoNoCanvas && !tecla.shiftKey ? { tipo: 'editar-texto' } : null;
 
   if (tecla.shiftKey) return tecla.code === 'Digit1' ? { tipo: 'enquadrar' } : null;
 

@@ -7,7 +7,7 @@ const GENERICO = 'Não consegui fazer isso agora. Tente de novo em instantes.';
 const frases: Readonly<Record<string, string>> = {
   versao_desatualizada: 'Esta peça foi alterada em outra aba. Recarreguei a versão atual; sua última alteração não entrou.',
   documento_em_tarefa: 'O Otto está trabalhando nesta peça. A edição volta quando ele terminar.',
-  catalogo_desatualizado: 'O Otto foi atualizado. Recarregue a página para continuar editando.',
+  catalogo_desatualizado: 'O Otto foi atualizado enquanto esta página estava aberta. Recarregue a página para continuar.',
   sem_conexao: 'Sem conexão. A edição volta quando a conexão voltar.',
   somente_leitura: 'Esta peça está aberta só para leitura.',
   nada_para_desfazer: 'Nada para desfazer.',

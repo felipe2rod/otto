@@ -34,6 +34,7 @@ export function ambienteDeTeste(doc: Documento | undefined, opcoes: { somenteLei
       return r.ok;
     },
     faltas: criarArmazem<FaltasDoRender>(opcoes.faltas ?? SEM_FALTAS),
+    avisar: vi.fn(),
     trocarImagem: vi.fn(async () => undefined),
     inserirArquivos: vi.fn(async () => undefined),
     listarFontes: async () => [

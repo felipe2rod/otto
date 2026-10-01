@@ -176,17 +176,18 @@ describe('painel de camadas: seleção múltipla', () => {
   });
 });
 
-describe('painel de camadas: reordenar por arraste', () => {
-  // no grupo Destaque: Título em cima, Foto embaixo
+describe('painel de camadas: arrastar', () => {
+  // Feed: Fundo embaixo e o grupo Destaque (Título em cima, Foto embaixo) por cima. Story: Faixa, bloqueada.
+  // Sem layout no teste, toda linha tem topo 0 e altura 0: Y positivo é "abaixo", negativo é "acima"
+  // e zero é "dentro" (só em grupo e prancheta).
   const arrastar = (de: HTMLElement, ate: HTMLElement, clientY: number) => {
-    fireEvent.pointerDown(de, { button: 0, clientY: 0 });
+    fireEvent.pointerDown(de, { button: 0, clientY: 100 });
     fireEvent.pointerMove(ate, { clientY });
     fireEvent.pointerUp(ate, { clientY });
   };
 
-  it('soltar a camada sobre a metade de baixo da irmã a põe logo abaixo dela', () => {
+  it('soltar abaixo da irmã a põe logo abaixo dela: é `reordenar`', () => {
     const { linha, lotes, nomes } = montar();
-    // sem layout no teste, toda linha tem topo 0 e altura 0: qualquer Y positivo é "metade de baixo"
     arrastar(linha('Título'), linha('Foto'), 10);
 
     expect(lotes).toHaveLength(1);
@@ -194,10 +195,31 @@ describe('painel de camadas: reordenar por arraste', () => {
     expect(nomes().slice(1, 4)).toEqual(['Destaque, grupo', 'Foto, forma', 'Título, forma']);
   });
 
-  it('soltar sobre camada de outro nível não faz nada: o catálogo não muda camada de pai', () => {
-    const { linha, lotes } = montar();
+  it('soltar ao lado de uma camada de fora do grupo tira a camada do grupo: é `transferir`', () => {
+    const { linha, lotes, nomes } = montar();
     arrastar(linha('Título'), linha('Fundo'), 10);
-    expect(lotes).toHaveLength(0);
+
+    expect(lotes[0]?.operacoes[0]).toMatchObject({ op: 'transferir', posicao: 0 });
+    expect(nomes().slice(1, 5)).toEqual(['Destaque, grupo', 'Foto, forma', 'Fundo, forma', 'Título, forma']);
+  });
+
+  it('soltar NO grupo põe a camada dentro dele, e a linha do grupo mostra que vai receber', () => {
+    const { linha, lotes, nomes } = montar();
+    fireEvent.pointerDown(linha('Fundo'), { button: 0, clientY: 100 });
+    fireEvent.pointerMove(linha('Destaque'), { clientY: 0 });
+    expect(linha('Destaque').getAttribute('data-destino')).toBe('dentro');
+    fireEvent.pointerUp(linha('Destaque'), { clientY: 0 });
+
+    expect(lotes[0]?.operacoes[0]).toMatchObject({ op: 'transferir', posicao: 'frente' });
+    expect(nomes().slice(1, 5)).toEqual(['Destaque, grupo', 'Fundo, forma', 'Título, forma', 'Foto, forma']);
+  });
+
+  it('soltar numa prancheta leva a camada para ela', () => {
+    const { linha, lotes, nomes } = montar();
+    arrastar(linha('Fundo'), linha('Story'), 0);
+
+    expect(lotes[0]?.operacoes[0]).toMatchObject({ op: 'transferir', posicao: 'frente' });
+    expect(nomes().slice(-3)).toEqual(['Story, prancheta 1080×1920', 'Fundo, forma', 'Faixa, forma']);
   });
 
   it('um clique sem mover não reordena, e camada bloqueada ou peça só para leitura não arrasta', () => {
@@ -205,11 +227,48 @@ describe('painel de camadas: reordenar por arraste', () => {
     fireEvent.pointerDown(linha('Título'), { button: 0 });
     fireEvent.pointerUp(linha('Título'));
     expect(lotes).toHaveLength(0);
+    arrastar(linha('Faixa'), linha('Feed'), 0);
+    expect(lotes).toHaveLength(0);
     cleanup();
 
     const leitura = montar({ somenteLeitura: true });
     arrastar(leitura.linha('Título'), leitura.linha('Foto'), 10);
     expect(leitura.lotes).toHaveLength(0);
+  });
+});
+
+describe('painel de camadas: agrupar e desagrupar', () => {
+  it('Agrupar junta as camadas selecionadas num grupo novo, que fica selecionado', () => {
+    const { linha, lotes, iface } = montar();
+    fireEvent.click(linha('Foto'));
+    fireEvent.click(linha('Título'), { shiftKey: true });
+    fireEvent.click(screen.getByRole('button', { name: textos.camadas.agrupar }));
+
+    expect(lotes[0]?.operacoes[0]).toMatchObject({ op: 'agrupar', nome: textos.camadas.grupoNovo(1) });
+    expect(linha('Grupo').getAttribute('aria-selected')).toBe('true');
+    expect(iface.armazem.obter().selecao).toMatchObject({ tipo: 'camadas', ids: [expect.any(String)] });
+  });
+
+  it('camadas de níveis diferentes: não manda lote, e a tela diz por quê', () => {
+    const { linha, lotes, ambiente } = montar();
+    fireEvent.click(linha('Fundo'));
+    fireEvent.click(linha('Título'), { shiftKey: true });
+    fireEvent.click(screen.getByRole('button', { name: textos.camadas.agrupar }));
+
+    expect(lotes).toHaveLength(0);
+    expect(ambiente.avisar).toHaveBeenCalledWith(textos.avisos.agruparNoMesmoNivel);
+  });
+
+  it('Desagrupar solta as camadas do grupo selecionado, que ficam selecionadas; sem grupo na seleção, o botão fica desligado', () => {
+    const { linha, lotes, nomes } = montar();
+    expect(screen.getByRole('button', { name: textos.camadas.desagrupar })).toHaveProperty('disabled', true);
+    fireEvent.click(linha('Destaque'));
+    fireEvent.click(screen.getByRole('button', { name: textos.camadas.desagrupar }));
+
+    expect(lotes[0]?.operacoes[0]).toMatchObject({ op: 'desagrupar' });
+    expect(nomes().slice(1, 4)).toEqual(['Título, forma', 'Foto, forma', 'Fundo, forma']);
+    expect(linha('Título').getAttribute('aria-selected')).toBe('true');
+    expect(linha('Foto').getAttribute('aria-selected')).toBe('true');
   });
 });
 

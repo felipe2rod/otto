@@ -3,11 +3,11 @@
 // não recompõe a cena, e trocar o motor não toca aqui (docs/mvp/frontend.md, seção 4).
 //
 // A marca em âmbar das camadas tocadas pelo Otto entra com a fatia da tarefa.
-import type { Caixa, Prancheta } from '@otto/documento';
+import type { Prancheta } from '@otto/documento';
 import type { Area, Camera } from '../nucleo/camera';
 import type { Selecao } from '../nucleo/interface';
-import { alcasDe } from './alcas';
 import { disporPranchetas, guiasDoStory } from './guias';
+import { cantosDe, pontoDeGirar, pontosDasAlcas, type Quadro } from './transformacao';
 
 // O canvas não lê variável CSS: as cores repetem as de estilos/tokens.css.
 const LARANJA = '#ff5b1f';
@@ -25,10 +25,12 @@ export interface Cena {
   pixelsPorPonto: number;
   pranchetas: readonly Pick<Prancheta, 'id' | 'nome' | 'largura' | 'altura'>[];
   selecao: Selecao;
-  /** Caixa de cada camada selecionada, no plano do editor (canvas/alvo.ts). */
-  caixasDaSelecao: readonly Caixa[];
-  /** A caixa que mostra alças de redimensionar (uma camada só, sem rotação, em peça editável). */
-  alcas?: Caixa | undefined;
+  /** O contorno de cada camada selecionada, no plano do editor, com a rotação dela (canvas/alvo.ts). */
+  contornos: readonly Quadro[];
+  /** O quadro que mostra as alças e a pega de girar: o da camada, ou o do conjunto. Ausente: sem alças. */
+  alcas?: Quadro | undefined;
+  /** A que distância do lado de cima fica a pega de girar, em pixels de tela. */
+  distanciaDoGiro: number;
   /** Pranchetas e camadas tocadas pelo Otto na tarefa viva. */
   tocados: ReadonlySet<string>;
   rotuloDaZonaDaInterface: string;
@@ -46,6 +48,9 @@ type Contexto = Pick<
   | 'moveTo'
   | 'lineTo'
   | 'stroke'
+  | 'closePath'
+  | 'arc'
+  | 'fill'
   | 'setLineDash'
   | 'save'
   | 'restore'
@@ -108,20 +113,50 @@ export function desenharSobreposicoes(ctx: Contexto, cena: Cena): void {
     ctx.restore();
   }
 
-  // contorno de cada camada selecionada
+  const naTela = (p: { x: number; y: number }) => ({ x: camera.x + p.x * camera.zoom, y: camera.y + p.y * camera.zoom });
+  const tracar = (q: Quadro) => {
+    ctx.beginPath();
+    cantosDe(q).forEach((canto, i) => {
+      const p = naTela(canto);
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+  };
+
+  // contorno de cada camada selecionada, girado como ela
   ctx.strokeStyle = LARANJA;
   ctx.lineWidth = 1.5;
-  for (const c of cena.caixasDaSelecao) ctx.strokeRect(camera.x + c.x * camera.zoom, camera.y + c.y * camera.zoom, c.w * camera.zoom, c.h * camera.zoom);
+  for (const q of cena.contornos) tracar(q);
 
-  // alças: quadrado claro com borda laranja, nos quatro cantos e nos quatro lados
   if (cena.alcas) {
+    const q = cena.alcas;
     ctx.lineWidth = 1;
-    for (const ponto of Object.values(alcasDe(cena.alcas))) {
-      const x = camera.x + ponto.x * camera.zoom;
-      const y = camera.y + ponto.y * camera.zoom;
-      ctx.fillStyle = PAPEL;
-      ctx.fillRect(x - 4, y - 4, 8, 8);
-      ctx.strokeRect(x - 4, y - 4, 8, 8);
+    // com várias camadas, o quadro do conjunto ganha um traço próprio, tracejado
+    if (cena.contornos.length > 1) {
+      ctx.setLineDash([4, 3]);
+      tracar(q);
+      ctx.setLineDash([]);
+    }
+    // a pega de girar: uma haste a partir do meio do lado de cima, com um círculo na ponta
+    const alcas = pontosDasAlcas(q);
+    const haste = naTela(alcas.n);
+    const giro = naTela(pontoDeGirar(q, cena.distanciaDoGiro / camera.zoom));
+    ctx.beginPath();
+    ctx.moveTo(haste.x, haste.y);
+    ctx.lineTo(giro.x, giro.y);
+    ctx.stroke();
+    ctx.fillStyle = PAPEL;
+    ctx.beginPath();
+    ctx.arc(giro.x, giro.y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // alças: quadrado claro com borda laranja, nos quatro cantos e nos quatro lados
+    for (const ponto of Object.values(alcas)) {
+      const p = naTela(ponto);
+      ctx.fillRect(p.x - 4, p.y - 4, 8, 8);
+      ctx.strokeRect(p.x - 4, p.y - 4, 8, 8);
     }
   }
 }

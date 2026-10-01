@@ -3,9 +3,10 @@
 // O canvas não é React. Este componente só monta os elementos e liga as assinaturas: o motor
 // recebe câmera, documento e prévia direto dos armazéns, e nenhum movimento do mouse passa por
 // estado do React. O que renderiza aqui é o indicador de zoom, o convite de soltar e o aviso de falha.
-import { acharEm, type Documento, disporPranchetas, type Operacao } from '@otto/documento';
+import { acharEm, type Documento, disporPranchetas, type Operacao, todasAsCamadas } from '@otto/documento';
 import { useEffect, useRef, useState } from 'react';
 import { editor as textos } from '../../textos/editor';
+import { loteDeEditarTexto } from '../nucleo/acoes';
 import type { Armazem } from '../nucleo/armazem';
 import { useArmazem } from '../nucleo/armazem';
 import { paraDocumento } from '../nucleo/camera';
@@ -13,9 +14,10 @@ import { ferramentaEmUso, type Interface } from '../nucleo/interface';
 import type { SessaoDoDocumento } from '../nucleo/sessaoDoDocumento';
 import type { Visao } from '../nucleo/visao';
 import estilos from './AreaDoCanvas.module.css';
-import { caixasDaSelecao, noDaAlca } from './alvo';
+import { alvoDeTransformar, contornosDaSelecao, noPlano } from './alvo';
 import { ligarControleDaCamera } from './controleDaCamera';
-import { criarArmazemAoVivo, criarArmazemDaPrevia, ligarControleDeGestos } from './controleDeGestos';
+import { criarArmazemDaPrevia, DISTANCIA_DO_GIRO, ligarControleDeGestos } from './controleDeGestos';
+import { EditorDeTexto } from './EditorDeTexto';
 import { caixaDoConteudo } from './guias';
 import { criarMotor as criarMotorPadrao, ehFaltaDeWebGL, type FabricaDeMotor, type MotorDeRender, type PreviaDeGesto, type RecursosDoRender, type RecursosEmFalta } from './motor';
 import { criarRecursosDoRender } from './recursos';
@@ -41,10 +43,8 @@ export interface PropriedadesDaArea {
   documento: Pick<Armazem<Documento | undefined>, 'obter' | 'assinar'>;
   /** A sessão da peça aberta, para os gestos virarem lote. Sem ela, o canvas só navega. */
   sessao?: () => SessaoDoDocumento<Documento, Operacao> | undefined;
-  /** A prévia do arraste. Quem monta pode passar a sua, para ler de fora. */
+  /** A prévia do gesto (mover, redimensionar, girar). Quem monta pode passar a sua, para ler de fora. */
   previa?: Armazem<PreviaDeGesto | null>;
-  /** O documento temporário de um redimensionamento em andamento. Quem monta pode passar o seu. */
-  aoVivo?: Armazem<Documento | null>;
   criarMotor?: FabricaDeMotor;
   recursos?: RecursosDoRender;
   /** Avisa quando o motor fica pronto (e null quando ele some). O medidor de tinta é dele. */
@@ -53,6 +53,18 @@ export interface PropriedadesDaArea {
   aoMudarEmFalta?: (emFalta: RecursosEmFalta) => void;
   /** Arquivos soltos sobre o canvas. `onde` ausente: fora de toda prancheta, quem recebe decide. */
   aoSoltarArquivos?: (arquivos: File[], onde: OndeSoltou | undefined) => void;
+}
+
+/** A camada de texto que pode ser editada no canvas, com a posição da prancheta dela. */
+function camadaDeTexto(doc: Documento | undefined, id: string, travado: boolean) {
+  if (!doc || travado) return undefined;
+  const posicoes = disporPranchetas(doc.pranchetas);
+  for (const prancheta of doc.pranchetas) {
+    const no = todasAsCamadas(prancheta.filhos).find((n) => n.id === id);
+    const origem = posicoes.get(prancheta.id);
+    if (no && origem) return no.tipo === 'texto' && !no.bloqueado ? { no, origem } : undefined;
+  }
+  return undefined;
 }
 
 const assinaturaDasPranchetas = (doc: Documento | undefined): string => doc?.pranchetas.map((p) => `${p.id}:${p.largura}x${p.altura}`).join('|') ?? '';
@@ -65,11 +77,15 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
   const motorRef = useRef<MotorDeRender | null>(null);
   const [previaPropria] = useState(criarArmazemDaPrevia);
   const previa = props.previa ?? previaPropria;
-  const [aoVivoProprio] = useState(criarArmazemAoVivo);
-  const aoVivo = props.aoVivo ?? aoVivoProprio;
   const [falha, setFalha] = useState<Falha | null>(null);
   const [soltando, setSoltando] = useState(false);
   const zoom = useArmazem(visao.camera, (c) => textos.canvas.porcentagem(c.zoom));
+  const editando = useArmazem(iface.armazem, (e) => e.editandoTexto);
+  const emEdicao = editando ? camadaDeTexto(documento.obter(), editando, sessao()?.obter().somenteLeitura !== false) : undefined;
+  // pedido de edição que não dá para atender (peça só para leitura, camada que não é texto) é esquecido
+  useEffect(() => {
+    if (editando && !emEdicao) iface.editarTexto(null);
+  }, [editando, emEdicao, iface]);
 
   // Sobreposições, tamanho e gestos: tudo por assinatura, um desenho por quadro.
   useEffect(() => {
@@ -91,19 +107,20 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
 
       const ctx = tela.getContext('2d');
       if (!ctx) return;
-      // durante um redimensionamento, o que vale na tela é o documento ao vivo
-      const doc = aoVivo.obter() ?? documento.obter();
+      const doc = documento.obter();
       const { selecao } = iface.armazem.obter();
       const editavel = sessao()?.obter().somenteLeitura === false;
+      // as alças somem durante o gesto e enquanto o texto é editado; não existem em peça só para leitura
+      const alvo = doc && editavel && !previa.obter() && !iface.armazem.obter().editandoTexto ? alvoDeTransformar(doc, selecao) : undefined;
       desenharSobreposicoes(ctx, {
         camera,
         area: visao.area(),
         pixelsPorPonto: window.devicePixelRatio || 1,
         pranchetas: doc?.pranchetas ?? [],
         selecao,
-        caixasDaSelecao: doc ? caixasDaSelecao(doc, selecao, previa.obter()) : [],
-        // as alças somem enquanto a camada é arrastada, e não existem em peça só para leitura
-        alcas: doc && editavel && !previa.obter() ? noDaAlca(doc, selecao)?.caixaNoPlano : undefined,
+        contornos: doc ? contornosDaSelecao(doc, selecao, previa.obter()) : [],
+        alcas: alvo && noPlano(alvo.quadro, alvo.origem),
+        distanciaDoGiro: DISTANCIA_DO_GIRO,
         tocados: SEM_TOCADOS,
         rotuloDaZonaDaInterface: textos.canvas.zonaDaInterface,
       });
@@ -138,17 +155,16 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
       visao.camera.assinar(agendar),
       iface.armazem.assinar(agendar),
       previa.assinar(agendar),
-      aoVivo.assinar(agendar),
       documento.assinar(aoMudarODocumento),
       ligarControleDaCamera(area, visao, iface),
-      ligarControleDeGestos(area, { visao, interface: iface, sessao, previa, aoVivo }),
+      ligarControleDeGestos(area, { visao, interface: iface, sessao, previa, aoEditarTexto: iface.editarTexto }),
     ];
     return () => {
       observador?.disconnect();
       for (const f of desligar) f();
       if (quadro) cancelAnimationFrame(quadro);
     };
-  }, [visao, iface, documento, sessao, previa, aoVivo]);
+  }, [visao, iface, documento, sessao, previa]);
 
   // Ciclo de vida do motor. Criar é assíncrono (o motor baixa o WebAssembly): se o componente
   // desmontar antes, o motor é destruído assim que chegar.
@@ -179,19 +195,12 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
           // o que a porta não entregar aparece em motor.emFalta, e o motor avisa; ele desenha o que tem
           pronto.prepararRecursos(doc).catch(() => undefined);
         };
-        // Redimensionar não tem prévia no motor: o documento temporário vai inteiro, a cada quadro, e
-        // o motor recompõe a prancheta tocada. Usa os mesmos recursos, então não busca nada de novo.
-        const entregarAoVivo = () => {
-          const doc = aoVivo.obter() ?? documento.obter();
-          if (doc) pronto.definirDocumento(doc);
-        };
         entregarDocumento();
         // A ordem destas assinaturas é a ordem ao soltar um gesto: a sessão publica o documento
-        // novo, o motor o recebe, e só depois a prévia (ou o documento ao vivo) encerra.
+        // novo, o motor o recebe, e só depois a prévia encerra.
         desligar = [
           visao.camera.assinar(() => pronto.definirCamera(visao.camera.obter())),
           documento.assinar(entregarDocumento),
-          aoVivo.assinar(entregarAoVivo),
           previa.assinar(() => pronto.definirPrevia(previa.obter())),
           pronto.aoMudarEmFalta((emFalta) => aoMudarEmFalta?.(emFalta)),
         ];
@@ -209,7 +218,7 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
       if (motor) aoTerMotor?.(null);
       motor?.destruir();
     };
-  }, [criarMotor, recursos, visao, documento, previa, aoVivo, aoTerMotor, aoMudarEmFalta]);
+  }, [criarMotor, recursos, visao, documento, previa, aoTerMotor, aoMudarEmFalta]);
 
   const aoSoltar = (e: React.DragEvent<HTMLDivElement>) => {
     if (!aoSoltarArquivos) return;
@@ -246,6 +255,21 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
     >
       <canvas ref={cenaRef} className={estilos.camada} />
       <canvas ref={sobreposicoesRef} className={estilos.camada} />
+      {emEdicao && (
+        <EditorDeTexto
+          key={emEdicao.no.id}
+          no={emEdicao.no}
+          origem={emEdicao.origem}
+          camera={visao.camera}
+          recursos={recursos}
+          aoDesistir={() => iface.editarTexto(null)}
+          aoConfirmar={(texto) => {
+            const lote = loteDeEditarTexto(emEdicao.no, texto);
+            if (lote) sessao()?.aplicar(lote.descricao, lote.operacoes);
+            iface.editarTexto(null);
+          }}
+        />
+      )}
       <div className={estilos.zoom}>
         <button type="button" title={textos.canvas.dicaDeEnquadrar} onClick={() => visao.enquadrar(caixaDoConteudo(documento.obter()?.pranchetas ?? []))}>
           {textos.canvas.enquadrar}

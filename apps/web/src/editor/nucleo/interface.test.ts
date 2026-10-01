@@ -4,7 +4,7 @@ import { criarInterface } from './interface';
 describe('estado de interface', () => {
   it('começa com a ferramenta de mover, painéis à vista e nada selecionado', () => {
     const i = criarInterface();
-    expect(i.armazem.obter()).toEqual({ ferramenta: 'mover', maoTemporaria: false, paineisVisiveis: true, selecao: null });
+    expect(i.armazem.obter()).toEqual({ ferramenta: 'mover', maoTemporaria: false, paineisVisiveis: true, selecao: null, editandoTexto: null });
   });
 
   it('troca de ferramenta', () => {
@@ -61,5 +61,14 @@ describe('estado de interface', () => {
     i.selecionar({ tipo: 'prancheta', id: 'p1' });
     i.alternarNaSelecao('a');
     expect(i.armazem.obter().selecao).toEqual({ tipo: 'camadas', ids: ['a'] });
+  });
+
+  it('guarda qual camada de texto está sendo editada no canvas, e esquece ao terminar', () => {
+    const iface = criarInterface();
+    expect(iface.armazem.obter().editandoTexto).toBeNull();
+    iface.editarTexto('t1');
+    expect(iface.armazem.obter().editandoTexto).toBe('t1');
+    iface.editarTexto(null);
+    expect(iface.armazem.obter().editandoTexto).toBeNull();
   });
 });

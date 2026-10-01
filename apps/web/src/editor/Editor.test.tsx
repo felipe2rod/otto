@@ -409,6 +409,21 @@ describe('casca do editor: a sessão ligada à API', () => {
     expect((screen.getByLabelText(textos.propriedades.x) as HTMLInputElement).value).toBe(String(caixa.x));
   });
 
+  it('catálogo desatualizado (o Otto foi atualizado com a peça aberta): a edição trava e a tela pede para recarregar, sem sumir', async () => {
+    const enviar = vi.fn<Lotes['enviar']>(async () => ({ tipo: 'recusado', codigo: 'catalogo_desatualizado', detalhe: { catalogoDoServidor: 3 } }));
+    await abrirESelecionar({ lotes: { enviar } });
+    await act(async () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+
+    const faixa = await screen.findByRole('alert');
+    expect(faixa.textContent).toContain(textos.avisos.catalogoDesatualizado);
+    expect(within(faixa).getByRole('button', { name: textos.avisos.recarregar })).toBeDefined();
+    // a alteração recusada voltou, e nenhuma outra sai: todas seriam recusadas do mesmo jeito
+    expect((screen.getByLabelText(textos.propriedades.x) as HTMLInputElement).value).toBe(String(caixa.x));
+    await act(async () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+    expect(enviar).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(textos.topo.salvamento.leitura)).toBeDefined();
+  });
+
   it('peça alterada em outra aba: recarrega a versão atual e avisa', async () => {
     const enviar = vi.fn<Lotes['enviar']>(async () => ({ tipo: 'versao_desatualizada', versaoAtual: 9 }));
     const { abrirPeca } = await abrirESelecionar({ lotes: { enviar } });
@@ -456,9 +471,38 @@ describe('casca do editor: a sessão ligada à API', () => {
     const { lotes } = await abrirESelecionar();
     await act(async () => fireEvent.keyDown(window, { key: 'j', ctrlKey: true }));
 
-    expect(enviados(lotes)[0]?.operacoes.map((o) => o.op)).toEqual(['criarNo', 'reordenar']);
-    const copia = textos.camadas.copia(camada.nome, 1);
-    expect(screen.getByRole('treeitem', { name: new RegExp(`^${copia}`) }).getAttribute('aria-selected')).toBe('true');
+    // um `duplicar` só; o nome da cópia é o catálogo que dá
+    expect(enviados(lotes)[0]?.operacoes).toEqual([{ op: 'duplicar', alvo: camada.id, dx: 0, dy: 0 }]);
+    expect(screen.getByRole('treeitem', { name: new RegExp(`^${camada.nome} cópia`) }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('Enter com uma camada de texto selecionada abre a edição do texto no canvas; confirmar grava um lote', async () => {
+    const texto = EXEMPLO.pranchetas[0]?.filhos.filter((n) => n.tipo === 'texto').at(-1);
+    if (texto?.tipo !== 'texto') throw new Error('falta o texto');
+    const { lotes, motor } = montar({ abrir: aberta, lotes: {} });
+    await waitFor(() => expect(motor.definirDocumento).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('treeitem', { name: new RegExp(`^${texto.nome},`) }));
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    await act(async () => fireEvent.keyDown(window, { key: 'Enter' }));
+    const campo = screen.getByRole('textbox', { name: textos.canvas.editarTexto(texto.nome) });
+    fireEvent.change(campo, { target: { value: 'Texto novo' } });
+    await act(async () => fireEvent.keyDown(campo, { key: 'Enter', ctrlKey: true }));
+
+    expect(enviados(lotes)[0]?.operacoes).toEqual([{ op: 'alterar', alvo: texto.id, props: { conteudo: 'Texto novo' } }]);
+    expect(screen.queryByRole('textbox', { name: textos.canvas.editarTexto(texto.nome) })).toBeNull();
+  });
+
+  it('Ctrl+G agrupa a seleção e seleciona o grupo; Ctrl+Shift+G desagrupa', async () => {
+    const { lotes } = await abrirESelecionar();
+    await act(async () => fireEvent.keyDown(window, { key: 'g', ctrlKey: true }));
+    expect(enviados(lotes)[0]?.operacoes).toEqual([{ op: 'agrupar', alvos: [camada.id], nome: textos.camadas.grupoNovo(1) }]);
+    const grupo = screen.getByRole('treeitem', { name: new RegExp(`^${textos.camadas.grupoNovo(1)},`) });
+    expect(grupo.getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => fireEvent.keyDown(window, { key: 'G', ctrlKey: true, shiftKey: true }));
+    await waitFor(() => expect(enviados(lotes)[1]?.operacoes[0]).toMatchObject({ op: 'desagrupar' }));
+    expect(screen.getByRole('treeitem', { name: new RegExp(`^${camada.nome}`) }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('o nome da peça se troca no topo: Enter manda à API e o topo mostra o nome que ela guardou', async () => {

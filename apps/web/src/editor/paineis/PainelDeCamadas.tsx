@@ -8,8 +8,9 @@ import type { Documento, No, Prancheta } from '@otto/documento';
 import { type KeyboardEvent, memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { editor as textos } from '../../textos/editor';
 import { type AmbienteDoEditor, useAmbiente } from '../ambiente';
-import { loteDeBloqueio, loteDeRenomear, loteDeReordenar, loteDeReordenarPara, loteDeVisibilidade } from '../nucleo/acoes';
+import { type DestinoNoPainel, loteDeBloqueio, loteDeDesagrupar, loteDeRenomear, loteDeReordenar, loteDeSoltarNoPainel, loteDeVisibilidade } from '../nucleo/acoes';
 import { useArmazem } from '../nucleo/armazem';
+import { agruparSelecao, desagruparSelecao } from '../nucleo/comandos';
 import type { Selecao } from '../nucleo/interface';
 import estilos from './PainelDeCamadas.module.css';
 
@@ -26,9 +27,18 @@ type Linha = { tipo: 'prancheta'; prancheta: Prancheta; id: string; nivel: 1 } |
 const INICIO_DO_ARRASTE = 4;
 
 /** Onde a camada arrastada vai cair: sobre qual linha, e em que metade dela. */
-interface Destino {
-  id: string;
-  onde: 'acima' | 'abaixo';
+type Destino = DestinoNoPainel;
+
+/**
+ * Onde o ponteiro está na linha: no quarto de cima, no de baixo ou, em grupo e prancheta, no meio
+ * (soltar ali põe a camada DENTRO). Prancheta só recebe por dentro. Linha sem altura (sem layout):
+ * acima do topo, abaixo dele ou exatamente nele.
+ */
+export function zonaDaLinha(y: number, topo: number, altura: number, aceitaDentro: boolean): Destino['onde'] {
+  const fracao = altura > 0 ? (y - topo) / altura : y < topo ? 0 : y > topo ? 1 : 0.5;
+  if (!aceitaDentro) return fracao < 0.5 ? 'acima' : 'abaixo';
+  if (fracao < 0.25) return 'acima';
+  return fracao > 0.75 ? 'abaixo' : 'dentro';
 }
 
 /** A árvore achatada, na ordem em que aparece: cada prancheta, e as camadas de cima para baixo. */
@@ -62,13 +72,13 @@ interface PropriedadesDaLinha {
   /** A fonte desta camada de texto não carregou: ela não aparece no canvas. */
   semFonte: boolean;
   /** A camada arrastada vai cair acima ou abaixo desta linha. */
-  destino: 'acima' | 'abaixo' | null;
+  destino: 'acima' | 'abaixo' | 'dentro' | null;
   topo: number;
   ambiente: AmbienteDoEditor;
   aoAlternarGrupo: (id: string) => void;
   aoRenomear: (id: string | null) => void;
   aoApertar: (id: string, y: number) => void;
-  aoPassar: (id: string, y: number, meio: number) => void;
+  aoPassar: (id: string, aceitaDentro: boolean, y: number, topo: number, altura: number) => void;
 }
 
 const LinhaDaArvore = memo(function LinhaDaArvore(props: PropriedadesDaLinha) {
@@ -101,7 +111,7 @@ const LinhaDaArvore = memo(function LinhaDaArvore(props: PropriedadesDaLinha) {
       onPointerDown={(e) => arrastavel && e.button === 0 && aoApertar(linha.id, e.clientY)}
       onPointerMove={(e) => {
         const r = e.currentTarget.getBoundingClientRect();
-        aoPassar(linha.id, e.clientY, r.top + r.height / 2);
+        aoPassar(linha.id, ehGrupo, e.clientY, r.top, r.height);
       }}
       style={{ top: topo, paddingLeft: 6 + (linha.nivel - 1) * 14 }}
       onClick={selecionar}
@@ -261,16 +271,17 @@ export function PainelDeCamadas() {
   const alternarGrupo = useRef((id: string) => setRecolhidos((atual) => new Set(atual.has(id) ? [...atual].filter((x) => x !== id) : [...atual, id]))).current;
   const renomear = useRef((id: string | null) => setRenomeando(id)).current;
 
-  // Reordenar por arraste, só entre irmãs (o catálogo não muda camada de pai). Soltar é UM lote.
+  // Arrastar uma camada: ao lado de outra (reordena, ou muda de grupo ou de prancheta para ficar ali)
+  // ou para dentro de um grupo ou de uma prancheta. Soltar é UM lote (`reordenar` ou `transferir`).
   const apertar = useRef((id: string, y: number) => {
     arraste.current = { id, y, andou: false };
   }).current;
-  const passar = useRef((id: string, y: number, meio: number) => {
+  const passar = useRef((id: string, aceitaDentro: boolean, y: number, topo: number, altura: number) => {
     const a = arraste.current;
     if (!a) return;
     if (!a.andou && Math.abs(y - a.y) < INICIO_DO_ARRASTE && id === a.id) return;
     a.andou = true;
-    const novo: Destino | null = id === a.id ? null : { id, onde: y < meio ? 'acima' : 'abaixo' };
+    const novo: Destino | null = id === a.id ? null : { id, onde: zonaDaLinha(y, topo, altura, aceitaDentro) };
     if (novo?.id !== destinoRef.current?.id || novo?.onde !== destinoRef.current?.onde) {
       destinoRef.current = novo;
       setDestino(novo);
@@ -284,7 +295,7 @@ export function PainelDeCamadas() {
       destinoRef.current = null;
       setDestino(null);
       const atual = ambiente.documento.obter();
-      if (a?.andou && d && atual) ambiente.aplicar(loteDeReordenarPara(atual, a.id, d.id, d.onde));
+      if (a?.andou && d && atual) ambiente.aplicar(loteDeSoltarNoPainel(atual, a.id, d));
     };
     window.addEventListener('pointerup', soltar);
     window.addEventListener('pointercancel', soltar);
@@ -315,6 +326,9 @@ export function PainelDeCamadas() {
   const reordenar = (sentido: 1 | -1) => doc && camadaAtiva && ambiente.aplicar(loteDeReordenar(doc, camadaAtiva, sentido));
   const podeReordenar = (sentido: 1 | -1) => Boolean(doc && camadaAtiva && !travado && loteDeReordenar(doc, camadaAtiva, sentido));
 
+  const podeAgrupar = Boolean(doc && !travado && selecao?.tipo === 'camadas' && selecao.ids.length > 0);
+  const podeDesagrupar = Boolean(doc && !travado && loteDeDesagrupar(doc, selecao));
+
   const primeira = Math.max(0, Math.floor(rolagem.topo / ALTURA_DA_LINHA) - FOLGA);
   const ultima = Math.min(linhas.length, Math.ceil((rolagem.topo + rolagem.altura) / ALTURA_DA_LINHA) + FOLGA);
 
@@ -325,6 +339,19 @@ export function PainelDeCamadas() {
           {textos.paineis.camadas.titulo}
         </h2>
         <span className={estilos.espaco} />
+        <button type="button" className={estilos.acao} disabled={!podeAgrupar} title={textos.camadas.atalhoDeAgrupar} aria-label={textos.camadas.agrupar} onClick={() => agruparSelecao(ambiente)}>
+          <span aria-hidden="true">▣</span>
+        </button>
+        <button
+          type="button"
+          className={estilos.acao}
+          disabled={!podeDesagrupar}
+          title={textos.camadas.atalhoDeDesagrupar}
+          aria-label={textos.camadas.desagrupar}
+          onClick={() => desagruparSelecao(ambiente)}
+        >
+          <span aria-hidden="true">▢</span>
+        </button>
         <button type="button" className={estilos.acao} disabled={!podeReordenar(1)} title={textos.camadas.atalhoParaAFrente} aria-label={textos.camadas.paraAFrente} onClick={() => reordenar(1)}>
           <span aria-hidden="true">↑</span>
         </button>

@@ -5,17 +5,22 @@ import { describe, expect, it } from 'vitest';
 import { editor as textos } from '../../textos/editor';
 import {
   acharNoPorId,
+  ajustarTrechos,
+  camadasNovas,
+  loteDeAgrupar,
   loteDeAlterar,
   loteDeBloqueio,
+  loteDeDesagrupar,
   loteDeDuplicar,
+  loteDeEditarTexto,
   loteDeInserirImagem,
   loteDeInserirVetor,
   loteDeMoverPorSeta,
-  loteDeRedimensionar,
   loteDeRemover,
   loteDeRenomear,
   loteDeReordenar,
-  loteDeReordenarPara,
+  loteDeSoltarNoPainel,
+  loteDeTransformar,
   loteDeTrocarImagem,
   loteDeVisibilidade,
 } from './acoes';
@@ -144,68 +149,210 @@ describe('reordenar um passo', () => {
   });
 });
 
-describe('reordenar soltando sobre outra camada (arraste no painel)', () => {
-  // dentro do grupo: A embaixo (0), B em cima (1). Na prancheta: Grupo (0)... e Travada por cima.
-  it('soltar na metade de cima da irmã põe a camada logo acima dela; na de baixo, logo abaixo', () => {
-    expect(loteDeReordenarPara(doc, id('A'), id('B'), 'acima')?.operacoes).toEqual([{ op: 'reordenar', alvo: id('A'), posicao: 1 }]);
-    expect(loteDeReordenarPara(doc, id('B'), id('A'), 'abaixo')?.operacoes).toEqual([{ op: 'reordenar', alvo: id('B'), posicao: 0 }]);
-    const lote = loteDeReordenarPara(doc, id('B'), id('A'), 'abaixo');
-    const r = lote && aplicarLote(doc, lote.operacoes, { autoria: { tipo: 'designer' }, idDoLote: 'x' });
-    const grupo = r?.ok ? acharNoPorId(r.doc, id('Grupo'))?.no : undefined;
-    expect(grupo?.tipo === 'grupo' && grupo.filhos.map((n) => n.nome)).toEqual(['B', 'A']);
+describe('soltar uma camada no painel de Camadas', () => {
+  // Feed: Grupo (A embaixo, B em cima) e Travada por cima. Story: Solta.
+  const comStory = (() => {
+    const r = aplicarLote(
+      doc,
+      [
+        { op: 'criarPrancheta', nome: 'Story', largura: 1080, altura: 1920, fundo: '#ffffff' },
+        { op: 'criarNo', prancheta: 'Story', no: { tipo: 'forma', nome: 'Solta', forma: 'retangulo', x: 0, y: 0, largura: 10, altura: 10, preenchimento: '#000000' } },
+        { op: 'criarNo', prancheta: 'Feed', no: { tipo: 'forma', nome: 'Raiz', forma: 'retangulo', x: 0, y: 0, largura: 10, altura: 10, preenchimento: '#000000' } },
+      ],
+      { autoria: { tipo: 'designer' }, idDoLote: 'story' },
+    );
+    if (!r.ok) throw new Error(r.erro.mensagem);
+    return r.doc;
+  })();
+  const feed = comStory.pranchetas[0];
+  const story = comStory.pranchetas[1];
+  const solta = story?.filhos[0];
+  const raiz = feed?.filhos.at(-1);
+  if (!feed || !story || !solta || !raiz) throw new Error('faltam camadas');
+  const aplicar = (lote: { operacoes: unknown[] } | null) => {
+    const r = lote && aplicarLote(comStory, lote.operacoes, { autoria: { tipo: 'designer' }, idDoLote: 'x' });
+    if (!r?.ok) throw new Error(r ? r.erro.mensagem : 'sem lote');
+    return r.doc;
+  };
+  const nomesDe = (d: Documento, pai: string) => {
+    const no = d.pranchetas.flatMap((p) => p.filhos).find((n) => n.nome === pai);
+    return no?.tipo === 'grupo' ? no.filhos.map((n) => n.nome) : [];
+  };
+
+  it('entre irmãs é `reordenar`: acima da irmã, logo acima dela; abaixo, logo abaixo', () => {
+    expect(loteDeSoltarNoPainel(comStory, id('A'), { id: id('B'), onde: 'acima' })?.operacoes).toEqual([{ op: 'reordenar', alvo: id('A'), posicao: 1 }]);
+    expect(loteDeSoltarNoPainel(comStory, id('B'), { id: id('A'), onde: 'abaixo' })?.operacoes).toEqual([{ op: 'reordenar', alvo: id('B'), posicao: 0 }]);
   });
 
-  it('soltar onde a camada já está não vira lote', () => {
-    expect(loteDeReordenarPara(doc, id('A'), id('B'), 'abaixo')).toBeNull();
-    expect(loteDeReordenarPara(doc, id('A'), id('A'), 'acima')).toBeNull();
+  it('soltar onde a camada já está, ou nela mesma, não vira lote', () => {
+    expect(loteDeSoltarNoPainel(comStory, id('A'), { id: id('B'), onde: 'abaixo' })).toBeNull();
+    expect(loteDeSoltarNoPainel(comStory, id('A'), { id: id('A'), onde: 'acima' })).toBeNull();
   });
 
-  it('só entre irmãs: soltar sobre camada de outro grupo não vira lote (o catálogo não muda camada de pai)', () => {
-    expect(loteDeReordenarPara(doc, id('A'), id('Travada'), 'acima')).toBeNull();
+  it('para fora do grupo: soltar ao lado de uma camada da raiz é `transferir` para a raiz, na posição dela', () => {
+    const lote = loteDeSoltarNoPainel(comStory, id('A'), { id: raiz.id, onde: 'abaixo' });
+    expect(lote?.operacoes).toEqual([{ op: 'transferir', alvo: id('A'), prancheta: feed.id, posicao: feed.filhos.indexOf(raiz) }]);
+    const depois = aplicar(lote);
+    const nomes = depois.pranchetas[0]?.filhos.map((n) => n.nome) ?? [];
+    expect(nomes.indexOf('A')).toBe(nomes.indexOf('Raiz') - 1);
+    expect(nomesDe(depois, 'Grupo')).toEqual(['B']);
+  });
+
+  it('para dentro do grupo: soltar NO grupo põe a camada no topo dele; soltar ao lado de uma de dentro, na posição dela', () => {
+    const noGrupo = loteDeSoltarNoPainel(comStory, raiz.id, { id: id('Grupo'), onde: 'dentro' });
+    expect(noGrupo?.operacoes).toEqual([{ op: 'transferir', alvo: raiz.id, grupo: id('Grupo'), posicao: 'frente' }]);
+    expect(nomesDe(aplicar(noGrupo), 'Grupo')).toEqual(['A', 'B', 'Raiz']);
+
+    const aoLado = loteDeSoltarNoPainel(comStory, raiz.id, { id: id('B'), onde: 'abaixo' });
+    expect(aoLado?.operacoes).toEqual([{ op: 'transferir', alvo: raiz.id, grupo: id('Grupo'), posicao: 1 }]);
+    expect(nomesDe(aplicar(aoLado), 'Grupo')).toEqual(['A', 'Raiz', 'B']);
+  });
+
+  it('para outra prancheta: soltar NA prancheta leva a camada para o topo dela; ao lado de uma camada de lá, para a posição', () => {
+    const naPrancheta = loteDeSoltarNoPainel(comStory, id('A'), { id: story.id, onde: 'dentro' });
+    expect(naPrancheta?.operacoes).toEqual([{ op: 'transferir', alvo: id('A'), prancheta: story.id, posicao: 'frente' }]);
+    expect(aplicar(naPrancheta).pranchetas[1]?.filhos.map((n) => n.nome)).toEqual(['Solta', 'A']);
+
+    const aoLado = loteDeSoltarNoPainel(comStory, id('A'), { id: solta.id, onde: 'abaixo' });
+    expect(aoLado?.operacoes).toEqual([{ op: 'transferir', alvo: id('A'), prancheta: story.id, posicao: 0 }]);
+    expect(aplicar(aoLado).pranchetas[1]?.filhos.map((n) => n.nome)).toEqual(['A', 'Solta']);
+  });
+
+  it('a descrição diz para onde foi', () => {
+    expect(loteDeSoltarNoPainel(comStory, raiz.id, { id: id('Grupo'), onde: 'dentro' })?.descricao).toBe(textos.historico.transferir('Raiz', 'Grupo'));
+    expect(loteDeSoltarNoPainel(comStory, id('A'), { id: story.id, onde: 'dentro' })?.descricao).toBe(textos.historico.transferir('A', 'Story'));
+    expect(loteDeSoltarNoPainel(comStory, id('A'), { id: raiz.id, onde: 'abaixo' })?.descricao).toBe(textos.historico.transferir('A', 'Feed'));
+  });
+
+  it('grupo não entra nele mesmo, camada bloqueada não sai do lugar, grupo bloqueado não recebe', () => {
+    expect(loteDeSoltarNoPainel(comStory, id('Grupo'), { id: id('Grupo'), onde: 'dentro' })).toBeNull();
+    expect(loteDeSoltarNoPainel(comStory, id('Grupo'), { id: id('A'), onde: 'acima' })).toBeNull();
+    expect(loteDeSoltarNoPainel(comStory, id('Travada'), { id: story.id, onde: 'dentro' })).toBeNull();
+    const travado = aplicarLote(comStory, [{ op: 'alterar', alvo: id('Grupo'), props: { bloqueado: true } }], { autoria: { tipo: 'designer' }, idDoLote: 't' });
+    if (!travado.ok) throw new Error('devia bloquear');
+    expect(loteDeSoltarNoPainel(travado.doc, raiz.id, { id: id('Grupo'), onde: 'dentro' })).toBeNull();
+  });
+
+  it('soltar na própria prancheta, estando na raiz dela, traz para o topo; já no topo, não há lote', () => {
+    expect(loteDeSoltarNoPainel(comStory, id('Grupo'), { id: feed.id, onde: 'dentro' })?.operacoes).toEqual([{ op: 'reordenar', alvo: id('Grupo'), posicao: 'frente' }]);
+    expect(loteDeSoltarNoPainel(comStory, raiz.id, { id: feed.id, onde: 'dentro' })).toBeNull();
   });
 });
 
 describe('duplicar', () => {
-  it('cria a cópia logo acima da original, com nome novo, e diz quais nomes criou', () => {
-    const r = loteDeDuplicar(doc, { tipo: 'camadas', ids: [id('A')] });
-    expect(r?.nomes).toEqual([textos.camadas.copia('A', 1)]);
-    const aplicado = r && aplicarLote(doc, r.lote.operacoes, { autoria: { tipo: 'designer' }, idDoLote: 'dup' });
+  it('é UM `duplicar` por camada selecionada; a cópia nasce logo acima da original', () => {
+    const lote = loteDeDuplicar(doc, { tipo: 'camadas', ids: [id('A')] });
+    expect(lote).toEqual({ descricao: textos.historico.duplicar('A'), operacoes: [{ op: 'duplicar', alvo: id('A'), dx: 0, dy: 0 }] });
+    const aplicado = lote && aplicarLote(doc, lote.operacoes, { autoria: { tipo: 'designer' }, idDoLote: 'dup' });
     if (!aplicado?.ok) throw new Error('duplicar devia aplicar');
     const grupo = acharNoPorId(aplicado.doc, id('Grupo'))?.no;
-    expect(grupo?.tipo === 'grupo' && grupo.filhos.map((n) => n.nome)).toEqual(['A', textos.camadas.copia('A', 1), 'B']);
-    const copia = grupo?.tipo === 'grupo' ? grupo.filhos[1] : undefined;
-    expect(copia).toMatchObject({ tipo: 'forma', x: 100, y: 100, largura: 200 });
-    expect(copia?.id).not.toBe(id('A'));
+    expect(grupo?.tipo === 'grupo' && grupo.filhos.map((n) => n.nome)).toEqual(['A', 'A cópia', 'B']);
   });
 
-  it('duplicar de novo não repete o nome', () => {
-    const primeira = loteDeDuplicar(doc, { tipo: 'camadas', ids: [id('A')] });
-    const d1 = primeira && aplicarLote(doc, primeira.lote.operacoes, { autoria: { tipo: 'designer' }, idDoLote: 'd1' });
-    if (!d1?.ok) throw new Error('devia aplicar');
-    expect(loteDeDuplicar(d1.doc, { tipo: 'camadas', ids: [id('A')] })?.nomes).toEqual([textos.camadas.copia('A', 2)]);
-  });
-
-  it('grupo é duplicado com as filhas', () => {
-    const r = loteDeDuplicar(doc, { tipo: 'camadas', ids: [id('Grupo')] });
-    const aplicado = r && aplicarLote(doc, r.lote.operacoes, { autoria: { tipo: 'designer' }, idDoLote: 'dg' });
+  it('grupo é duplicado inteiro, com um `duplicar` só', () => {
+    const lote = loteDeDuplicar(doc, { tipo: 'camadas', ids: [id('Grupo')] });
+    expect(lote?.operacoes).toEqual([{ op: 'duplicar', alvo: id('Grupo'), dx: 0, dy: 0 }]);
+    const aplicado = lote && aplicarLote(doc, lote.operacoes, { autoria: { tipo: 'designer' }, idDoLote: 'dg' });
     if (!aplicado?.ok) throw new Error(aplicado ? aplicado.erro.mensagem : 'sem lote');
-    const copia = aplicado.doc.pranchetas[0]?.filhos.find((n) => n.nome === textos.camadas.copia('Grupo', 1));
+    const copia = aplicado.doc.pranchetas[0]?.filhos.find((n) => n.nome === 'Grupo cópia');
     expect(copia?.tipo === 'grupo' && copia.filhos).toHaveLength(2);
+  });
+
+  it('camada que já vai na cópia do grupo selecionado não é duplicada duas vezes', () => {
+    expect(loteDeDuplicar(doc, { tipo: 'camadas', ids: [id('Grupo'), id('A')] })?.operacoes).toEqual([{ op: 'duplicar', alvo: id('Grupo'), dx: 0, dy: 0 }]);
   });
 
   it('sem camada selecionada não há o que duplicar', () => {
     expect(loteDeDuplicar(doc, null)).toBeNull();
+    expect(loteDeDuplicar(doc, { tipo: 'prancheta', id: 'x' })).toBeNull();
   });
 });
 
-describe('redimensionar', () => {
-  it('vira `alterar` de posição e tamanho', () => {
-    const a = acharNoPorId(doc, id('A'))?.no;
-    if (!a) throw new Error('falta A');
-    expect(loteDeRedimensionar(a, { x: 90, y: 100, w: 250, h: 120 })).toEqual({
+describe('o que um lote criou', () => {
+  it('devolve as camadas novas de cima: a cópia do grupo, não as filhas dela', () => {
+    const lote = loteDeDuplicar(doc, { tipo: 'camadas', ids: [id('Grupo'), id('Travada')] });
+    const aplicado = lote && aplicarLote(doc, lote.operacoes, { autoria: { tipo: 'designer' }, idDoLote: 'novas' });
+    if (!aplicado?.ok) throw new Error('devia aplicar');
+    const novas = camadasNovas(doc, aplicado.doc);
+    expect(novas.map((n) => acharNoPorId(aplicado.doc, n)?.no.nome).sort()).toEqual(['Grupo cópia', 'Travada cópia']);
+  });
+});
+
+describe('agrupar e desagrupar', () => {
+  it('agrupar é UM `agrupar` com as camadas selecionadas e um nome livre na prancheta', () => {
+    const lote = loteDeAgrupar(doc, { tipo: 'camadas', ids: [id('A'), id('B')] });
+    // "Grupo" já existe na prancheta
+    expect(lote).toEqual({ descricao: textos.historico.agrupar('A, B'), operacoes: [{ op: 'agrupar', alvos: [id('A'), id('B')], nome: textos.camadas.grupoNovo(2) }] });
+    expect(aplica(lote as { operacoes: unknown[] })).toBe(true);
+  });
+
+  it('uma camada só também agrupa, como no Photoshop', () => {
+    expect((loteDeAgrupar(doc, { tipo: 'camadas', ids: [id('A')] }) as { operacoes: unknown[] }).operacoes).toHaveLength(1);
+  });
+
+  it('camadas de níveis diferentes não agrupam: devolve o motivo, para a tela dizer', () => {
+    expect(loteDeAgrupar(doc, { tipo: 'camadas', ids: [id('A'), id('Travada')] })).toBe('niveis-diferentes');
+  });
+
+  it('com camada bloqueada na seleção, ou sem seleção, não há lote', () => {
+    expect(loteDeAgrupar(doc, { tipo: 'camadas', ids: [id('Travada')] })).toBeNull();
+    expect(loteDeAgrupar(doc, null)).toBeNull();
+  });
+
+  it('desagrupar é um `desagrupar` por grupo selecionado, e diz quais camadas saíram de dentro', () => {
+    const r = loteDeDesagrupar(doc, { tipo: 'camadas', ids: [id('Grupo')] });
+    expect(r?.lote).toEqual({ descricao: textos.historico.desagrupar('Grupo'), operacoes: [{ op: 'desagrupar', alvo: id('Grupo') }] });
+    expect(r?.soltas).toEqual([id('A'), id('B')]);
+    expect(aplica(r?.lote ?? null)).toBe(true);
+  });
+
+  it('sem grupo na seleção não há o que desagrupar', () => {
+    expect(loteDeDesagrupar(doc, { tipo: 'camadas', ids: [id('A')] })).toBeNull();
+  });
+});
+
+describe('redimensionar e girar pela alça', () => {
+  const a = { id: 'a', nome: 'A' };
+  const b = { id: 'b', nome: 'B' };
+  const q = { x: 100, y: 100, w: 200, h: 100, rotacao: 0 };
+
+  it('redimensionar vira `alterar` de posição e tamanho, sem rotação', () => {
+    expect(loteDeTransformar([{ no: a, antes: q, depois: { ...q, x: 90, w: 250, h: 120 } }], 'redimensionar')).toEqual({
       descricao: textos.historico.redimensionar('A'),
-      operacoes: [{ op: 'alterar', alvo: a.id, props: { x: 90, y: 100, largura: 250, altura: 120 } }],
+      operacoes: [{ op: 'alterar', alvo: 'a', props: { x: 90, y: 100, largura: 250, altura: 120 } }],
     });
+  });
+
+  it('girar uma camada manda só a rotação; girar várias manda também a posição de quem andou', () => {
+    expect(loteDeTransformar([{ no: a, antes: q, depois: { ...q, rotacao: 45 } }], 'girar')).toEqual({
+      descricao: textos.historico.girar('A'),
+      operacoes: [{ op: 'alterar', alvo: 'a', props: { rotacao: 45 } }],
+    });
+    const varias = loteDeTransformar(
+      [
+        { no: a, antes: q, depois: { ...q, x: 300, y: 50, rotacao: 90 } },
+        { no: b, antes: q, depois: { ...q, rotacao: 90 } },
+      ],
+      'girar',
+    );
+    expect(varias?.descricao).toBe(textos.historico.girar('A, B'));
+    expect(varias?.operacoes).toEqual([
+      { op: 'alterar', alvo: 'a', props: { x: 300, y: 50, largura: 200, altura: 100, rotacao: 90 } },
+      { op: 'alterar', alvo: 'b', props: { rotacao: 90 } },
+    ]);
+  });
+
+  it('camada que não mudou fica de fora; se nenhuma mudou, não há lote', () => {
+    expect(loteDeTransformar([{ no: a, antes: q, depois: q }], 'redimensionar')).toBeNull();
+    const r = loteDeTransformar(
+      [
+        { no: a, antes: q, depois: q },
+        { no: b, antes: q, depois: { ...q, w: 300 } },
+      ],
+      'redimensionar',
+    );
+    expect(r?.operacoes).toHaveLength(1);
+    expect(r?.descricao).toBe(textos.historico.redimensionar('B'));
   });
 });
 
@@ -261,5 +408,55 @@ describe('inserir imagem e vetor', () => {
     expect(loteDeTrocarImagem({ id: 'n1', nome: 'Foto', origem }, arquivo).operacoes).toEqual([
       { op: 'alterar', alvo: 'n1', props: { arquivo: arquivo.sha256, larguraOriginal: 4000, alturaOriginal: 2000, origem: null } },
     ]);
+  });
+});
+
+describe('editar o texto no canvas', () => {
+  const texto = { id: 't', nome: 'Título', conteudo: 'Cappuccino em dobro' };
+
+  it('vira UM `alterar` do conteúdo; texto igual, ou vazio, não vira lote', () => {
+    expect(loteDeEditarTexto(texto, 'Cappuccino em triplo')).toEqual({
+      descricao: textos.historico.editarTexto('Título'),
+      operacoes: [{ op: 'alterar', alvo: 't', props: { conteudo: 'Cappuccino em triplo' } }],
+    });
+    expect(loteDeEditarTexto(texto, 'Cappuccino em dobro')).toBeNull();
+    // camada de texto sem texto fica invisível e sem como achar: a edição não apaga tudo
+    expect(loteDeEditarTexto(texto, '   ')).toBeNull();
+  });
+
+  it('trecho com estilo próprio acompanha a edição: o lote leva os trechos nas posições novas', () => {
+    // "dobro" (14 a 19) em destaque
+    const comTrecho = { ...texto, trechos: [{ inicio: 14, fim: 19, cor: '#ff0000' }] };
+    expect(loteDeEditarTexto(comTrecho, 'Um cappuccino em dobro')?.operacoes).toEqual([
+      { op: 'alterar', alvo: 't', props: { conteudo: 'Um cappuccino em dobro', trechos: [{ inicio: 17, fim: 22, cor: '#ff0000' }] } },
+    ]);
+  });
+
+  it('se nenhum trecho sobra, a propriedade sai da camada', () => {
+    const comTrecho = { ...texto, trechos: [{ inicio: 14, fim: 19, cor: '#ff0000' }] };
+    expect(loteDeEditarTexto(comTrecho, 'Cappuccino em')?.operacoes).toEqual([{ op: 'alterar', alvo: 't', props: { conteudo: 'Cappuccino em', trechos: null } }]);
+  });
+});
+
+describe('trechos de estilo quando o texto muda', () => {
+  const trecho = (inicio: number, fim: number) => ({ inicio, fim, peso: 700 as const });
+
+  it('antes da mudança fica onde está; depois dela, anda pelo quanto o texto cresceu ou encolheu', () => {
+    // "abc DEF ghi": troca "DEF" por "XYZW"
+    expect(ajustarTrechos('abc DEF ghi', 'abc XYZW ghi', [trecho(0, 3), trecho(8, 11)])).toEqual([trecho(0, 3), trecho(9, 12)]);
+  });
+
+  it('o trecho que contém a mudança cresce ou encolhe com ela', () => {
+    expect(ajustarTrechos('abc DEF ghi', 'abc DEXXF ghi', [trecho(4, 7)])).toEqual([trecho(4, 9)]);
+    expect(ajustarTrechos('abc DEF ghi', 'abc DF ghi', [trecho(4, 7)])).toEqual([trecho(4, 6)]);
+  });
+
+  it('o trecho apagado por inteiro some', () => {
+    expect(ajustarTrechos('abc DEF ghi', 'abc  ghi', [trecho(4, 7)])).toEqual([]);
+  });
+
+  it('texto igual devolve os mesmos trechos', () => {
+    const trechos = [trecho(1, 2)];
+    expect(ajustarTrechos('abc', 'abc', trechos)).toEqual(trechos);
   });
 });

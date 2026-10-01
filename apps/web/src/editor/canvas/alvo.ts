@@ -1,52 +1,79 @@
 // Geometria da seleção no plano do editor. O teste de alvo (que camada está sob o ponteiro) é de
-// @otto/documento (`acharEm`, com rotação, elipse e canto arredondado); aqui fica o que é da tela:
-// a caixa de cada camada selecionada e qual camada tem alças.
-import { type Caixa, caixaDe, type Documento, disporPranchetas, type No, todasAsCamadas } from '@otto/documento';
+// @otto/documento (`acharEm`); aqui fica o que é da tela: o contorno de cada camada selecionada e o
+// que as alças de redimensionar e girar pegam.
+import { type Documento, disporPranchetas, ehVisual, type No, type NoVisual } from '@otto/documento';
+import type { Ponto } from '../nucleo/camera';
 import type { Selecao } from '../nucleo/interface';
 import type { PreviaDeGesto } from './motor';
+import { type Quadro, quadroDaSelecao } from './transformacao';
 
-/** Caixa de cada camada selecionada, no plano do editor, já deslocada pela prévia do arraste. */
-export function caixasDaSelecao(doc: Documento, selecao: Selecao, previa: PreviaDeGesto | null): Caixa[] {
+/** Uma camada visual da seleção. Grupo selecionado entra pelas camadas de dentro. */
+export interface Folha {
+  no: NoVisual;
+  /** O quadro da camada, em coordenadas da prancheta: é o que o lote altera. */
+  quadro: Quadro;
+}
+
+interface FolhaAchada extends Folha {
+  pranchetaId: string;
+  origem: Ponto;
+  /** O id selecionado de onde ela veio: ela mesma, ou o grupo. */
+  raiz: string;
+  /** Ela, ou um grupo acima dela, está bloqueada ou oculta. */
+  presa: boolean;
+}
+
+const quadroDe = (no: NoVisual): Quadro => ({ x: no.x, y: no.y, w: no.largura, h: no.altura, rotacao: no.rotacao });
+
+function folhasDaSelecao(doc: Documento, selecao: Selecao): FolhaAchada[] {
   if (selecao?.tipo !== 'camadas') return [];
   const ids = new Set(selecao.ids);
   const posicoes = disporPranchetas(doc.pranchetas);
-  const caixas: Caixa[] = [];
+  const folhas: FolhaAchada[] = [];
   for (const prancheta of doc.pranchetas) {
     const origem = posicoes.get(prancheta.id);
     if (!origem) continue;
-    for (const no of todasAsCamadas(prancheta.filhos)) {
-      if (!ids.has(no.id)) continue;
-      const caixa = caixaDe(no);
-      if (!caixa) continue;
-      const movida = previa?.ids.includes(no.id) ? previa : undefined;
-      caixas.push({ x: origem.x + caixa.x + (movida?.dx ?? 0), y: origem.y + caixa.y + (movida?.dy ?? 0), w: caixa.w, h: caixa.h });
-    }
+    const andar = (nos: readonly No[], raiz: string | undefined, presa: boolean) => {
+      for (const no of nos) {
+        const daqui = raiz ?? (ids.has(no.id) ? no.id : undefined);
+        const presaAqui = presa || no.bloqueado || !no.visivel;
+        if (no.tipo === 'grupo') andar(no.filhos, daqui, presaAqui);
+        else if (daqui !== undefined && ehVisual(no)) folhas.push({ no, quadro: quadroDe(no), pranchetaId: prancheta.id, origem, raiz: daqui, presa: presaAqui });
+      }
+    };
+    andar(prancheta.filhos, undefined, false);
   }
-  return caixas;
+  return folhas;
 }
 
-export interface NoComAlcas {
-  no: No;
-  /** A caixa da camada, em coordenadas da prancheta: é o que o lote de redimensionar altera. */
-  caixa: Caixa;
-  /** A mesma caixa no plano do editor (com a posição da prancheta): é onde as alças aparecem. */
-  caixaNoPlano: Caixa;
+/** O contorno de cada camada selecionada, no plano do editor, já como a prévia do gesto a mostra. */
+export function contornosDaSelecao(doc: Documento, selecao: Selecao, previa: PreviaDeGesto | null): Quadro[] {
+  return folhasDaSelecao(doc, selecao).map((f) => {
+    const caixa = previa?.caixas?.[f.no.id];
+    if (caixa) return { x: f.origem.x + caixa.x, y: f.origem.y + caixa.y, w: caixa.largura, h: caixa.altura, rotacao: caixa.rotacao ?? f.quadro.rotacao };
+    const movida = previa && (previa.ids.includes(f.no.id) || previa.ids.includes(f.raiz)) ? previa : undefined;
+    return { ...f.quadro, x: f.origem.x + f.quadro.x + (movida?.dx ?? 0), y: f.origem.y + f.quadro.y + (movida?.dy ?? 0) };
+  });
+}
+
+export interface AlvoDeTransformar {
+  folhas: Folha[];
+  /** O quadro das alças, em coordenadas da prancheta: o da camada, ou a caixa reta que cobre todas. */
+  quadro: Quadro;
+  /** Onde a prancheta fica no plano do editor. */
+  origem: Ponto;
 }
 
 /**
- * A camada que mostra alças de redimensionar: UMA camada selecionada, visual, sem rotação, visível
- * e desbloqueada. Grupo e camada girada não têm alça nesta fatia.
+ * O que as alças pegam: as camadas visuais da seleção, se TODAS podem mudar (nenhuma bloqueada nem
+ * oculta) e estão na mesma prancheta (a prévia do motor cobre uma prancheta por gesto).
  */
-export function noDaAlca(doc: Documento, selecao: Selecao): NoComAlcas | undefined {
-  if (selecao?.tipo !== 'camadas' || selecao.ids.length !== 1) return undefined;
-  const posicoes = disporPranchetas(doc.pranchetas);
-  for (const prancheta of doc.pranchetas) {
-    const no = todasAsCamadas(prancheta.filhos).find((n) => n.id === selecao.ids[0]);
-    const origem = posicoes.get(prancheta.id);
-    if (!no || !origem) continue;
-    if (no.tipo === 'grupo' || no.tipo === 'ajuste' || no.rotacao !== 0 || no.bloqueado || !no.visivel) return undefined;
-    const caixa = { x: no.x, y: no.y, w: no.largura, h: no.altura };
-    return { no, caixa, caixaNoPlano: { ...caixa, x: origem.x + no.x, y: origem.y + no.y } };
-  }
-  return undefined;
+export function alvoDeTransformar(doc: Documento, selecao: Selecao): AlvoDeTransformar | undefined {
+  const folhas = folhasDaSelecao(doc, selecao);
+  const [primeira] = folhas;
+  if (!primeira || folhas.some((f) => f.presa || f.pranchetaId !== primeira.pranchetaId)) return undefined;
+  return { folhas: folhas.map(({ no, quadro }) => ({ no, quadro })), quadro: quadroDaSelecao(folhas.map((f) => f.quadro)), origem: primeira.origem };
 }
+
+/** O mesmo quadro, no plano do editor: é onde as alças aparecem e onde o ponteiro as pega. */
+export const noPlano = (quadro: Quadro, origem: Ponto): Quadro => ({ ...quadro, x: quadro.x + origem.x, y: quadro.y + origem.y });

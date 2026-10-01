@@ -111,6 +111,7 @@ export const exportar = {
         'nativo-editavel': 'com os dados de edição',
         'nativo-pixel': 'pixel',
         'raster-com-aviso': 'pixel, sem os dados de edição',
+        'omitido-com-aviso': 'fica de fora do arquivo',
       },
     },
     soPng: 'O PNG não tem camadas: sai a imagem de cada prancheta, como está no canvas.',

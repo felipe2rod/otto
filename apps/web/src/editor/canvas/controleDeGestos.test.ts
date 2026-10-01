@@ -18,7 +18,8 @@ if (!camada) throw new Error('o documento de exemplo precisa de camada');
 const caixa = caixaDe(camada);
 if (!caixa) throw new Error('a camada do topo precisa de caixa');
 /** Um ponto dentro da camada do topo da primeira prancheta, em unidades do documento. */
-const dentro = { x: caixa.x + 4, y: caixa.y + 4 };
+// longe das bordas: perto do canto de uma camada selecionada o que se pega é a alça
+const dentro = { x: caixa.x + caixa.w / 2, y: caixa.y + caixa.h / 2 };
 
 let elemento: HTMLElement;
 let visao: Visao;
@@ -26,7 +27,6 @@ let iface: Interface;
 let sessao: SessaoDoDocumento<Documento, Operacao>;
 let enviados: LoteDoEditor<Operacao>[];
 let previa: ReturnType<typeof criarArmazem<PreviaDeGesto | null>>;
-let aoVivo: ReturnType<typeof criarArmazem<Documento | null>>;
 let quadros: (() => void)[];
 /** O que aconteceu, em ordem: é o que prova que o documento chega ao motor antes de a prévia encerrar. */
 let ordem: string[];
@@ -62,13 +62,11 @@ beforeEach(() => {
     },
   );
   previa = criarArmazem<PreviaDeGesto | null>(null);
-  aoVivo = criarArmazem<Documento | null>(null);
-  aoVivo.assinar(() => ordem.push(aoVivo.obter() ? 'ao-vivo' : 'fim-do-ao-vivo'));
   quadros = [];
   ordem = [];
   sessao.assinar(() => ordem.push('documento'));
   previa.assinar(() => ordem.push(previa.obter() ? 'previa' : 'fim-da-previa'));
-  desligar = ligarControleDeGestos(elemento, { visao, interface: iface, sessao: () => sessao, previa, aoVivo, agendar: (q) => quadros.push(q) });
+  desligar = ligarControleDeGestos(elemento, { visao, interface: iface, sessao: () => sessao, previa, agendar: (q) => quadros.push(q) });
 });
 
 /** Ponteiro em unidades do documento (o teste converte para tela pelo zoom de 50%). */
@@ -262,23 +260,21 @@ describe('gestos: redimensionar pela alça', () => {
   /** O canto sudeste da camada do topo. */
   const sudeste = { x: caixa.x + caixa.w, y: caixa.y + caixa.h };
   const selecionar = () => iface.selecionar({ tipo: 'camadas', ids: [camada.id] });
-  const camadaAoVivo = () => aoVivo.obter()?.pranchetas[0]?.filhos.at(-1);
+  const caixaNaPrevia = () => previa.obter()?.caixas?.[camada.id];
 
-  it('arrastar a alça mostra a camada no tamanho novo AO VIVO, sem lote e sem trocar o documento da sessão', () => {
+  it('arrastar a alça manda ao motor a caixa nova pela PRÉVIA: sem lote e sem documento novo', () => {
     selecionar();
     ponteiro('pointerdown', sudeste);
     ponteiro('pointermove', { x: sudeste.x + 60, y: sudeste.y + 30 });
     rodarQuadro();
 
-    expect(camadaAoVivo()).toMatchObject({ x: caixa.x, y: caixa.y, largura: caixa.w + 60, altura: caixa.h + 30 });
+    expect(previa.obter()).toMatchObject({ ids: [camada.id], dx: 0, dy: 0 });
+    expect(caixaNaPrevia()).toMatchObject({ x: caixa.x, y: caixa.y, largura: caixa.w + 60, altura: caixa.h + 30 });
     expect(sessao.obter().visivel).toBe(inicial);
     expect(enviados).toEqual([]);
-    expect(previa.obter()).toBeNull();
-    // as outras pranchetas são os mesmos objetos: o motor só recompõe a que mudou
-    expect(aoVivo.obter()?.pranchetas[1]).toBe(inicial.pranchetas[1]);
   });
 
-  it('soltar grava UM lote `alterar` com posição e tamanho, e o documento chega antes de o "ao vivo" encerrar', () => {
+  it('soltar grava UM lote `alterar` com posição e tamanho, e o documento chega antes de a prévia encerrar', () => {
     selecionar();
     ponteiro('pointerdown', sudeste);
     ponteiro('pointermove', { x: sudeste.x + 60, y: sudeste.y + 30 });
@@ -288,7 +284,7 @@ describe('gestos: redimensionar pela alça', () => {
 
     expect(enviados).toHaveLength(1);
     expect(enviados[0]?.operacoes).toEqual([{ op: 'alterar', alvo: camada.id, props: { x: caixa.x, y: caixa.y, largura: caixa.w + 60, altura: caixa.h + 30 } }]);
-    expect(ordem).toEqual(['documento', 'fim-do-ao-vivo']);
+    expect(ordem).toEqual(['documento', 'fim-da-previa']);
   });
 
   it('com Shift, o canto mantém a proporção', () => {
@@ -296,16 +292,16 @@ describe('gestos: redimensionar pela alça', () => {
     ponteiro('pointerdown', sudeste);
     ponteiro('pointermove', { x: sudeste.x + caixa.w, y: sudeste.y }, { shiftKey: true });
     rodarQuadro();
-    expect(camadaAoVivo()).toMatchObject({ largura: caixa.w * 2, altura: caixa.h * 2 });
+    expect(caixaNaPrevia()).toMatchObject({ largura: caixa.w * 2, altura: caixa.h * 2 });
   });
 
-  it('vários movimentos no mesmo quadro viram um documento ao vivo só', () => {
+  it('vários movimentos no mesmo quadro viram uma prévia só', () => {
     selecionar();
     ponteiro('pointerdown', sudeste);
     ordem = [];
     for (let i = 1; i <= 8; i++) ponteiro('pointermove', { x: sudeste.x + i * 10, y: sudeste.y });
     rodarQuadro();
-    expect(ordem).toEqual(['ao-vivo']);
+    expect(ordem).toEqual(['previa']);
   });
 
   it('Esc cancela: a camada volta ao tamanho e nenhum lote sai', () => {
@@ -316,7 +312,14 @@ describe('gestos: redimensionar pela alça', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     ponteiro('pointerup', { x: sudeste.x + 60, y: sudeste.y });
 
-    expect(aoVivo.obter()).toBeNull();
+    expect(previa.obter()).toBeNull();
+    expect(enviados).toEqual([]);
+  });
+
+  it('soltar sem ter mudado nada não grava lote', () => {
+    selecionar();
+    ponteiro('pointerdown', sudeste);
+    ponteiro('pointerup', sudeste);
     expect(enviados).toEqual([]);
   });
 
@@ -324,13 +327,105 @@ describe('gestos: redimensionar pela alça', () => {
     ponteiro('pointerdown', sudeste);
     ponteiro('pointermove', { x: sudeste.x + 60, y: sudeste.y });
     rodarQuadro();
-    expect(aoVivo.obter()).toBeNull();
+    expect(previa.obter()?.caixas).toBeUndefined();
+    ponteiro('pointerup', sudeste);
 
     sessao.definirSomenteLeitura(true);
     selecionar();
     ponteiro('pointerdown', sudeste);
     ponteiro('pointermove', { x: sudeste.x + 60, y: sudeste.y });
     rodarQuadro();
-    expect(aoVivo.obter()).toBeNull();
+    expect(previa.obter()).toBeNull();
+  });
+
+  it('várias camadas: a alça do conjunto redimensiona todas, numa prévia e num lote só', () => {
+    const outra = inicial.pranchetas[0]?.filhos.at(-2);
+    const caixaDaOutra = outra && caixaDe(outra);
+    if (!outra || !caixaDaOutra) throw new Error('faltam camadas');
+    iface.selecionar({ tipo: 'camadas', ids: [camada.id, outra.id] });
+    const direita = Math.max(caixa.x + caixa.w, caixaDaOutra.x + caixaDaOutra.w);
+    const base = Math.max(caixa.y + caixa.h, caixaDaOutra.y + caixaDaOutra.h);
+    const canto = { x: direita, y: base };
+
+    ponteiro('pointerdown', canto);
+    ponteiro('pointermove', { x: canto.x + 100, y: canto.y + 80 });
+    rodarQuadro();
+    expect(Object.keys(previa.obter()?.caixas ?? {}).sort()).toEqual([camada.id, outra.id].sort());
+
+    ponteiro('pointerup', { x: canto.x + 100, y: canto.y + 80 });
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0]?.operacoes.map((o) => o.op)).toEqual(['alterar', 'alterar']);
+  });
+});
+
+describe('gestos: girar pela pega', () => {
+  // a pega de girar fica 24 pixels de tela acima do meio do lado de cima; com zoom de 50%, 48 unidades
+  const pega = { x: caixa.x + caixa.w / 2, y: caixa.y - 48 };
+  const centro = { x: caixa.x + caixa.w / 2, y: caixa.y + caixa.h / 2 };
+  const raio = centro.y - pega.y;
+  /** O ponto a `graus` da pega, em torno do centro da camada. */
+  const girado = (graus: number) => ({ x: centro.x + raio * Math.sin((graus * Math.PI) / 180), y: centro.y - raio * Math.cos((graus * Math.PI) / 180) });
+
+  it('arrastar a pega gira a camada em torno do centro, pela prévia; soltar grava UM `alterar` só com a rotação', () => {
+    iface.selecionar({ tipo: 'camadas', ids: [camada.id] });
+    ponteiro('pointerdown', pega);
+    ponteiro('pointermove', girado(40));
+    rodarQuadro();
+    expect(previa.obter()?.caixas?.[camada.id]).toMatchObject({ x: caixa.x, y: caixa.y, largura: caixa.w, altura: caixa.h, rotacao: 40 });
+
+    ponteiro('pointerup', girado(40));
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0]?.operacoes).toEqual([{ op: 'alterar', alvo: camada.id, props: { rotacao: 40 } }]);
+  });
+
+  it('com Shift, trava em passos de 15°', () => {
+    iface.selecionar({ tipo: 'camadas', ids: [camada.id] });
+    ponteiro('pointerdown', pega);
+    ponteiro('pointermove', girado(40), { shiftKey: true });
+    rodarQuadro();
+    expect(previa.obter()?.caixas?.[camada.id]?.rotacao).toBe(45);
+  });
+
+  it('a camada girada continua com alças, no lugar girado', () => {
+    sessao.aplicar('girar', [{ op: 'alterar', alvo: camada.id, props: { rotacao: 90 } }]);
+    iface.selecionar({ tipo: 'camadas', ids: [camada.id] });
+    // girada 90°, a alça leste fica embaixo do centro
+    const leste = { x: centro.x, y: centro.y + caixa.w / 2 };
+    ponteiro('pointerdown', leste);
+    ponteiro('pointermove', { x: leste.x, y: leste.y + 40 });
+    rodarQuadro();
+    expect(previa.obter()?.caixas?.[camada.id]).toMatchObject({ largura: caixa.w + 40, altura: caixa.h, rotacao: 90 });
+  });
+});
+
+describe('gestos: dois cliques', () => {
+  const texto = inicial.pranchetas[0]?.filhos.find((n) => n.tipo === 'texto');
+  const forma = inicial.pranchetas[0]?.filhos.find((n) => n.tipo === 'forma');
+  const noMeio = (no: typeof texto) => {
+    const c = no && caixaDe(no);
+    if (!c) throw new Error('falta a camada');
+    return { x: c.x + c.w / 2, y: c.y + c.h / 2 };
+  };
+
+  it('numa camada de texto: seleciona e pede a edição do texto no lugar', () => {
+    desligar();
+    const pedidos: string[] = [];
+    desligar = ligarControleDeGestos(elemento, { visao, interface: iface, sessao: () => sessao, previa, aoEditarTexto: (id) => pedidos.push(id), agendar: (q) => quadros.push(q) });
+    // acha um ponto em que o texto é a camada de cima
+    const alvo = inicial.pranchetas[0]?.filhos.filter((n) => n.tipo === 'texto').at(-1);
+    ponteiro('dblclick', noMeio(alvo));
+    expect(pedidos).toEqual([alvo?.id]);
+    expect(iface.armazem.obter().selecao).toEqual({ tipo: 'camadas', ids: [alvo?.id] });
+  });
+
+  it('numa camada que não é de texto, ou em peça só para leitura: nada', () => {
+    desligar();
+    const pedidos: string[] = [];
+    desligar = ligarControleDeGestos(elemento, { visao, interface: iface, sessao: () => sessao, previa, aoEditarTexto: (id) => pedidos.push(id), agendar: (q) => quadros.push(q) });
+    if (forma) ponteiro('dblclick', { x: 5, y: 5 });
+    expect(pedidos).toEqual([]);
+    sessao.definirSomenteLeitura(true);
+    ponteiro('dblclick', noMeio(texto));
+    expect(pedidos).toEqual([]);
   });
 });

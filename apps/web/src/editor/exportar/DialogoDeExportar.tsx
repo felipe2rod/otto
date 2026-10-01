@@ -27,7 +27,8 @@ export interface PropriedadesDoDialogoDeExportar {
   agora?: () => number;
 }
 
-type Formato = PedidoDeExportacao['formato'];
+/** Os formatos que esta tela oferece. SVG, PDF e o pacote .zip já estão no contrato; a tela deles é a rodada seguinte. */
+type Formato = 'psd' | 'png';
 type Juncao = 'por-prancheta' | 'juntas';
 const SEM_PRANCHETAS: readonly { id: string; nome: string; largura: number; altura: number }[] = [];
 

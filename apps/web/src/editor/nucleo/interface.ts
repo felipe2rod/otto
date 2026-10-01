@@ -13,6 +13,8 @@ export interface EstadoDeInterface {
   maoTemporaria: boolean;
   paineisVisiveis: boolean;
   selecao: Selecao;
+  /** A camada de texto que está sendo editada no canvas, ou nulo. */
+  editandoTexto: string | null;
 }
 
 export interface Interface {
@@ -24,12 +26,14 @@ export interface Interface {
   selecionar(selecao: Selecao): void;
   /** Shift+clique: acrescenta a camada à seleção, ou tira se já estava. */
   alternarNaSelecao(id: string): void;
+  /** Abre (ou, com nulo, encerra) a edição do texto de uma camada no canvas. */
+  editarTexto(id: string | null): void;
 }
 
 export const ferramentaEmUso = (estado: EstadoDeInterface): Ferramenta => (estado.maoTemporaria ? 'mao' : estado.ferramenta);
 
 export function criarInterface(): Interface {
-  const armazem = criarArmazem<EstadoDeInterface>({ ferramenta: 'mover', maoTemporaria: false, paineisVisiveis: true, selecao: null });
+  const armazem = criarArmazem<EstadoDeInterface>({ ferramenta: 'mover', maoTemporaria: false, paineisVisiveis: true, selecao: null, editandoTexto: null });
   return {
     armazem,
     escolherFerramenta: (ferramenta) => armazem.definir((e) => (e.ferramenta === ferramenta ? e : { ...e, ferramenta })),
@@ -37,6 +41,7 @@ export function criarInterface(): Interface {
     ferramentaEmUso: () => ferramentaEmUso(armazem.obter()),
     alternarPaineis: () => armazem.definir((e) => ({ ...e, paineisVisiveis: !e.paineisVisiveis })),
     selecionar: (selecao) => armazem.definir((e) => ({ ...e, selecao: selecao?.tipo === 'camadas' && selecao.ids.length === 0 ? null : selecao })),
+    editarTexto: (id) => armazem.definir((e) => (e.editandoTexto === id ? e : { ...e, editandoTexto: id })),
     alternarNaSelecao: (id) =>
       armazem.definir((e) => {
         const atuais = e.selecao?.tipo === 'camadas' ? e.selecao.ids : [];

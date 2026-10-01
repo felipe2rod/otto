@@ -1,6 +1,6 @@
 // Montadores de lote das ações do editor. Todo gesto vira operação do catálogo (ADR 027): estas
 // funções não aplicam nada, só dizem QUAL lote o gesto é. Quem aplica é a sessão do documento.
-import { type Caixa, caixaDe, type Documento, type No, type Operacao, type Prancheta, todasAsCamadas } from '@otto/documento';
+import { caixaDe, type Documento, type No, type Operacao, type Prancheta, todasAsCamadas } from '@otto/documento';
 import { editor as textos } from '../../textos/editor';
 import type { Selecao } from './interface';
 
@@ -45,7 +45,7 @@ function editaveis(doc: Documento, selecao: Selecao): No[] {
   });
 }
 
-const nomes = (nos: readonly No[]): string => nos.map((n) => n.nome).join(', ');
+const nomes = (nos: readonly Pick<No, 'nome'>[]): string => nos.map((n) => n.nome).join(', ');
 
 export function loteDeMoverPorSeta(doc: Documento, selecao: Selecao, dx: number, dy: number): LoteParaAplicar | null {
   const operacoes = editaveis(doc, selecao).flatMap((no): Operacao[] => {
@@ -92,17 +92,62 @@ export function loteDeReordenar(doc: Documento, id: string, sentido: 1 | -1): Lo
 }
 
 /** Soltar a camada sobre uma irmã, no painel: `acima` é mais para a frente na pilha. Só entre irmãs. */
-export function loteDeReordenarPara(doc: Documento, id: string, idDoAlvo: string, onde: 'acima' | 'abaixo'): LoteParaAplicar | null {
+/** Onde a camada arrastada foi solta no painel de Camadas: ao lado de uma linha, ou dentro dela (grupo ou prancheta). */
+export interface DestinoNoPainel {
+  id: string;
+  onde: 'acima' | 'abaixo' | 'dentro';
+}
+
+/**
+ * Soltar uma camada no painel de Camadas. Entre irmãs é `reordenar`; para dentro de grupo, para a
+ * raiz ou para outra prancheta é `transferir`. Sempre UMA operação. A posição no documento é o
+ * índice de baixo para cima; o painel mostra de cima para baixo, então "acima" é o índice seguinte.
+ */
+export function loteDeSoltarNoPainel(doc: Documento, id: string, destino: DestinoNoPainel): LoteParaAplicar | null {
   const achado = acharNoPorId(doc, id);
-  if (!achado || achado.no.bloqueado || id === idDoAlvo) return null;
-  // o catálogo não muda camada de pai: o alvo tem de estar na mesma lista
-  const semElaMesma = achado.irmaos.filter((n) => n.id !== id);
-  const indiceDoAlvo = semElaMesma.findIndex((n) => n.id === idDoAlvo);
-  if (indiceDoAlvo < 0) return null;
-  // `posicao` é o índice na lista sem a camada (0 = embaixo)
-  const posicao = onde === 'acima' ? indiceDoAlvo + 1 : indiceDoAlvo;
-  if (posicao === achado.indice) return null;
-  return { descricao: (posicao > achado.indice ? textos.historico.paraAFrente : textos.historico.paraTras)(achado.no.nome), operacoes: [{ op: 'reordenar', alvo: id, posicao }] };
+  if (!achado || achado.no.bloqueado || id === destino.id) return null;
+  const { no } = achado;
+  const dentroDeSi = (alvo: string) => no.tipo === 'grupo' && todasAsCamadas(no.filhos).some((n) => n.id === alvo);
+  const paiDe = (irmaos: readonly No[], prancheta: Prancheta) => todasAsCamadas(prancheta.filhos).find((n) => n.tipo === 'grupo' && n.filhos === irmaos);
+
+  // dentro de uma prancheta: o topo da raiz dela
+  const prancheta = doc.pranchetas.find((p) => p.id === destino.id);
+  if (prancheta) {
+    if (destino.onde !== 'dentro') return null;
+    if (achado.irmaos === prancheta.filhos) {
+      if (achado.indice === prancheta.filhos.length - 1) return null;
+      return { descricao: textos.historico.paraAFrente(no.nome), operacoes: [{ op: 'reordenar', alvo: id, posicao: 'frente' }] };
+    }
+    return { descricao: textos.historico.transferir(no.nome, prancheta.nome), operacoes: [{ op: 'transferir', alvo: id, prancheta: prancheta.id, posicao: 'frente' }] };
+  }
+
+  const alvo = acharNoPorId(doc, destino.id);
+  if (!alvo || dentroDeSi(destino.id)) return null;
+
+  // dentro de um grupo: o topo dele
+  if (destino.onde === 'dentro') {
+    if (alvo.no.tipo !== 'grupo' || alvo.no.bloqueado) return null;
+    if (achado.irmaos === alvo.no.filhos && achado.indice === alvo.no.filhos.length - 1) return null;
+    return { descricao: textos.historico.transferir(no.nome, alvo.no.nome), operacoes: [{ op: 'transferir', alvo: id, grupo: alvo.no.id, posicao: 'frente' }] };
+  }
+
+  // ao lado de uma irmã: só muda a ordem
+  if (alvo.irmaos === achado.irmaos) {
+    const semElaMesma = achado.irmaos.filter((n) => n.id !== id);
+    const indiceDoAlvo = semElaMesma.findIndex((n) => n.id === destino.id);
+    const posicao = destino.onde === 'acima' ? indiceDoAlvo + 1 : indiceDoAlvo;
+    if (posicao === achado.indice) return null;
+    return { descricao: (posicao > achado.indice ? textos.historico.paraAFrente : textos.historico.paraTras)(no.nome), operacoes: [{ op: 'reordenar', alvo: id, posicao }] };
+  }
+
+  // ao lado de uma camada de outro lugar: entra na lista dela (grupo, raiz, outra prancheta)
+  const grupo = paiDe(alvo.irmaos, alvo.prancheta);
+  if (grupo?.bloqueado) return null;
+  const posicao = destino.onde === 'acima' ? alvo.indice + 1 : alvo.indice;
+  return {
+    descricao: textos.historico.transferir(no.nome, grupo?.nome ?? alvo.prancheta.nome),
+    operacoes: [{ op: 'transferir', alvo: id, ...(grupo ? { grupo: grupo.id } : { prancheta: alvo.prancheta.id }), posicao }],
+  };
 }
 
 /** Um nome que ainda não existe na prancheta (nomes são únicos dentro dela). */
@@ -111,50 +156,86 @@ function nomeLivre(ocupados: Set<string>, base: string, comNumero: (n: number) =
   for (let n = 2; ; n++) if (!ocupados.has(comNumero(n))) return comNumero(n);
 }
 
-/**
- * Duplica as camadas selecionadas: cada cópia nasce logo acima da original, como no Photoshop.
- * O catálogo não tem "duplicar camada": é `criarNo` com as propriedades da original e `reordenar`
- * para o lugar. Devolve também os nomes criados, para o editor selecionar as cópias.
- */
-export function loteDeDuplicar(doc: Documento, selecao: Selecao): { lote: LoteParaAplicar; nomes: string[] } | null {
-  if (selecao?.tipo !== 'camadas') return null;
-  const operacoes: Operacao[] = [];
-  const nomes: string[] = [];
-  const originais: string[] = [];
-  // nomes ocupados por prancheta, contando os que este lote cria
-  const ocupados = new Map<string, Set<string>>();
-
-  const copiar = (prancheta: Prancheta, no: No, grupo: string | undefined): string => {
-    const nomesDaPrancheta = ocupados.get(prancheta.id) ?? new Set(todasAsCamadas(prancheta.filhos).map((n) => n.nome));
-    ocupados.set(prancheta.id, nomesDaPrancheta);
-    let numero = 1;
-    while (nomesDaPrancheta.has(textos.camadas.copia(no.nome, numero))) numero++;
-    const nome = textos.camadas.copia(no.nome, numero);
-    nomesDaPrancheta.add(nome);
-    const { id: _id, ...semId } = no;
-    const novo = no.tipo === 'grupo' ? (({ filhos: _filhos, ...resto }) => resto)({ ...semId, filhos: undefined }) : semId;
-    operacoes.push({ op: 'criarNo', prancheta: prancheta.id, no: { ...novo, nome, bloqueado: false } as never, ...(grupo ? { grupo } : {}) });
-    // as filhas do grupo entram dentro da cópia, de baixo para cima
-    if (no.tipo === 'grupo') for (const filha of no.filhos) copiar(prancheta, filha, `${prancheta.nome}/${nome}`);
-    return nome;
-  };
-
-  for (const id of selecao.ids) {
-    const achado = acharNoPorId(doc, id);
-    if (!achado) continue;
-    // dentro de grupo, a cópia nasce no mesmo grupo
-    const pai = todasAsCamadas(achado.prancheta.filhos).find((n) => n.tipo === 'grupo' && n.filhos === achado.irmaos);
-    const nome = copiar(achado.prancheta, achado.no, pai ? pai.id : undefined);
-    operacoes.push({ op: 'reordenar', alvo: `${achado.prancheta.nome}/${nome}`, posicao: achado.indice + 1 });
-    nomes.push(nome);
-    originais.push(achado.no.nome);
-  }
-  if (operacoes.length === 0) return null;
-  return { lote: { descricao: textos.historico.duplicar(originais.join(', ')), operacoes }, nomes };
+/** As camadas selecionadas, sem as que já estão dentro de um grupo também selecionado. */
+function selecionadasDeCima(doc: Documento, selecao: Selecao): NoNoDocumento[] {
+  if (selecao?.tipo !== 'camadas') return [];
+  const achados = selecao.ids.flatMap((id) => acharNoPorId(doc, id) ?? []);
+  const dentroDeOutra = (id: string) => achados.some((a) => a.no.id !== id && a.no.tipo === 'grupo' && todasAsCamadas(a.no.filhos).some((n) => n.id === id));
+  return achados.filter((a) => !dentroDeOutra(a.no.id));
 }
 
-export function loteDeRedimensionar(no: Pick<No, 'id' | 'nome'>, caixa: Caixa): LoteParaAplicar {
-  return { descricao: textos.historico.redimensionar(no.nome), operacoes: [{ op: 'alterar', alvo: no.id, props: { x: caixa.x, y: caixa.y, largura: caixa.w, altura: caixa.h } }] };
+/**
+ * Duplica as camadas selecionadas: UM `duplicar` por camada (grupo vai inteiro). A cópia nasce logo
+ * acima da original, com o nome que o catálogo dá. Quem aplica acha as cópias com `camadasNovas`.
+ */
+export function loteDeDuplicar(doc: Documento, selecao: Selecao): LoteParaAplicar | null {
+  const camadas = selecionadasDeCima(doc, selecao);
+  if (camadas.length === 0) return null;
+  return { descricao: textos.historico.duplicar(nomes(camadas.map((a) => a.no))), operacoes: camadas.map((a) => ({ op: 'duplicar', alvo: a.no.id, dx: 0, dy: 0 })) };
+}
+
+/** As camadas que existem em `depois` e não em `antes`, sem as de dentro de um grupo também novo. */
+export function camadasNovas(antes: Documento, depois: Documento): string[] {
+  const velhas = new Set(antes.pranchetas.flatMap((p) => todasAsCamadas(p.filhos).map((n) => n.id)));
+  const novas: string[] = [];
+  const andar = (nos: readonly No[]) => {
+    for (const no of nos) {
+      if (!velhas.has(no.id)) novas.push(no.id);
+      else if (no.tipo === 'grupo') andar(no.filhos);
+    }
+  };
+  for (const p of depois.pranchetas) andar(p.filhos);
+  return novas;
+}
+
+/**
+ * Agrupa as camadas selecionadas num grupo novo, com nome livre na prancheta. O catálogo só agrupa
+ * camadas do mesmo nível: quando não são, devolve o motivo para a tela dizer, em vez de um lote que falha.
+ */
+export function loteDeAgrupar(doc: Documento, selecao: Selecao): LoteParaAplicar | 'niveis-diferentes' | null {
+  const camadas = selecionadasDeCima(doc, selecao);
+  const [primeira] = camadas;
+  if (!primeira) return null;
+  if (camadas.some((a) => a.irmaos !== primeira.irmaos)) return 'niveis-diferentes';
+  if (camadas.some((a) => a.no.bloqueado)) return null;
+  const ocupados = new Set(todasAsCamadas(primeira.prancheta.filhos).map((n) => n.nome));
+  const nome = nomeLivre(ocupados, textos.camadas.grupoNovo(1), textos.camadas.grupoNovo);
+  return { descricao: textos.historico.agrupar(nomes(camadas.map((a) => a.no))), operacoes: [{ op: 'agrupar', alvos: camadas.map((a) => a.no.id), nome }] };
+}
+
+/** Desfaz os grupos selecionados. `soltas` são as camadas que saem de dentro, para o editor selecioná-las. */
+export function loteDeDesagrupar(doc: Documento, selecao: Selecao): { lote: LoteParaAplicar; soltas: string[] } | null {
+  const grupos = selecionadasDeCima(doc, selecao).flatMap((a) => (a.no.tipo === 'grupo' && !a.no.bloqueado ? [a.no] : []));
+  if (grupos.length === 0) return null;
+  return {
+    lote: { descricao: textos.historico.desagrupar(nomes(grupos)), operacoes: grupos.map((g) => ({ op: 'desagrupar', alvo: g.id })) },
+    soltas: grupos.flatMap((g) => g.filhos.map((f) => f.id)),
+  };
+}
+
+/** Uma camada como estava e como ficou depois de redimensionar ou girar pela alça. */
+export interface Transformada {
+  no: Pick<No, 'id' | 'nome'>;
+  antes: { x: number; y: number; w: number; h: number; rotacao: number };
+  depois: { x: number; y: number; w: number; h: number; rotacao: number };
+}
+
+/**
+ * Redimensionar ou girar pela alça: UM `alterar` por camada que mudou, só com o que mudou (girar uma
+ * camada em torno do centro manda só a rotação). Nada mudou: não há lote.
+ */
+export function loteDeTransformar(camadas: readonly Transformada[], gesto: 'redimensionar' | 'girar'): LoteParaAplicar | null {
+  const mudadas: Pick<No, 'id' | 'nome'>[] = [];
+  const operacoes = camadas.flatMap(({ no, antes, depois }): Operacao[] => {
+    const props: Record<string, number> = {};
+    if (depois.x !== antes.x || depois.y !== antes.y || depois.w !== antes.w || depois.h !== antes.h) Object.assign(props, { x: depois.x, y: depois.y, largura: depois.w, altura: depois.h });
+    if (depois.rotacao !== antes.rotacao) props.rotacao = depois.rotacao;
+    if (Object.keys(props).length === 0) return [];
+    mudadas.push(no);
+    return [{ op: 'alterar', alvo: no.id, props }];
+  });
+  if (operacoes.length === 0) return null;
+  return { descricao: textos.historico[gesto](nomes(mudadas)), operacoes };
 }
 
 /** O que o editor precisa de um arquivo enviado para pô-lo no documento (resposta de POST /api/arquivos). */
@@ -233,4 +314,38 @@ export function loteDeTrocarImagem(no: Pick<No, 'id' | 'nome'> & { origem?: unkn
     descricao: textos.historico.trocarImagem(no.nome),
     operacoes: [{ op: 'alterar', alvo: no.id, props: { arquivo: arquivo.sha256, larguraOriginal: arquivo.largura, alturaOriginal: arquivo.altura, ...semOrigem } }],
   };
+}
+
+interface Trecho {
+  inicio: number;
+  fim: number;
+}
+
+/**
+ * Os trechos de estilo (posições no conteúdo) depois de o texto mudar. A mudança é o miolo entre o
+ * começo e o fim que os dois textos têm em comum: o que está antes fica, o que está depois anda, e o
+ * trecho que a contém cresce ou encolhe com ela. Trecho que ficou vazio some.
+ */
+export function ajustarTrechos<T extends Trecho>(antes: string, depois: string, trechos: readonly T[]): T[] {
+  if (antes === depois) return [...trechos];
+  const menor = Math.min(antes.length, depois.length);
+  let comeco = 0;
+  while (comeco < menor && antes[comeco] === depois[comeco]) comeco++;
+  let fim = 0;
+  while (fim < menor - comeco && antes[antes.length - 1 - fim] === depois[depois.length - 1 - fim]) fim++;
+  const fimAntigo = antes.length - fim;
+  const fimNovo = depois.length - fim;
+  const levar = (posicao: number): number => (posicao <= comeco ? posicao : posicao >= fimAntigo ? posicao + (fimNovo - fimAntigo) : Math.min(posicao, fimNovo));
+  return trechos.map((t) => ({ ...t, inicio: levar(t.inicio), fim: levar(t.fim) })).filter((t) => t.fim > t.inicio);
+}
+
+/**
+ * O texto de uma camada editado no canvas: UM `alterar` do conteúdo, com os trechos de estilo nas
+ * posições novas. Texto igual não vira lote; texto vazio também não (a camada ficaria invisível).
+ */
+export function loteDeEditarTexto(no: Pick<No, 'id' | 'nome'> & { conteudo: string; trechos?: readonly Trecho[] | undefined }, novo: string): LoteParaAplicar | null {
+  if (novo === no.conteudo || novo.trim() === '') return null;
+  const trechos = no.trechos ? ajustarTrechos(no.conteudo, novo, no.trechos) : undefined;
+  const props = { conteudo: novo, ...(trechos ? { trechos: trechos.length > 0 ? trechos : null } : {}) };
+  return { descricao: textos.historico.editarTexto(no.nome), operacoes: [{ op: 'alterar', alvo: no.id, props }] };
 }

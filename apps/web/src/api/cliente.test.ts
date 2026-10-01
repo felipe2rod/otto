@@ -1,3 +1,4 @@
+import { VERSAO_DO_CATALOGO, VERSAO_DO_FORMATO } from '@otto/documento';
 import { CABECALHOS, DocumentoRenomeado as Coisa } from '@otto/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { criarCliente } from './cliente';
@@ -29,7 +30,9 @@ describe('cliente da API', () => {
     const cabecalhos = new Headers(init?.headers);
     expect(init?.method).toBe('POST');
     expect(cabecalhos.get(CABECALHOS.cliente.nome)).toBe(CABECALHOS.cliente.valor);
-    expect(cabecalhos.get(CABECALHOS.catalogo)).toBe('1');
+    // a versão do CATÁLOGO de operações, não a do formato do documento salvo
+    expect(cabecalhos.get(CABECALHOS.catalogo)).toBe(String(VERSAO_DO_CATALOGO));
+    expect(VERSAO_DO_CATALOGO).not.toBe(VERSAO_DO_FORMATO);
     expect(cabecalhos.get('Content-Type')).toBe('application/json');
     expect(init?.body).toBe('{"nome":"x"}');
   });

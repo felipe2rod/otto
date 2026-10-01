@@ -4,7 +4,7 @@
 //
 // A conta nunca vai na requisição: a API resolve. Sem login (ADR 035) não há cookie; `cabecalhos`
 // existe para o componente de servidor repassar o que o navegador mandou, quando houver.
-import { VERSAO_DO_FORMATO } from '@otto/documento';
+import { VERSAO_DO_CATALOGO } from '@otto/documento';
 import { CABECALHOS, ErroDaApi } from '@otto/shared';
 
 type Buscar = (endereco: string, init?: RequestInit) => Promise<Response>;
@@ -40,7 +40,7 @@ export function criarCliente(opcoes: { fetch?: Buscar; base?: string; cabecalhos
     const cabecalhos: Record<string, string> = { Accept: 'application/json', ...opcoes.cabecalhos };
     if (metodo !== 'GET') {
       cabecalhos[CABECALHOS.cliente.nome] = CABECALHOS.cliente.valor;
-      cabecalhos[CABECALHOS.catalogo] = String(VERSAO_DO_FORMATO);
+      cabecalhos[CABECALHOS.catalogo] = String(VERSAO_DO_CATALOGO);
       if (bytes) cabecalhos['Content-Type'] = bytes.tipo;
       else if (corpo !== undefined) cabecalhos['Content-Type'] = 'application/json';
     }

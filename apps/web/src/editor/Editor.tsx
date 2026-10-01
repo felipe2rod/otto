@@ -26,10 +26,11 @@ import { type Aviso, criarEnvio } from './envio';
 import { DialogoDeExportar } from './exportar/DialogoDeExportar';
 import { criarExportador } from './exportar/exportador';
 import { criarFonteDaApi, type FonteDaPeca } from './fonteDaPeca';
-import { loteDeDuplicar, loteDeMoverPorSeta, loteDeRemover, loteDeReordenar } from './nucleo/acoes';
+import { loteDeMoverPorSeta, loteDeRemover, loteDeReordenar } from './nucleo/acoes';
 import { criarArmazem, useArmazem } from './nucleo/armazem';
 import { resolverAtalho } from './nucleo/atalhos';
 import { aplicadorDoCatalogo } from './nucleo/catalogo';
+import { agruparSelecao, desagruparSelecao, duplicarSelecao } from './nucleo/comandos';
 import { criarInterface } from './nucleo/interface';
 import { criarSessaoDoDocumento, type Historico, type RespostaDoEnvio, type Salvamento, type SessaoDoDocumento } from './nucleo/sessaoDoDocumento';
 import { criarVisao } from './nucleo/visao';
@@ -56,6 +57,8 @@ export interface EstadoDaPecaAberta {
 }
 
 const SEM_PECA: EstadoDaPecaAberta = { salvamento: 'salvo', pendentes: 0, versao: 0, somenteLeitura: true };
+/** O servidor fala um catálogo de operações mais novo que o desta página: nenhuma escrita entra até recarregar. */
+const CATALOGO_DESATUALIZADO = 'catalogo_desatualizado';
 const SEM_HISTORICO: Historico = { podeDesfazer: false, podeRefazer: false };
 const INTERVALO_DE_NOVA_TENTATIVA = 5000;
 const DURACAO_DO_AVISO = 7000;
@@ -92,6 +95,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   const [comWebGL] = useState(temWebGL);
   const [situacao, setSituacao] = useState<SituacaoDaPeca>({ estado: 'abrindo' });
   const [tentativa, setTentativa] = useState(0);
+  const [catalogoVelho, setCatalogoVelho] = useState(false);
   const paineisVisiveis = useArmazem(iface.armazem, (e) => e.paineisVisiveis);
   const mensagem = useArmazem(aviso, (a) => a);
   const semConexao = useArmazem(estado, (e) => e.salvamento === 'sem-conexao');
@@ -150,7 +154,8 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       aviso,
       enviando,
     });
-    return { interface: iface, documento, somenteLeitura, faltas, listarFontes: () => fonte.listarFontes(), aplicar, inserirArquivos: envio.inserir, trocarImagem: envio.trocarImagem };
+    const avisar = (texto: string) => aviso.definir({ texto, tom: 'erro' });
+    return { interface: iface, documento, somenteLeitura, faltas, listarFontes: () => fonte.listarFontes(), aplicar, avisar, inserirArquivos: envio.inserir, trocarImagem: envio.trocarImagem };
   }, [iface, documento, somenteLeitura, faltas, fonte, aviso, enviando, selecionarPorNome]);
 
   // Abre a peça e cria a sessão do documento. Sem WebGL nem busca: a peça não abre assim.
@@ -209,7 +214,12 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
           faltas.definir((f) => ({ ...f, naoDesenhado: lista }));
         }
         if (e.recusa) {
-          aviso.definir({ texto: erros.doCodigo(e.recusa.codigo), tom: 'erro' });
+          // Catálogo velho não é aviso que some: toda alteração seria recusada igual. A edição trava
+          // e a faixa fica, com a única saída que existe (recarregar).
+          if (e.recusa.codigo === CATALOGO_DESATUALIZADO) {
+            setCatalogoVelho(true);
+            sessao.definirSomenteLeitura(true);
+          } else aviso.definir({ texto: erros.doCodigo(e.recusa.codigo), tom: 'erro' });
           sessao.dispensarRecusa();
         }
       };
@@ -246,6 +256,9 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
     if (r.ok) {
       sessao.adotar({ doc: r.doc, versao: r.versao });
       historico.definir(r.historico);
+    } else if (r.codigo === CATALOGO_DESATUALIZADO) {
+      setCatalogoVelho(true);
+      sessao.definirSomenteLeitura(true);
     } else aviso.definir({ texto: erros.doCodigo(r.codigo), tom: 'erro' });
   });
 
@@ -314,11 +327,24 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
           if (ambiente.aplicar(lote)) iface.selecionar(null);
           break;
         }
-        case 'duplicar': {
-          const copia = doc && loteDeDuplicar(doc, selecao);
-          if (!copia) return;
+        case 'duplicar':
           // a cópia nasce selecionada, como no Photoshop
-          if (ambiente.aplicar(copia.lote)) selecionarPorNome(copia.nomes);
+          if (!duplicarSelecao(ambiente)) return;
+          break;
+        case 'agrupar':
+          // sem o que agrupar, o Ctrl+G continua sendo do navegador
+          if (!doc || selecao?.tipo !== 'camadas') return;
+          agruparSelecao(ambiente);
+          break;
+        case 'desagrupar':
+          if (!doc || selecao?.tipo !== 'camadas') return;
+          desagruparSelecao(ambiente);
+          break;
+        case 'editar-texto': {
+          // só com UMA camada selecionada; se não for de texto, a área do canvas descarta o pedido
+          const id = selecao?.tipo === 'camadas' && selecao.ids.length === 1 ? selecao.ids[0] : undefined;
+          if (!id) return;
+          iface.editarTexto(id);
           break;
         }
         case 'reordenar': {
@@ -343,7 +369,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       window.removeEventListener('keyup', aoSoltar);
       window.removeEventListener('blur', aoPerderOFoco);
     };
-  }, [iface, visao, documento, ambiente, reverter, selecionarPorNome]);
+  }, [iface, visao, documento, ambiente, reverter]);
 
   // Sem conexão: a edição trava (a sessão recusa lote novo) e o lote parado é reenviado, com o
   // mesmo id, quando o navegador volta a ter rede e de tempos em tempos.
@@ -421,7 +447,15 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
                   {erros.doCodigo('sem_conexao')}
                 </p>
               )}
-              {fontesEmFalta.length > 0 && (
+              {catalogoVelho && (
+                <div className={estilos.faixaDeRecarregar} role="alert">
+                  <p>{textos.avisos.catalogoDesatualizado}</p>
+                  <button type="button" onClick={() => window.location.reload()}>
+                    {textos.avisos.recarregar}
+                  </button>
+                </div>
+              )}
+              {fontesEmFalta.length > 0 && !catalogoVelho && (
                 <div className={estilos.faixaDeFonte} role="status">
                   <p>{textos.avisos.fonteEmFalta(fontesEmFalta.map((f) => `${f.familia} ${f.peso}`).join(', '))}</p>
                   <button type="button" onClick={() => void tentarRecursosDeNovo()}>

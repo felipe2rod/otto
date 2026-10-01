@@ -142,6 +142,36 @@
   color: var(--ambar);
 }
 
+/* o Otto foi atualizado com a peça aberta: fica até recarregar, por cima das outras faixas */
+.faixaDeRecarregar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 7px 12px;
+  background: var(--erro-fundo);
+  border-bottom: 1px solid var(--erro);
+  color: #ffd9d3;
+}
+
+.faixaDeRecarregar p {
+  margin: 0;
+}
+
+.faixaDeRecarregar button {
+  padding: 3px 10px;
+  background: none;
+  border: 1px solid currentcolor;
+  border-radius: 4px;
+  color: inherit;
+  white-space: nowrap;
+}
+
 .faixaDeFonte p {
   margin: 0;
 }

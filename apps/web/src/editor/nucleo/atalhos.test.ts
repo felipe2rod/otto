@@ -63,6 +63,16 @@ describe('atalhos', () => {
     expect(resolverAtalho(tecla({ key: 'j' }), noCanvas)).toBeNull();
   });
 
+  it('Ctrl+G agrupa e Ctrl+Shift+G desagrupa', () => {
+    expect(resolverAtalho(tecla({ key: 'g', ctrlKey: true }), noCanvas)).toEqual({ tipo: 'agrupar' });
+    expect(resolverAtalho(tecla({ key: 'G', ctrlKey: true, shiftKey: true }), noCanvas)).toEqual({ tipo: 'desagrupar' });
+  });
+
+  it('Enter, com o foco no canvas, edita o texto da camada selecionada', () => {
+    expect(resolverAtalho(tecla({ key: 'Enter' }), noCanvas)).toEqual({ tipo: 'editar-texto' });
+    expect(resolverAtalho(tecla({ key: 'Enter' }), { emCampoDeTexto: false, focoNoCanvas: false })).toBeNull();
+  });
+
   it('Ctrl+] traz para a frente e Ctrl+[ envia para trás, um passo', () => {
     expect(resolverAtalho(tecla({ key: ']', ctrlKey: true }), noCanvas)).toEqual({ tipo: 'reordenar', sentido: 1 });
     expect(resolverAtalho(tecla({ key: '[', ctrlKey: true }), noCanvas)).toEqual({ tipo: 'reordenar', sentido: -1 });

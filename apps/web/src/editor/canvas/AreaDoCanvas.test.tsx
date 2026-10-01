@@ -1,15 +1,16 @@
 // @vitest-environment jsdom
 
-import type { Documento } from '@otto/documento';
+import type { Documento, Operacao } from '@otto/documento';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { editor as textos } from '../../textos/editor';
 import { montarDocumentoDeExemplo } from '../bancada/documentoDeExemplo';
 import { criarArmazem } from '../nucleo/armazem';
 import { criarInterface } from '../nucleo/interface';
+import type { SessaoDoDocumento } from '../nucleo/sessaoDoDocumento';
 import { criarVisao } from '../nucleo/visao';
 import { AreaDoCanvas } from './AreaDoCanvas';
-import { criarArmazemAoVivo, criarArmazemDaPrevia } from './controleDeGestos';
+import { criarArmazemDaPrevia } from './controleDeGestos';
 import type { FabricaDeMotor, MotorDeRender, RecursosEmFalta } from './motor';
 
 beforeAll(() => {
@@ -151,24 +152,6 @@ describe('área do canvas', () => {
     expect((await screen.findByRole('alert')).textContent).toContain(textos.avisos.motorNaoCarregou.titulo);
   });
 
-  it('o documento ao vivo (redimensionar) vai ao motor no lugar do da sessão, e ao encerrar o da sessão volta', async () => {
-    const { motor } = motorFalso();
-    const documento = criarArmazem<Documento | undefined>(EXEMPLO);
-    const aoVivo = criarArmazemAoVivo();
-    render(<AreaDoCanvas visao={criarVisao()} interface={criarInterface()} documento={documento} aoVivo={aoVivo} criarMotor={async () => motor} />);
-    await waitFor(() => expect(motor.definirDocumento).toHaveBeenCalledWith(EXEMPLO));
-    const preparos = motor.prepararRecursos.mock.calls.length;
-
-    const temporario = { ...EXEMPLO, pranchetas: [...EXEMPLO.pranchetas] };
-    act(() => aoVivo.definir(temporario));
-    expect(motor.definirDocumento).toHaveBeenLastCalledWith(temporario);
-    // o documento ao vivo usa os mesmos recursos: não busca fonte nem imagem a cada quadro
-    expect(motor.prepararRecursos.mock.calls.length).toBe(preparos);
-
-    act(() => aoVivo.definir(null));
-    expect(motor.definirDocumento).toHaveBeenLastCalledWith(EXEMPLO);
-  });
-
   it('repassa o que o motor avisa que faltou', async () => {
     const { motor, faltar } = motorFalso();
     const aoMudarEmFalta = vi.fn();
@@ -235,5 +218,92 @@ describe('área do canvas', () => {
 
     expect(motor.destruir).toHaveBeenCalledTimes(1);
     expect(motor.definirCamera).not.toHaveBeenCalled();
+  });
+});
+
+describe('área do canvas: editar texto no lugar', () => {
+  const titulo = EXEMPLO.pranchetas[0]?.filhos.find((n) => n.tipo === 'texto' && n.nome === 'Título');
+  if (titulo?.tipo !== 'texto') throw new Error('o documento de exemplo precisa do Título');
+
+  function montarComSessao(opcoes: { somenteLeitura?: boolean } = {}) {
+    const { motor } = motorFalso();
+    const iface = criarInterface();
+    const documento = criarArmazem<Documento | undefined>(EXEMPLO);
+    const aplicar = vi.fn((_descricao: string, _operacoes: unknown[]) => ({ ok: true as const }));
+    const sessao = { obter: () => ({ visivel: EXEMPLO, somenteLeitura: opcoes.somenteLeitura ?? false }), aplicar } as unknown as SessaoDoDocumento<Documento, Operacao>;
+    const visao = criarVisao();
+    render(
+      <AreaDoCanvas
+        visao={visao}
+        interface={iface}
+        documento={documento}
+        sessao={() => sessao}
+        criarMotor={async () => motor}
+        recursos={{ imagem: async () => new ArrayBuffer(0), fonte: async () => new ArrayBuffer(0) }}
+      />,
+    );
+    return { iface, aplicar, visao };
+  }
+  const campo = () => screen.getByRole('textbox', { name: textos.canvas.editarTexto('Título') }) as HTMLTextAreaElement;
+
+  it('pedir a edição abre um campo com o texto da camada, com o foco nele', () => {
+    const { iface } = montarComSessao();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    act(() => iface.editarTexto(titulo.id));
+    expect(campo().value).toBe(titulo.conteudo);
+    expect(document.activeElement).toBe(campo());
+    expect(screen.getByText(textos.canvas.dicaDeEditarTexto)).toBeDefined();
+  });
+
+  it('Ctrl+Enter confirma: UM lote `alterar` com o texto novo, e o campo fecha', () => {
+    const { iface, aplicar } = montarComSessao();
+    act(() => iface.editarTexto(titulo.id));
+    fireEvent.change(campo(), { target: { value: 'Camadas de fato' } });
+    fireEvent.keyDown(campo(), { key: 'Enter', ctrlKey: true });
+
+    expect(aplicar).toHaveBeenCalledTimes(1);
+    expect(aplicar.mock.calls[0]?.[1]).toEqual([{ op: 'alterar', alvo: titulo.id, props: { conteudo: 'Camadas de fato' } }]);
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(iface.armazem.obter().editandoTexto).toBeNull();
+  });
+
+  it('Enter sozinho é quebra de linha, não confirma; sair do campo confirma', () => {
+    const { iface, aplicar } = montarComSessao();
+    act(() => iface.editarTexto(titulo.id));
+    fireEvent.keyDown(campo(), { key: 'Enter' });
+    expect(aplicar).not.toHaveBeenCalled();
+    expect(campo()).toBeDefined();
+
+    fireEvent.change(campo(), { target: { value: 'Outra\nlinha' } });
+    fireEvent.blur(campo());
+    expect(aplicar.mock.calls[0]?.[1]).toEqual([{ op: 'alterar', alvo: titulo.id, props: { conteudo: 'Outra\nlinha' } }]);
+  });
+
+  it('Esc desiste: nenhum lote, e o campo fecha', () => {
+    const { iface, aplicar } = montarComSessao();
+    act(() => iface.editarTexto(titulo.id));
+    fireEvent.change(campo(), { target: { value: 'Não vale' } });
+    fireEvent.keyDown(campo(), { key: 'Escape' });
+    expect(aplicar).not.toHaveBeenCalled();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('texto sem mudança não vira lote', () => {
+    const { iface, aplicar } = montarComSessao();
+    act(() => iface.editarTexto(titulo.id));
+    fireEvent.keyDown(campo(), { key: 'Enter', ctrlKey: true });
+    expect(aplicar).not.toHaveBeenCalled();
+  });
+
+  it('peça só para leitura, camada bloqueada ou camada que não é de texto: o campo não abre', () => {
+    const leitura = montarComSessao({ somenteLeitura: true });
+    act(() => leitura.iface.editarTexto(titulo.id));
+    expect(screen.queryByRole('textbox')).toBeNull();
+    cleanup();
+
+    const outra = montarComSessao();
+    const forma = EXEMPLO.pranchetas[0]?.filhos.find((n) => n.tipo !== 'texto');
+    act(() => outra.iface.editarTexto(forma?.id ?? ''));
+    expect(screen.queryByRole('textbox')).toBeNull();
   });
 });
