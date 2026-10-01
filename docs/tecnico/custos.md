@@ -4,6 +4,9 @@ Levantamento de 2026-09-26 para o agente do [ADR 029](../decisoes/029-agente-pro
 
 Regra deste documento: todo número tem fonte (URL) ou está marcado **[ESTIMATIVA]** com a premissa ao lado. O que não foi conferido está escrito **não verificado**. Preços em dólar; conversão para real pela cotação da seção 7.
 
+
+> **Medição de 2026-09-26 (chave do Felipe, conta atual).** `GET /v1/models` respondeu 200 e lista 78 modelos, com 12 Claude. **Toda chamada a modelo Claude (12 de 12) e a modelo OpenAI testado (gpt-4.1, gpt-4o, gpt-4o-mini) devolveu HTTP 403 `this model is not available for your subscription tier`**, nos dois formatos (`/v1/messages` e `/v1/chat/completions`). Modelos abertos testados (Llama 4 Maverick, gpt-oss-120b) responderam 200. Tool use, imagem e cache com Claude **continuam não testados**. O item 1 da seção "O que medir no spike" está respondido: a conta não está no tier que dá acesso a modelos comerciais. Repetido no mesmo dia com uma segunda chave, criada pelo Felipe: mesmo resultado. **O bloqueio é da conta, não da chave.** Script em scratchpad da sessão, não versionado.
+
 ## 0. Resumo: o ADR 029 cabe na DigitalOcean?
 
 | Requisito do ADR 029 | Na DigitalOcean, com Claude | Estado |
@@ -13,7 +16,7 @@ Regra deste documento: todo número tem fonte (URL) ou está marcado **[ESTIMATI
 | Cache de prompt com TTL de 1h | Documentado em Chat Completions e Responses (`cache_control` com `ttl` `5m` ou `1h`), com preço de escrita 5m, escrita 1h e leitura por modelo. **No `/v1/messages` (formato Anthropic) o cache não está documentado** | Parcial: verificado nos endpoints compatíveis com OpenAI; **não verificado** no formato Anthropic |
 | Streaming | Parâmetro `stream` documentado na referência da API | Verificado em documentação |
 | Pensamento adaptativo | A página de modelos lista "Adaptive thinking" no Sonnet 5 e no Opus 5.5; a página de limites diz que "Anthropic's extended thinking" não está disponível | **Contraditório.** Ver risco R4 |
-| Acesso aos modelos Anthropic | Contas em Tier 1 e Tier 2 **não têm** acesso a nenhum modelo Anthropic | **Bloqueante até conferir o tier da conta do Felipe** |
+| Acesso aos modelos Anthropic | Contas em Tier 1 e Tier 2 **não têm** acesso a nenhum modelo Anthropic | **Medido em 2026-09-26: a conta atual está bloqueada (HTTP 403 em todos os Claude).** Bloqueante até o tier subir |
 
 Conclusão curta: preço igual ao da Anthropic, tool use documentado, cache documentado só no formato OpenAI, **visão com Claude sem nenhuma documentação**. O spike do agente começa por essas duas perguntas, antes de qualquer medição de custo.
 

@@ -53,7 +53,7 @@ Não existe ferramenta que o editor não tenha nem operação que só o agente f
 | Tool use com Claude | Documentado | Atende |
 | Imagem (visão) com Claude | **Não documentado** (a página multimodal só cita modelos abertos) | **Bloqueia o passo "Conferir"**. Primeira coisa do spike |
 | Cache de prompt, TTL de 1h | Documentado só no formato OpenAI (Chat Completions/Responses), não em `/v1/messages` | Sem cache, a tarefa custa ~2× |
-| Acesso a modelos Anthropic | Contas Tier 1 e 2 não têm acesso | Conferir o tier da conta antes do spike |
+| Acesso a modelos Anthropic | **Medido em 2026-09-26 com a chave do Felipe: bloqueado.** `GET /v1/models` lista os 12 Claude (inclusive Sonnet 5, Opus 5.5 e Haiku 4.5), mas toda chamada devolve HTTP 403 "this model is not available for your subscription tier". O mesmo com modelos OpenAI (gpt-4.1, gpt-4o). Modelos abertos (Llama 4 Maverick, gpt-oss-120b) respondem | **Bloqueia o agente na DigitalOcean até o tier subir.** Tool use, imagem e cache ficaram sem teste, porque nenhuma chamada a Claude passou |
 | Preço | Igual ao da Anthropic nos três modelos | A DigitalOcean se justifica pelo crédito, não pelo preço |
 | Haiku 4.5 | Saída limitada a 8.192 tokens na DigitalOcean; retirada anunciada pela Anthropic "not sooner than" 2026-10-15 | Não fazer desenho depender dele |
 
