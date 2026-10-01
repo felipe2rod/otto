@@ -1,0 +1,178 @@
+# Ambiente de desenvolvimento do Otto (ADR 035). `docker compose up` sobe tudo.
+# O disco do repositório é exFAT e recusa link simbólico: o código entra por montagem
+# e CADA node_modules é um volume nomeado. Pacote novo no workspace precisa de um volume aqui
+# e da pasta correspondente no alvo "dev" de docker/Dockerfile.
+name: otto
+
+x-node: &node
+  image: otto-dev:local
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+    target: dev
+  user: node
+  init: true
+  working_dir: /workspace
+  volumes:
+    - .:/workspace
+    - nm_raiz:/workspace/node_modules
+    - nm_api:/workspace/apps/api/node_modules
+    - nm_web:/workspace/apps/web/node_modules
+    - nm_documento:/workspace/packages/documento/node_modules
+    - nm_render:/workspace/packages/render/node_modules
+    - nm_shared:/workspace/packages/shared/node_modules
+    - next_cache:/workspace/apps/web/.next
+    - arquivos_locais:/dados/arquivos
+
+# O que API e worker têm em comum. Nenhum dos dois recebe a URL do papel migrador.
+x-servidor: &servidor
+  AMBIENTE: desenvolvimento
+  NIVEL_DE_LOG: ${NIVEL_DE_LOG:-info}
+  BANCO_URL_APP: postgresql://otto_app:${BANCO_SENHA_APP:-app-dev}@banco:5432/otto
+  # SUPOSIÇÃO A CONFIRMAR (ADR 035, item 7): sem login, uma conta fixa, semeada pela migração.
+  CONTA_FIXA_ID: 01990000-0000-7000-8000-000000000001
+  # Compatível com S3 (serviço "armazenamento"). Plano B, de uma máquina só:
+  #   ARMAZENAMENTO_ADAPTADOR: disco-local  e  ARMAZENAMENTO_PASTA: /dados/arquivos
+  ARMAZENAMENTO_ADAPTADOR: s3
+  ARMAZENAMENTO_ENDERECO: http://armazenamento:7070
+  ARMAZENAMENTO_BUCKET: otto
+  ARMAZENAMENTO_CHAVE_DE_ACESSO: ${ARMAZENAMENTO_CHAVE_DE_ACESSO:-otto-dev}
+  ARMAZENAMENTO_CHAVE_SECRETA: ${ARMAZENAMENTO_CHAVE_SECRETA:-segredo-do-armazenamento-dev}
+
+services:
+  # ---------- o que atende ----------
+  borda:
+    image: caddy:2-alpine
+    volumes:
+      - ./docker/borda/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      # única porta publicada, e só na máquina local. Ocupadas no host: 80, 3030, 3306, 5433, 7070, 8137.
+      - "127.0.0.1:${PORTA_DA_BORDA:-8080}:8080"
+    depends_on:
+      api: { condition: service_healthy }
+      web: { condition: service_started }
+
+  api:
+    <<: *node
+    command: ["pnpm", "--filter", "@otto/api", "dev"]
+    environment:
+      <<: *servidor
+      PORTA: "3000"
+    healthcheck: &saude
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+process.env.PORTA+'/api/saude/pronto').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 5s
+    depends_on:
+      instalar: { condition: service_completed_successfully }
+      semear: { condition: service_completed_successfully }
+      armazenamento: { condition: service_started }
+
+  worker:
+    <<: *node
+    command: ["pnpm", "--filter", "@otto/api", "dev:worker"]
+    environment:
+      <<: *servidor
+      PORTA: "3001"
+    healthcheck: *saude
+    depends_on:
+      instalar: { condition: service_completed_successfully }
+      semear: { condition: service_completed_successfully }
+      armazenamento: { condition: service_started }
+
+  web:
+    <<: *node
+    command: ["pnpm", "--filter", "@otto/web", "dev"]
+    environment:
+      # endereço interno da API, para componente de servidor; o navegador usa /api na mesma origem
+      API_ENDERECO_INTERNO: http://api:3000
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      instalar: { condition: service_completed_successfully }
+
+  # ---------- execução única ----------
+  instalar:
+    <<: *node
+    # instala nos volumes e gera o cliente do banco (arquivo gerado, fora do git)
+    command: ["sh", "-c", "pnpm install --frozen-lockfile && pnpm --filter @otto/api banco:gerar"]
+
+  migracao:
+    <<: *node
+    # único serviço de desenvolvimento com a URL do papel migrador (ADR 023)
+    command: ["pnpm", "--filter", "@otto/api", "banco:migrar"]
+    environment:
+      BANCO_URL_MIGRADOR: postgresql://otto_migrador:${BANCO_SENHA_MIGRADOR:-migrador-dev}@banco:5432/otto
+    depends_on:
+      instalar: { condition: service_completed_successfully }
+      banco: { condition: service_healthy }
+
+  semear:
+    <<: *node
+    # biblioteca do Otto (fontes base). Idempotente; roda como otto_app, depois da migração
+    command: ["pnpm", "--filter", "@otto/api", "biblioteca:semear"]
+    environment:
+      <<: *servidor
+    depends_on:
+      migracao: { condition: service_completed_successfully }
+      armazenamento: { condition: service_started }
+
+  # ---------- dados ----------
+  banco:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${BANCO_SENHA_SUPERUSUARIO:-superusuario-dev}
+      BANCO_SENHA_MIGRADOR: ${BANCO_SENHA_MIGRADOR:-migrador-dev}
+      BANCO_SENHA_APP: ${BANCO_SENHA_APP:-app-dev}
+      BANCO_SENHA_OPERACAO: ${BANCO_SENHA_OPERACAO:-operacao-dev}
+    volumes:
+      - dados_do_banco:/var/lib/postgresql/data
+      - ./docker/banco:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # só fica saudável depois que o script de início criou a base e os papéis
+      test: ["CMD-SHELL", "psql -U otto_app -d otto -c 'select 1' >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  armazenamento:
+    # Servidor compatível com S3 para desenvolvimento (o MinIO foi arquivado em 2026-04).
+    # Guarda em pasta comum; cada pasta de primeiro nível é um bucket.
+    image: versity/versitygw:v1.8.0
+    user: "0:0"
+    entrypoint: ["sh", "-c", "mkdir -p /dados/otto /dados/otto-teste && exec versitygw posix /dados"]
+    environment:
+      ROOT_ACCESS_KEY: ${ARMAZENAMENTO_CHAVE_DE_ACESSO:-otto-dev}
+      ROOT_SECRET_KEY: ${ARMAZENAMENTO_CHAVE_SECRETA:-segredo-do-armazenamento-dev}
+    volumes:
+      - objetos:/dados
+
+  # ---------- testes (não sobe com `docker compose up`) ----------
+  teste:
+    <<: *node
+    profiles: ["teste"]
+    command: ["pnpm", "test"]
+    environment:
+      BANCO_DE_TESTE_URL_MIGRADOR: postgresql://otto_migrador:${BANCO_SENHA_MIGRADOR:-migrador-dev}@banco:5432/otto_teste
+      BANCO_DE_TESTE_URL_APP: postgresql://otto_app:${BANCO_SENHA_APP:-app-dev}@banco:5432/otto_teste
+      ARMAZENAMENTO_S3_DE_TESTE_ENDERECO: http://armazenamento:7070
+      ARMAZENAMENTO_S3_DE_TESTE_BUCKET: otto-teste
+      ARMAZENAMENTO_S3_DE_TESTE_CHAVE_DE_ACESSO: ${ARMAZENAMENTO_CHAVE_DE_ACESSO:-otto-dev}
+      ARMAZENAMENTO_S3_DE_TESTE_CHAVE_SECRETA: ${ARMAZENAMENTO_CHAVE_SECRETA:-segredo-do-armazenamento-dev}
+    depends_on:
+      instalar: { condition: service_completed_successfully }
+      banco: { condition: service_healthy }
+      armazenamento: { condition: service_started }
+
+volumes:
+  nm_raiz:
+  nm_api:
+  nm_web:
+  nm_documento:
+  nm_render:
+  nm_shared:
+  next_cache:
+  arquivos_locais:
+  objetos:
+  dados_do_banco:

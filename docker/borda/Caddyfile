@@ -1,0 +1,19 @@
+# Borda do desenvolvimento: uma origem só para página e API, como na produção.
+# /api/* vai para a API; o resto vai para o web. Sem cookie entre origens e sem CORS.
+{
+	auto_https off
+	admin off
+}
+
+:8080 {
+	handle /api/* {
+		reverse_proxy api:3000 {
+			# não segura a resposta: o fluxo de eventos da tarefa (fatia 3) precisa sair na hora
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

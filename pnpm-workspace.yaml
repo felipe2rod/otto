@@ -1,0 +1,12 @@
+# Workspaces do monorepo (ADR 009). Pacote novo entra pelo padrão abaixo e precisa de um volume
+# para o node_modules dele em compose.yaml (o disco é exFAT, sem symlink).
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# O pnpm não roda script de instalação de dependência sem aprovação.
+# Para aprovar um novo: docker compose run --rm instalar pnpm approve-builds <pacote>
+allowBuilds:
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true

@@ -1,0 +1,17 @@
+# Sem isto, poc/dados (193 MB), poc/modelos (171 MB) e o .env entram no contexto de build.
+.git
+.env
+.env.*
+!.env.example
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/*.tsbuildinfo
+poc
+spikes
+docs
+avaliacao
+.claude
+.mcp.json
+*.log
