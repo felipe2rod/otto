@@ -12,17 +12,23 @@ export type EstadoDoExportador =
   | { fase: 'parado' }
   /** O pedido saiu e a API ainda não respondeu. */
   | { fase: 'pedindo'; pedido: PedidoDeExportacao; arquivos: readonly ArquivoDaExportacao[] }
+  /**
+   * `pedido` indefinido nas três fases abaixo: a exportação foi RETOMADA depois de recarregar a página.
+   * Sabe-se o que a API diz dela, não o pedido original: dá para acompanhar e baixar, não para repetir.
+   */
   /** Na fila ou rodando. `arquivos` junta os desta exportação com os de tentativas anteriores. */
-  | { fase: 'andando'; pedido: PedidoDeExportacao; exportacao: Exportacao; arquivos: readonly ArquivoDaExportacao[] }
+  | { fase: 'andando'; pedido: PedidoDeExportacao | undefined; exportacao: Exportacao; arquivos: readonly ArquivoDaExportacao[] }
   /** Pronta, ou pronta em parte (ver `exportacao.falhas`). */
-  | { fase: 'terminou'; pedido: PedidoDeExportacao; exportacao: Exportacao; arquivos: readonly ArquivoDaExportacao[] }
+  | { fase: 'terminou'; pedido: PedidoDeExportacao | undefined; exportacao: Exportacao; arquivos: readonly ArquivoDaExportacao[] }
   /** `retomar`: a exportação entrou na fila e foi a consulta que não respondeu. Tentar de novo volta a consultar essa mesma. */
-  | { fase: 'falhou'; pedido: PedidoDeExportacao; codigo: string; arquivos: readonly ArquivoDaExportacao[]; retomar?: Exportacao };
+  | { fase: 'falhou'; pedido: PedidoDeExportacao | undefined; codigo: string; arquivos: readonly ArquivoDaExportacao[]; retomar?: Exportacao };
 
 export interface Exportador {
   armazem: Pick<Armazem<EstadoDoExportador>, 'obter' | 'assinar'>;
   /** Começa uma exportação do zero. */
   exportar(pedido: PedidoDeExportacao): void;
+  /** Volta a acompanhar uma exportação que já estava em curso (a página foi recarregada). Não pede nada. */
+  retomar(exportacao: Exportacao): void;
   /** Depois de uma falha: retoma a consulta se a exportação já estava na fila; senão, pede de novo. */
   tentarDeNovo(): void;
   /** Depois de um resultado em parte: pede só as pranchetas que falharam e mantém os arquivos que saíram. */
@@ -55,7 +61,7 @@ export function criarExportador(deps: DependenciasDoExportador): Exportador {
    * `retomar`: em vez de pedir, volta a consultar uma exportação que já está na fila. `anteriores` são
    * os arquivos de tentativas anteriores (resultado em parte), que continuam para baixar.
    */
-  async function rodar(pedido: PedidoDeExportacao, anteriores: readonly ArquivoDaExportacao[], retomar?: Exportacao): Promise<void> {
+  async function rodar(pedido: PedidoDeExportacao | undefined, anteriores: readonly ArquivoDaExportacao[], retomar?: Exportacao): Promise<void> {
     const minha = ++vez;
     const atual = () => minha === vez;
 
@@ -72,6 +78,7 @@ export function criarExportador(deps: DependenciasDoExportador): Exportador {
     let exportacao = retomar;
     if (exportacao) armazem.definir({ fase: 'andando', pedido, exportacao, arquivos: [...anteriores, ...exportacao.arquivos] });
     else {
+      if (!pedido) return;
       armazem.definir({ fase: 'pedindo', pedido, arquivos: anteriores });
       const pedida = await deps.api.pedir(pedido);
       if (!atual()) return;
@@ -102,13 +109,18 @@ export function criarExportador(deps: DependenciasDoExportador): Exportador {
   return {
     armazem,
     exportar: (pedido) => void rodar(pedido, SEM_ARQUIVOS),
+    retomar(exportacao) {
+      // só o que ainda está em curso, e só se o editor não estiver cuidando de outra
+      if (armazem.obter().fase !== 'parado' || ESTADOS_FINAIS_DA_EXPORTACAO.includes(exportacao.estado)) return;
+      void rodar(undefined, SEM_ARQUIVOS, exportacao);
+    },
     tentarDeNovo() {
       const e = armazem.obter();
-      if (e.fase === 'falhou') void rodar(e.pedido, e.arquivos, e.retomar);
+      if (e.fase === 'falhou' && (e.pedido || e.retomar)) void rodar(e.pedido, e.arquivos, e.retomar);
     },
     tentarAsQueFalharam() {
       const e = armazem.obter();
-      if (e.fase !== 'terminou' || e.exportacao.falhas.length === 0) return;
+      if (e.fase !== 'terminou' || !e.pedido || e.exportacao.falhas.length === 0) return;
       void rodar({ ...e.pedido, pranchetas: e.exportacao.falhas.map((f) => f.pranchetaId) }, e.arquivos);
     },
     limpar() {

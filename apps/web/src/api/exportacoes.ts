@@ -1,7 +1,7 @@
 // Exportação de uma peça (packages/shared/src/exportacao.ts): o relatório antes de exportar, o
 // pedido que entra na fila e a consulta do andamento. O download não passa por aqui: é navegação
 // comum para `arquivos[].baixar`, que responde 302 para um link assinado novo a cada pedido.
-import { Exportacao, type PedidoDeExportacao, RelatorioDeExportacao } from '@otto/shared';
+import { Exportacao, ListaDeExportacoes, type PedidoDeExportacao, RelatorioDeExportacao } from '@otto/shared';
 import type { Cliente, Resposta } from './cliente';
 
 export type ResultadoDoRelatorio = { ok: true; relatorio: RelatorioDeExportacao } | { ok: false; codigo: string };
@@ -15,6 +15,11 @@ export interface ApiDeExportacoes {
   /** Põe a exportação na fila. É da versão da peça neste momento. */
   pedir(pedido: PedidoDeExportacao): Promise<ResultadoDaExportacao>;
   consultar(id: string): Promise<ResultadoDaExportacao>;
+  /**
+   * As exportações da peça dos últimos 7 dias, em curso ou não, da mais nova para a mais velha, sem o
+   * relatório. É como o editor retoma depois de recarregar. Se a lista não vier, devolve vazio.
+   */
+  listar(): Promise<Exportacao[]>;
 }
 
 export function criarApiDeExportacoes(cliente: Cliente, pecaId: string): ApiDeExportacoes {
@@ -27,5 +32,9 @@ export function criarApiDeExportacoes(cliente: Cliente, pecaId: string): ApiDeEx
     },
     pedir: async (pedido) => daExportacao(await cliente.escrever(Exportacao, 'POST', base, pedido)),
     consultar: async (id) => daExportacao(await cliente.ler(Exportacao, `/api/exportacoes/${encodeURIComponent(id)}`)),
+    async listar() {
+      const r = await cliente.ler(ListaDeExportacoes, base);
+      return r.ok ? r.dados.itens : [];
+    },
   };
 }

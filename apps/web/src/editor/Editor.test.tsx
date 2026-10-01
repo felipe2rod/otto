@@ -90,6 +90,7 @@ function montar(
             relatorio: vi.fn(async () => ({ ok: true as const, relatorio: RELATORIO })),
             pedir: vi.fn(async () => ({ ok: true as const, exportacao: EXPORTACAO })),
             consultar: vi.fn(async () => ({ ok: true as const, exportacao: EXPORTACAO })),
+            listar: vi.fn(async () => [] as Exportacao[]),
             ...opcoes.exportacoes,
           },
         }
@@ -610,7 +611,7 @@ describe('casca do editor: exportar', () => {
 
   /** O botão só liga quando o relatório chega. */
   async function clicarEmExportarPsd() {
-    const botao = await screen.findByRole('button', { name: textosDeExportar.botao.psd });
+    const botao = await screen.findByRole('button', { name: textosDeExportar.botao.pacote });
     await waitFor(() => expect(botao).toHaveProperty('disabled', false));
     await act(async () => fireEvent.click(botao));
   }
@@ -627,7 +628,22 @@ describe('casca do editor: exportar', () => {
     fireEvent.click(exportarDoTopo());
 
     expect(await screen.findByRole('dialog', { name: textosDeExportar.daPeca('Lançamento Crové') })).toBeDefined();
-    await waitFor(() => expect(fonte.exportacoes?.relatorio).toHaveBeenCalledWith({ formato: 'psd', arquivos: 'por-prancheta' }));
+    await waitFor(() => expect(fonte.exportacoes?.relatorio).toHaveBeenCalledWith({ formato: 'psd', arquivos: 'por-prancheta', pacote: true }));
+  });
+
+  it('ao abrir a peça, a exportação que estava em curso é retomada: o topo mostra o andamento sem ninguém pedir de novo', async () => {
+    const emCurso: Exportacao = { ...EXPORTACAO, estado: 'rodando', progresso: { pranchetasProntas: 1, pranchetasNoTotal: 2 } };
+    const { fonte } = await abrir({ exportacoes: { listar: vi.fn(async () => [emCurso]), consultar: vi.fn(async () => ({ ok: true as const, exportacao: emCurso })) } });
+
+    expect(await screen.findByRole('button', { name: textosDeExportar.topo.andando(1, 2) })).toBeDefined();
+    expect(fonte.exportacoes?.pedir).not.toHaveBeenCalled();
+  });
+
+  it('exportação recente já terminada não vira aviso no topo ao abrir a peça: fica na lista de recentes do diálogo', async () => {
+    const pronta: Exportacao = { ...EXPORTACAO, estado: 'pronta', progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 } };
+    const { fonte } = await abrir({ exportacoes: { listar: vi.fn(async () => [pronta]) } });
+    await waitFor(() => expect(fonte.exportacoes?.listar).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: textosDeExportar.topo.pronto })).toBeNull();
   });
 
   it('fechar o diálogo devolve o foco a quem o abriu', async () => {

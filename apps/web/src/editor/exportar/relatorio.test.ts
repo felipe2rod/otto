@@ -104,4 +104,77 @@ describe('ler o relatório', () => {
   it('relatório de PNG (sem camadas) não inventa resumo', () => {
     expect(lerRelatorio(vazio)).toMatchObject({ temCamadas: false, comEdicao: 0, emPixel: [] });
   });
+
+  it('SVG e PDF: o que fica de fora do arquivo tem lista própria, separada do que vai como imagem', () => {
+    const r = lerRelatorio(
+      {
+        ...vazio,
+        camadas: [
+          linha('Título', 'texto', 'nativo-editavel', 'no:texto'),
+          linha('Selo', 'forma', 'raster-com-aviso', 'efeito:sombraInterna'),
+          linha('Foto', 'imagem', 'raster-com-aviso', 'mascara:degrade'),
+          linha('Curvas', 'ajuste', 'omitido-com-aviso', 'ajuste:curvas'),
+        ],
+        avisos: [
+          { codigo: 'ficou-de-fora', texto: 'As camadas de ajuste não vão…' },
+          { codigo: 'modo-de-mesclagem-trocado', texto: 'Há camada com modo…' },
+          { codigo: 'texto-em-linhas', texto: 'No Illustrator ele não requebra sozinho…' },
+          { codigo: 'virou-imagem', texto: 'Algumas camadas saíram como imagem…' },
+        ],
+      },
+      'svg',
+    );
+
+    expect(r.emPixel).toEqual([
+      { onde: 'Feed / Selo', motivo: t.emPixel.porPrefixo.efeito },
+      { onde: 'Feed / Foto', motivo: t.emPixel.porPrefixo.mascara },
+    ]);
+    expect(r.deFora).toEqual([{ onde: 'Feed / Curvas', motivo: t.deFora.ajuste }]);
+    expect(r.modoTrocado).toBe(true);
+    expect(r.resumo).toBe(t.resumo(1, 2, 0, 1));
+    // o que tem seção própria não se repete nas observações; o texto em linhas tem frase da tela
+    expect(r.observacoes).toEqual([t.observacoes.doCodigo['texto-em-linhas']]);
+    expect(JSON.stringify(r)).not.toMatch(/Illustrator|Photoshop/i);
+    // na tabela, a camada de fora diz que fica de fora
+    expect(r.camadas.at(-1)).toEqual({ onde: 'Feed / Curvas', tipo: 'camada de ajuste', comoVai: t.todas.destinos['omitido-com-aviso'] });
+  });
+
+  it('no PSD nada fica de fora, e o título do que perdeu a edição fala em pixel; no vetor, em imagem', () => {
+    const camadas = [linha('Selo', 'forma', 'raster-com-aviso' as const, 'filtro-fora-de-foto')];
+    expect(lerRelatorio({ ...vazio, camadas }).tituloDoEmPixel).toBe(t.emPixel.titulo(1));
+    expect(lerRelatorio({ ...vazio, camadas }, 'pdf').tituloDoEmPixel).toBe(t.emPixel.tituloNoVetor(1));
+    expect(lerRelatorio({ ...vazio, camadas }).deFora).toEqual([]);
+  });
+
+  it('o mesmo motivo tem frase do vetor no SVG e no PDF: "só continua ajustável em foto" é coisa do PSD', () => {
+    const camadas = [linha('Grão', 'forma', 'raster-com-aviso' as const, 'filtro-fora-de-foto')];
+    expect(lerRelatorio({ ...vazio, camadas }).emPixel[0]?.motivo).toBe(t.emPixel.motivos['filtro-fora-de-foto']);
+    expect(lerRelatorio({ ...vazio, camadas }, 'svg').emPixel[0]?.motivo).toBe(t.emPixel.porPrefixo.filtro);
+  });
+
+  it('pacote: diz quais fontes vão no .zip e quais não, com o motivo, sem inventar onde baixar', () => {
+    const fonte = (familia: string, extra: Record<string, unknown>) => ({ familia, peso: 700, postScript: `${familia}-Bold`, licenca: null, incluida: false, ...extra });
+    const r = lerRelatorio({
+      ...vazio,
+      pacote: {
+        fontes: [
+          fonte('Fraunces', { incluida: true, licenca: 'SIL Open Font License', arquivo: 'Fontes/Fraunces-Bold.ttf' }),
+          fonte('Didot', { licenca: 'Licença comercial da fundição', motivo: 'licenca_nao_permite' }),
+          fonte('Rara', { motivo: 'licenca_desconhecida' }),
+        ],
+      },
+    });
+    expect(r.pacote).toEqual({
+      vao: ['Fraunces Negrito (700)'],
+      naoVao: [
+        t.pacote.naoVai('Didot Negrito (700)', t.pacote.motivos.licenca_nao_permite('Licença comercial da fundição')),
+        t.pacote.naoVai('Rara Negrito (700)', t.pacote.motivos.licenca_desconhecida),
+      ],
+    });
+    expect(JSON.stringify(r.pacote)).not.toMatch(/baixe em/i);
+  });
+
+  it('sem pedido de pacote, não há lista de fontes do pacote', () => {
+    expect(lerRelatorio(vazio).pacote).toBeUndefined();
+  });
 });

@@ -314,6 +314,59 @@
   background: var(--grafite-0);
 }
 
+/* o que o botão principal entrega, dito ao lado dele */
+.noPacote {
+  margin: 0 auto 0 0;
+  align-self: center;
+  font: 11px var(--mono);
+  color: var(--texto-3);
+}
+
+.linha {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.contagem {
+  margin: 8px 0 0;
+  font: 13px var(--mono);
+}
+
+.recentes {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--linha);
+  font-size: 12px;
+}
+
+.recentes summary {
+  cursor: pointer;
+  color: var(--texto-2);
+}
+
+.recentes ul {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recentes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--linha);
+}
+
+.recentes a {
+  color: var(--papel);
+  overflow-wrap: anywhere;
+}
+
 .acoes {
   display: flex;
   gap: 8px;
@@ -339,7 +392,12 @@
   color: var(--grafite-0);
 }
 
-.botao:hover {
+.botao:disabled {
+  color: var(--texto-3);
+  cursor: default;
+}
+
+.botao:hover:not(:disabled) {
   border-color: var(--texto-3);
 }
 

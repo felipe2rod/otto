@@ -265,6 +265,21 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   // Sair do editor encerra a consulta da exportação (o arquivo continua sendo feito no servidor).
   useEffect(() => () => exportador?.limpar(), [exportador]);
 
+  // Recarregou a página ou reabriu a peça com uma exportação em curso: volta a acompanhá-la. As já
+  // terminadas não viram aviso no topo; ficam na lista de recentes do diálogo.
+  const pecaAberta = situacao.estado === 'aberta';
+  useEffect(() => {
+    if (!pecaAberta || !exportador || !fonte.exportacoes) return;
+    let desmontado = false;
+    void fonte.exportacoes.listar().then((itens) => {
+      const emCurso = itens.find((e) => e.estado === 'na_fila' || e.estado === 'rodando');
+      if (!desmontado && emCurso) exportador.retomar(emCurso);
+    });
+    return () => {
+      desmontado = true;
+    };
+  }, [pecaAberta, exportador, fonte]);
+
   /** Pede ao motor as fontes e imagens outra vez (o que não chegou é tentado de novo). */
   const tentarRecursosDeNovo = async () => {
     const doc = documento.obter();

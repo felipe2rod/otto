@@ -27,6 +27,8 @@ const frases: Readonly<Record<string, string>> = {
   exportacao_expirada: 'Os arquivos desta exportação já foram apagados. Exporte de novo.',
   exportacao_nao_pronta: 'O arquivo ainda não está pronto.',
   exportacao_falhou: 'Não consegui exportar esta peça. Tente de novo.',
+  abandonada: 'A exportação ficou parada na fila e foi encerrada sem sair. Tente de novo.',
+  interrompida: 'A exportação foi interrompida no meio. Tente de novo; se a peça for muito pesada, exporte menos pranchetas de cada vez.',
 };
 
 export const erros = {

@@ -84,3 +84,28 @@ describe('pedir e consultar', () => {
     expect(await montar(() => json(404, { codigo: 'nao_encontrado' })).api.consultar(EXPORTACAO)).toEqual({ ok: false, codigo: 'nao_encontrado', passageiro: false });
   });
 });
+
+describe('exportações da peça (retomar depois de recarregar)', () => {
+  it('lista as em curso e as recentes, da mais nova para a mais velha', async () => {
+    const { api, fetch } = montar(() =>
+      json(200, {
+        itens: [
+          { ...naFila, estado: 'rodando' },
+          { ...naFila, id: '0199a000-0000-7000-8000-0000000000e2', estado: 'pronta', formato: 'pdf', pacote: true },
+        ],
+      }),
+    );
+    const r = await api.listar();
+
+    expect(fetch.mock.calls[0]?.[0]).toBe(`/api/documentos/${PECA}/exportacoes`);
+    expect(fetch.mock.calls[0]?.[1]?.method).toBe('GET');
+    expect(r.map((e) => [e.estado, e.formato, e.pacote])).toEqual([
+      ['rodando', 'psd', undefined],
+      ['pronta', 'pdf', true],
+    ]);
+  });
+
+  it('se a lista não vier, devolve vazio: retomar é conforto, não pode impedir a peça de abrir', async () => {
+    expect(await montar(() => json(500, { codigo: 'erro_interno' })).api.listar()).toEqual([]);
+  });
+});

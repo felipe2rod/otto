@@ -163,6 +163,43 @@ describe('tentar de novo', () => {
   });
 });
 
+describe('retomar depois de recarregar a página', () => {
+  it('exportação em curso volta a ser consultada, sem pedir outra; o pedido original não é conhecido', async () => {
+    // quem retoma consulta na hora: a exportação pode ter terminado enquanto a página recarregava
+    respostasDeConsultar.push(ok({ estado: 'pronta', arquivos: [arquivo(0, 'p1')] }));
+    exportador.retomar({ ...base, estado: 'rodando', progresso: { pranchetasProntas: 1, pranchetasNoTotal: 2 } });
+    const e = exportador.armazem.obter();
+    expect(e).toMatchObject({ fase: 'andando', exportacao: { estado: 'rodando' } });
+    expect(e.fase === 'andando' && e.pedido).toBeUndefined();
+
+    await assentar();
+    expect(exportador.armazem.obter()).toMatchObject({ fase: 'terminou', exportacao: { estado: 'pronta' } });
+    expect(pedidos).toEqual([]);
+  });
+
+  it('exportação que já terminou não é retomada, e não passa por cima de uma que está andando', async () => {
+    exportador.retomar({ ...base, estado: 'pronta' });
+    expect(exportador.armazem.obter()).toEqual({ fase: 'parado' });
+
+    exportador.exportar(PSD);
+    await assentar();
+    exportador.retomar({ ...base, id: '0199a000-0000-7000-8000-0000000000e9', estado: 'rodando' });
+    expect(exportador.armazem.obter()).toMatchObject({ fase: 'andando', pedido: PSD });
+  });
+
+  it('a retomada que falha no servidor (interrompida) vira falha com o código, sem como repetir o pedido', async () => {
+    respostasDeConsultar.push(ok({ estado: 'falhou', erro: { codigo: 'interrompida' } }));
+    exportador.retomar({ ...base, estado: 'rodando' });
+    await assentar();
+    const e = exportador.armazem.obter();
+    expect(e).toMatchObject({ fase: 'falhou', codigo: 'interrompida' });
+    expect(e.fase === 'falhou' && e.pedido).toBeUndefined();
+    exportador.tentarDeNovo();
+    await assentar();
+    expect(pedidos).toEqual([]);
+  });
+});
+
 describe('resultado em parte', () => {
   const emParte = ok({ estado: 'pronta_em_parte', progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 }, arquivos: [arquivo(0, 'p1')], falhas: [{ pranchetaId: 'p2', codigo: 'erro_interno' }] });
 
