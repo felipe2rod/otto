@@ -19,6 +19,7 @@ x-node: &node
     - nm_api:/workspace/apps/api/node_modules
     - nm_web:/workspace/apps/web/node_modules
     - nm_documento:/workspace/packages/documento/node_modules
+    - nm_psd:/workspace/packages/psd/node_modules
     - nm_render:/workspace/packages/render/node_modules
     - nm_shared:/workspace/packages/shared/node_modules
     - next_cache:/workspace/apps/web/.next
@@ -170,6 +171,7 @@ volumes:
   nm_api:
   nm_web:
   nm_documento:
+  nm_psd:
   nm_render:
   nm_shared:
   next_cache:

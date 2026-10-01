@@ -1,0 +1,135 @@
+{
+  "arquivos": ["texto.psd"],
+  "camadas": [
+    {
+      "prancheta": "Peça",
+      "camada": "Fundo",
+      "tipo": "prancheta",
+      "destino": "nativo-editavel",
+      "mapeamento": "fundo-da-prancheta",
+      "observacao": "camada de preenchimento sólido"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Título",
+      "idDoNo": "03686de8-15e2-8854-b399-49bd75ade749",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, Anton-Regular, 52 px"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Parágrafo",
+      "idDoNo": "413fb0f1-4249-89b7-bf17-684bc7771a24",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, IBMPlexSans, 18 px, 5 trechos de estilo"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Caixa alta",
+      "idDoNo": "5290960a-fa00-8a27-8665-68ed9d2d743c",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, IBMPlexSans-Bold, 14 px"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Centro, com sombra",
+      "idDoNo": "5bf950bb-6d6f-8aec-8432-998316e9602e",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, DMSerifDisplay-Regular, 30 px; sombra projetada como efeito de camada"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Girado",
+      "idDoNo": "cc3651d6-1eac-84fc-8ee6-f82b07f0df55",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, Anton-Regular, 28 px; girada -8°"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Peso trocado",
+      "idDoNo": "bf05606c-9f3a-862e-a202-a3899803f5ca",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, IBMPlexSans-Bold, 18 px"
+    }
+  ],
+  "tokens": [],
+  "fontes": [
+    {
+      "familia": "Anton",
+      "peso": 400,
+      "postScript": "Anton-Regular",
+      "arquivo": "Anton-Regular.ttf"
+    },
+    {
+      "familia": "IBM Plex Sans",
+      "peso": 400,
+      "postScript": "IBMPlexSans",
+      "arquivo": "IBMPlexSans-Regular.ttf"
+    },
+    {
+      "familia": "IBM Plex Sans",
+      "peso": 700,
+      "postScript": "IBMPlexSans-Bold",
+      "arquivo": "IBMPlexSans-Bold.ttf"
+    },
+    {
+      "familia": "DM Serif Display",
+      "peso": 400,
+      "postScript": "DMSerifDisplay-Regular",
+      "arquivo": "DMSerifDisplay-Regular.ttf"
+    }
+  ],
+  "substituicoes": [
+    {
+      "camada": "Peça / Peso trocado",
+      "pedida": {
+        "familia": "IBM Plex Sans",
+        "peso": 600
+      },
+      "usada": {
+        "familia": "IBM Plex Sans",
+        "peso": 700,
+        "postScript": "IBMPlexSans-Bold"
+      }
+    }
+  ],
+  "emFalta": {
+    "fontes": [],
+    "imagens": []
+  },
+  "imagens": [],
+  "avisos": [
+    {
+      "codigo": "atualizar-texto",
+      "texto": "Ao abrir, o Photoshop pode avisar que as camadas de texto precisam ser atualizadas. Escolha \"Atualizar\": o texto continua editável."
+    },
+    {
+      "codigo": "instalar-fontes",
+      "texto": "Para editar o texto no Photoshop, as fontes listadas neste relatório precisam estar instaladas. Sem elas o arquivo abre com a aparência certa, mas o texto não pode ser editado sem trocar de fonte."
+    },
+    {
+      "codigo": "fonte-substituida",
+      "texto": "Há texto com um peso de fonte que a conta não tem. Saiu com o peso mais próximo, igual ao que aparece no editor."
+    },
+    {
+      "codigo": "recalculo-do-photoshop",
+      "texto": "Modos de mesclagem, camadas de ajuste e efeitos são recalculados pelo Photoshop quando a camada é editada, e podem variar um pouco do que o Otto mostra."
+    },
+    {
+      "codigo": "sem-perfil-de-cor",
+      "texto": "O arquivo sai em RGB de 8 bits, sem perfil de cor embutido. O Otto trabalha em sRGB: se o Photoshop perguntar, escolha sRGB."
+    }
+  ]
+}

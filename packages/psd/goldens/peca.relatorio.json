@@ -1,0 +1,191 @@
+{
+  "arquivos": ["peca (todas as pranchetas).psd"],
+  "camadas": [
+    {
+      "prancheta": "Feed",
+      "camada": "Fundo",
+      "tipo": "prancheta",
+      "destino": "nativo-editavel",
+      "mapeamento": "fundo-da-prancheta",
+      "observacao": "prancheta do Photoshop, com camada de preenchimento sólido"
+    },
+    {
+      "prancheta": "Feed",
+      "camada": "Foto",
+      "idDoNo": "76d7b206-2dfa-8953-a0ee-fb23e32b8a22",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial"
+    },
+    {
+      "prancheta": "Feed",
+      "camada": "Película",
+      "idDoNo": "19688221-b207-8da5-a0d1-c2f44ee4dc5c",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo), preenchimento em degradê linear"
+    },
+    {
+      "prancheta": "Feed",
+      "camada": "Sobretítulo",
+      "idDoNo": "13f1520f-3e85-86e5-b469-4ef309c8fc27",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, IBMPlexSans-Bold, 9 px"
+    },
+    {
+      "prancheta": "Feed",
+      "camada": "Título",
+      "idDoNo": "ef4dfd43-985d-8967-8a29-43cc98778b43",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, Anton-Regular, 48 px; sombra projetada como efeito de camada"
+    },
+    {
+      "prancheta": "Feed",
+      "camada": "Botão",
+      "idDoNo": "ad118e50-001e-8d68-9248-75a669a50db2",
+      "tipo": "grupo",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:grupo",
+      "observacao": "grupo"
+    },
+    {
+      "prancheta": "Feed",
+      "camada": "Fundo do botão",
+      "idDoNo": "74d46634-2e9a-8d6a-9fe1-d03ba60430b1",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo, raio 12)"
+    },
+    {
+      "prancheta": "Feed",
+      "camada": "Texto do botão",
+      "idDoNo": "24f8153d-ad77-8c5a-8405-07abc607450b",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, IBMPlexSans-Bold, 7 px"
+    },
+    {
+      "prancheta": "Feed",
+      "camada": "Níveis",
+      "idDoNo": "8dbccc3c-0f3a-8b5d-b3f0-69d81971cafd",
+      "tipo": "ajuste",
+      "destino": "nativo-editavel",
+      "mapeamento": "ajuste:niveis",
+      "observacao": "camada de ajuste de níveis"
+    },
+    {
+      "prancheta": "Story",
+      "camada": "Fundo",
+      "tipo": "prancheta",
+      "destino": "nativo-editavel",
+      "mapeamento": "fundo-da-prancheta",
+      "observacao": "prancheta do Photoshop, com camada de preenchimento sólido"
+    },
+    {
+      "prancheta": "Story",
+      "camada": "Foto",
+      "idDoNo": "9ff1565f-bdb2-8fa4-b61a-06e5f0df96ba",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial"
+    },
+    {
+      "prancheta": "Story",
+      "camada": "Título",
+      "idDoNo": "68b75b88-cc7d-847d-8196-9b7ae08d4efd",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, Anton-Regular, 40 px"
+    },
+    {
+      "prancheta": "Story",
+      "camada": "Logo",
+      "idDoNo": "c8f0d9cc-2b1b-869a-a4ce-a7f47380d342",
+      "tipo": "vetor",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:vetor",
+      "observacao": "vetor: grupo com 1 camada de forma"
+    }
+  ],
+  "tokens": [
+    {
+      "nome": "fundo",
+      "valor": "#0c0a09",
+      "usadoEm": ["Feed / Fundo", "Feed / Película", "Story / Fundo"]
+    },
+    {
+      "nome": "marca",
+      "valor": "#ea580c",
+      "usadoEm": ["Feed / Fundo do botão"]
+    },
+    {
+      "nome": "claro",
+      "valor": "#fff7ed",
+      "usadoEm": ["Feed / Título", "Story / Título", "Story / Logo"]
+    }
+  ],
+  "fontes": [
+    {
+      "familia": "IBM Plex Sans",
+      "peso": 700,
+      "postScript": "IBMPlexSans-Bold",
+      "arquivo": "IBMPlexSans-Bold.ttf"
+    },
+    {
+      "familia": "Anton",
+      "peso": 400,
+      "postScript": "Anton-Regular",
+      "arquivo": "Anton-Regular.ttf"
+    }
+  ],
+  "substituicoes": [],
+  "emFalta": {
+    "fontes": [],
+    "imagens": []
+  },
+  "imagens": [
+    {
+      "camada": "Feed / Foto",
+      "banco": "Banco de teste",
+      "autor": "Autora de teste",
+      "licenca": "Licença de teste",
+      "url": "https://exemplo.test/foto/1"
+    }
+  ],
+  "avisos": [
+    {
+      "codigo": "atualizar-texto",
+      "texto": "Ao abrir, o Photoshop pode avisar que as camadas de texto precisam ser atualizadas. Escolha \"Atualizar\": o texto continua editável."
+    },
+    {
+      "codigo": "instalar-fontes",
+      "texto": "Para editar o texto no Photoshop, as fontes listadas neste relatório precisam estar instaladas. Sem elas o arquivo abre com a aparência certa, mas o texto não pode ser editado sem trocar de fonte."
+    },
+    {
+      "codigo": "tokens-viram-valor",
+      "texto": "As cores da identidade viraram valor fixo: o PSD não tem variável de cor."
+    },
+    {
+      "codigo": "objeto-inteligente",
+      "texto": "As fotos saem como objeto inteligente, com a imagem original embutida, e os filtros como filtros inteligentes."
+    },
+    {
+      "codigo": "recalculo-do-photoshop",
+      "texto": "Modos de mesclagem, camadas de ajuste e efeitos são recalculados pelo Photoshop quando a camada é editada, e podem variar um pouco do que o Otto mostra."
+    },
+    {
+      "codigo": "sem-perfil-de-cor",
+      "texto": "O arquivo sai em RGB de 8 bits, sem perfil de cor embutido. O Otto trabalha em sRGB: se o Photoshop perguntar, escolha sRGB."
+    }
+  ]
+}

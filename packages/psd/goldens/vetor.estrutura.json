@@ -1,0 +1,100 @@
+[
+  {
+    "tipo": "grupo",
+    "nome": "Logo",
+    "opacidade": 255,
+    "blocos": ["lfx2", "lrFX", "lsct", "luni"],
+    "filhos": [
+      {
+        "tipo": "camada",
+        "nome": "Logo · #fde047 (2)",
+        "opacidade": 255,
+        "blocos": ["luni", "vmsk", "vscg", "vstk"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [29, 95, 182, 105],
+        "mascara": [306999143, 0, 286913790, 1864384288, 48]
+      },
+      {
+        "tipo": "camada",
+        "nome": "Logo · #0f766e (1)",
+        "opacidade": 255,
+        "blocos": ["SoCo", "luni", "vmsk"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [35, 100, 170, 100],
+        "mascara": [306999143, 0, 283375312, 1864384288, 54]
+      }
+    ]
+  },
+  {
+    "tipo": "grupo",
+    "nome": "Onda",
+    "opacidade": 255,
+    "blocos": ["lsct", "luni"],
+    "filhos": [
+      {
+        "tipo": "camada",
+        "nome": "Onda · #be123c",
+        "opacidade": 255,
+        "blocos": ["luni", "vmsk", "vscg", "vstk"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [192, 12, 96, 96],
+        "mascara": [240086628, 0, 353564365, 1629503264, 50]
+      }
+    ]
+  },
+  {
+    "tipo": "grupo",
+    "nome": "Anel",
+    "opacidade": 255,
+    "blocos": ["lsct", "luni"],
+    "filhos": [
+      {
+        "tipo": "camada",
+        "nome": "Anel · #1d4ed8",
+        "opacidade": 255,
+        "blocos": ["SoCo", "luni", "vmsk"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [109, 19, 82, 82],
+        "mascara": [239169125, 0, 351270351, 1814052640, 101]
+      }
+    ]
+  },
+  {
+    "tipo": "grupo",
+    "nome": "Estrela",
+    "opacidade": 255,
+    "blocos": ["lsct", "luni"],
+    "filhos": [
+      {
+        "tipo": "camada",
+        "nome": "Estrela · #f59e0b",
+        "opacidade": 255,
+        "blocos": ["SoCo", "luni", "vmsk"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [19, 19, 82, 82],
+        "mascara": [289764212, 0, 251243695, 1919249505, 102]
+      }
+    ]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Fundo",
+    "opacidade": 255,
+    "blocos": ["SoCo", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 0, 300, 200],
+    "mascara": [88503662, 0, 855364575, 1684996096, 83]
+  }
+]

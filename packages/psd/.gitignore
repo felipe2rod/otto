@@ -1,0 +1,3 @@
+# PSDs de peças reais para conferir no Photoshop (pnpm --filter @otto/psd exportar:pecas): trabalho de cliente não entra no git
+saida/
+goldens/_recusado/

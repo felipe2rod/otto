@@ -1,0 +1,152 @@
+[
+  {
+    "tipo": "camada",
+    "nome": "Oculta",
+    "opacidade": 255,
+    "blocos": ["SoCo", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": true,
+    "presa": false,
+    "pixel": [149, 99, 102, 102],
+    "mascara": [105866101, 0, 838002136, 1819566336, 83]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Véu bloqueado",
+    "opacidade": 102,
+    "blocos": ["SoCo", "lspf", "luni", "vmsk"],
+    "modo": "sLit",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 0, 400, 300],
+    "mascara": [223756149, 0, 1679762924, 543321199, 100]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Níveis em sobrepor",
+    "opacidade": 255,
+    "blocos": ["levl", "luni"],
+    "modo": "over",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 0, 1, 1],
+    "mascara": [0, 0, 400, 300, 0]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Curvas",
+    "opacidade": 204,
+    "blocos": ["curv", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 0, 1, 1],
+    "mascara": [105084274, 0, 838783963, 1986097920, 108]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Preto e branco no texto",
+    "opacidade": 255,
+    "blocos": ["blwh", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": true,
+    "pixel": [0, 0, 1, 1],
+    "mascara": [0, 0, 400, 300, 0]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Foto no texto",
+    "opacidade": 255,
+    "blocos": ["PlLd", "SoLd", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": true,
+    "pixel": [19, 149, 362, 132],
+    "mascara": [222719860, 0, 321779204, 1864396399, 116]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Base do recorte",
+    "opacidade": 255,
+    "blocos": ["TySh", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [17, 147, 366, 153],
+    "texto": "OTTO",
+    "mascara": [256008563, 0, 288359408, 1696621679, 111]
+  },
+  {
+    "tipo": "grupo",
+    "nome": "Luzes",
+    "opacidade": 255,
+    "blocos": ["lsct", "luni"],
+    "filhos": [
+      {
+        "tipo": "camada",
+        "nome": "Luz",
+        "opacidade": 255,
+        "blocos": ["GdFl", "luni", "vmsk"],
+        "modo": "lLit",
+        "oculta": false,
+        "presa": false,
+        "pixel": [239, 19, 142, 142],
+        "mascara": [55342458, 0, 1142411506, 943868237, 0]
+      }
+    ]
+  },
+  {
+    "tipo": "grupo",
+    "nome": "Selo",
+    "opacidade": 230,
+    "blocos": ["lsct", "luni"],
+    "filhos": [
+      {
+        "tipo": "camada",
+        "nome": "Data",
+        "opacidade": 255,
+        "blocos": ["TySh", "luni"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [17, 31, 96, 77],
+        "texto": "20\rJUN",
+        "mascara": [71590260, 0, 872277977, 1627389952, 84]
+      },
+      {
+        "tipo": "camada",
+        "nome": "Disco",
+        "opacidade": 255,
+        "blocos": ["SoCo", "luni", "vmsk"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [19, 19, 92, 92],
+        "mascara": [88369523, 0, 855498714, 1668218880, 83]
+      }
+    ]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Foto",
+    "opacidade": 255,
+    "blocos": ["PlLd", "SoLd", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 0, 400, 300],
+    "mascara": [71724916, 0, 872143321, 1862270976, 118]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Fundo",
+    "opacidade": 255,
+    "blocos": ["SoCo", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 0, 400, 300],
+    "mascara": [88503662, 0, 855364575, 1684996096, 83]
+  }
+]

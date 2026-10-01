@@ -1,0 +1,85 @@
+[
+  {
+    "tipo": "camada",
+    "nome": "Peso trocado",
+    "opacidade": 255,
+    "blocos": ["TySh", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [17, 247, 206, 36],
+    "texto": "meio-negrito",
+    "mascara": [206595443, 0, 1662188529, 1864397938, 111]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Girado",
+    "opacidade": 255,
+    "blocos": ["TySh", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [274, 225, 122, 62],
+    "texto": "ao vivo",
+    "mascara": [105343346, 0, 838524891, 1633971968, 84]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Centro, com sombra",
+    "opacidade": 255,
+    "blocos": ["TySh", "lfx2", "lrFX", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [17, 197, 366, 46],
+    "texto": "Sábado",
+    "mascara": [306406766, 0, 236980735, 1953656620, 32]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Caixa alta",
+    "opacidade": 255,
+    "blocos": ["TySh", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [17, 167, 366, 30],
+    "texto": "entrada franca",
+    "mascara": [172188009, 0, 1647378327, 2019631201, 56]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Parágrafo",
+    "opacidade": 255,
+    "blocos": ["TySh", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [17, 87, 366, 76],
+    "texto": "O agente faz a produção, você faz o design. A partir de R$ 19,90.",
+    "mascara": [156262770, 0, 1562287758, 1063744097, 56]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Título",
+    "opacidade": 255,
+    "blocos": ["TySh", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [17, 13, 366, 84],
+    "texto": "JAZZ NA PRAÇA",
+    "mascara": [106184564, 0, 837683673, 1970040576, 84]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Fundo",
+    "opacidade": 255,
+    "blocos": ["SoCo", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 0, 400, 300],
+    "mascara": [88503662, 0, 855364575, 1684996096, 83]
+  }
+]

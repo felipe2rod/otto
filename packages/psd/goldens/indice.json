@@ -1,0 +1,30 @@
+{
+  "forma": {
+    "bytes": 185980,
+    "sha256": "022b8457cab7da0630b269100d3aa1854598597901aa7aeb8352ba6bcf5d0122"
+  },
+  "texto": {
+    "bytes": 197481,
+    "sha256": "27d7393d1483b4dbccc4a5e2c81589236df47e3f10422271dfbdc0b6ecf29575"
+  },
+  "imagem": {
+    "bytes": 777324,
+    "sha256": "87e9b2a55a5486428e496c4187f270be742c2b0013212778ae0bd0af9bf7ee88"
+  },
+  "vetor": {
+    "bytes": 63331,
+    "sha256": "037fddf49c1b4c5b0870c99a12ae960a20428ba9ae224a31bebb96b17260920f"
+  },
+  "grupo-e-ajuste": {
+    "bytes": 775312,
+    "sha256": "1727a465683d1813dd6ee926f3d4144e2c08fa57ea10c666db17a7e468b31d08"
+  },
+  "efeitos": {
+    "bytes": 219884,
+    "sha256": "485a73a99109b0c764fac0d802c833bdacf949ccf2966a7bc7ea1e7e9b30085c"
+  },
+  "peca": {
+    "bytes": 781436,
+    "sha256": "0fd28e85fdab8efbf92e3e4de19ccdab3d41ae74bcd5aa6a2267abefdc41f60e"
+  }
+}

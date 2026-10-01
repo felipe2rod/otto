@@ -1,0 +1,167 @@
+{
+  "arquivos": ["grupo-e-ajuste.psd"],
+  "camadas": [
+    {
+      "prancheta": "Peça",
+      "camada": "Fundo",
+      "tipo": "prancheta",
+      "destino": "nativo-editavel",
+      "mapeamento": "fundo-da-prancheta",
+      "observacao": "camada de preenchimento sólido"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Foto",
+      "idDoNo": "24fd6f16-0b3a-836c-b720-1d0b182f3104",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Selo",
+      "idDoNo": "0e0e3606-f472-832e-82a6-1e9f97a55a25",
+      "tipo": "grupo",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:grupo",
+      "observacao": "grupo"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Disco",
+      "idDoNo": "0f8fa514-ee68-810a-8ac1-84e3adf8a55d",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (elipse)"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Data",
+      "idDoNo": "d0207e9e-82d8-8d31-8ed9-29b5f0cca425",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, Anton-Regular, 30 px"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Luzes",
+      "idDoNo": "b03791c2-31dc-85ed-a171-64d79834d30a",
+      "tipo": "grupo",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:grupo",
+      "observacao": "grupo; máscara em degradê (90°)"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Luz",
+      "idDoNo": "413000b1-4f16-8401-9fd9-0de1630bf4cc",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (elipse), preenchimento em degradê radial; modo luz-linear"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Base do recorte",
+      "idDoNo": "d31f7301-81a5-8e43-807c-f10fc332850a",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, Anton-Regular, 120 px"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Foto no texto",
+      "idDoNo": "04d432a0-2c20-8a8e-a9c7-85d14f2404f9",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial; presa à camada de baixo por máscara de recorte"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Preto e branco no texto",
+      "idDoNo": "b89b4fb9-989d-81fc-99ae-ee71d6f223fc",
+      "tipo": "ajuste",
+      "destino": "nativo-editavel",
+      "mapeamento": "ajuste:preto-e-branco",
+      "observacao": "camada de ajuste de preto e branco; máscara de retângulo; presa à camada de baixo por máscara de recorte"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Curvas",
+      "idDoNo": "30c9bb6a-6ad8-81e8-98b3-08763d9370e3",
+      "tipo": "ajuste",
+      "destino": "nativo-editavel",
+      "mapeamento": "ajuste:curvas",
+      "observacao": "camada de ajuste de curvas"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Níveis em sobrepor",
+      "idDoNo": "f304b864-11cf-80e0-9361-abb302be8053",
+      "tipo": "ajuste",
+      "destino": "nativo-editavel",
+      "mapeamento": "ajuste:niveis",
+      "observacao": "camada de ajuste de níveis; máscara de elipse suavizada invertida; modo sobrepor"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Véu bloqueado",
+      "idDoNo": "ef5b6221-8544-87fb-911b-0a8223f814b7",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo); modo luz-suave"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Oculta",
+      "idDoNo": "547856d6-b475-8709-8e94-9b1c1ca1b2af",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo)"
+    }
+  ],
+  "tokens": [],
+  "fontes": [
+    {
+      "familia": "Anton",
+      "peso": 400,
+      "postScript": "Anton-Regular",
+      "arquivo": "Anton-Regular.ttf"
+    }
+  ],
+  "substituicoes": [],
+  "emFalta": {
+    "fontes": [],
+    "imagens": []
+  },
+  "imagens": [],
+  "avisos": [
+    {
+      "codigo": "atualizar-texto",
+      "texto": "Ao abrir, o Photoshop pode avisar que as camadas de texto precisam ser atualizadas. Escolha \"Atualizar\": o texto continua editável."
+    },
+    {
+      "codigo": "instalar-fontes",
+      "texto": "Para editar o texto no Photoshop, as fontes listadas neste relatório precisam estar instaladas. Sem elas o arquivo abre com a aparência certa, mas o texto não pode ser editado sem trocar de fonte."
+    },
+    {
+      "codigo": "objeto-inteligente",
+      "texto": "As fotos saem como objeto inteligente, com a imagem original embutida, e os filtros como filtros inteligentes."
+    },
+    {
+      "codigo": "recalculo-do-photoshop",
+      "texto": "Modos de mesclagem, camadas de ajuste e efeitos são recalculados pelo Photoshop quando a camada é editada, e podem variar um pouco do que o Otto mostra."
+    },
+    {
+      "codigo": "sem-perfil-de-cor",
+      "texto": "O arquivo sai em RGB de 8 bits, sem perfil de cor embutido. O Otto trabalha em sRGB: se o Photoshop perguntar, escolha sRGB."
+    }
+  ]
+}

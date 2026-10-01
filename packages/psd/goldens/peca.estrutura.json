@@ -1,0 +1,170 @@
+[
+  {
+    "tipo": "grupo",
+    "nome": "Story",
+    "opacidade": 255,
+    "blocos": ["artb", "lsct", "luni"],
+    "filhos": [
+      {
+        "tipo": "grupo",
+        "nome": "Logo",
+        "opacidade": 255,
+        "blocos": ["lsct", "luni"],
+        "filhos": [
+          {
+            "tipo": "camada",
+            "nome": "Logo · #fff7ed",
+            "opacidade": 255,
+            "blocos": ["SoCo", "luni", "vmsk"],
+            "modo": "norm",
+            "oculta": false,
+            "presa": false,
+            "pixel": [445, 15, 30, 30],
+            "mascara": [239890279, 0, 354023167, 1864384288, 55]
+          }
+        ]
+      },
+      {
+        "tipo": "camada",
+        "nome": "Título",
+        "opacidade": 255,
+        "blocos": ["TySh", "luni"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [443, 247, 190, 106],
+        "texto": "JAZZ NA\rPRAÇA",
+        "mascara": [106184564, 0, 837683673, 1970040576, 84]
+      },
+      {
+        "tipo": "camada",
+        "nome": "Foto",
+        "opacidade": 255,
+        "blocos": ["PlLd", "SoLd", "luni", "vmsk"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [430, 0, 216, 384],
+        "mascara": [71724916, 0, 872143321, 1862270976, 118]
+      },
+      {
+        "tipo": "camada",
+        "nome": "Fundo",
+        "opacidade": 255,
+        "blocos": ["SoCo", "luni"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [430, 0, 216, 384],
+        "mascara": [88503662, 0, 855364575, 1684996096, 83]
+      }
+    ]
+  },
+  {
+    "tipo": "grupo",
+    "nome": "Feed",
+    "opacidade": 255,
+    "blocos": ["artb", "lsct", "luni"],
+    "filhos": [
+      {
+        "tipo": "camada",
+        "nome": "Níveis",
+        "opacidade": 255,
+        "blocos": ["levl", "luni"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [0, 0, 1, 1],
+        "mascara": [105791350, 0, 838076887, 1701409536, 108]
+      },
+      {
+        "tipo": "grupo",
+        "nome": "Botão",
+        "opacidade": 255,
+        "blocos": ["lsct", "luni"],
+        "filhos": [
+          {
+            "tipo": "camada",
+            "nome": "Texto do botão",
+            "opacidade": 255,
+            "blocos": ["TySh", "luni"],
+            "modo": "norm",
+            "oculta": false,
+            "presa": false,
+            "pixel": [167, 304, 90, 16],
+            "texto": "GARANTA O SEU",
+            "mascara": [240412024, 0, 1623981303, 1953439844, 116]
+          },
+          {
+            "tipo": "camada",
+            "nome": "Fundo do botão",
+            "opacidade": 255,
+            "blocos": ["SoCo", "luni", "vmsk"],
+            "modo": "norm",
+            "oculta": false,
+            "presa": false,
+            "pixel": [169, 299, 86, 26],
+            "mascara": [239498606, 0, 1624894721, 1685004388, 116]
+          }
+        ]
+      },
+      {
+        "tipo": "camada",
+        "nome": "Título",
+        "opacidade": 255,
+        "blocos": ["TySh", "lfx2", "lrFX", "luni"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [15, 201, 240, 125],
+        "texto": "JAZZ NA\rPRAÇA",
+        "mascara": [106184564, 0, 837683673, 1970040576, 84]
+      },
+      {
+        "tipo": "camada",
+        "nome": "Sobretítulo",
+        "opacidade": 255,
+        "blocos": ["TySh", "luni"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [15, 187, 236, 20],
+        "texto": "FESTIVAL DE INVERNO",
+        "mascara": [190017378, 0, 1763835149, 1919251519, 56]
+      },
+      {
+        "tipo": "camada",
+        "nome": "Película",
+        "opacidade": 255,
+        "blocos": ["GdFl", "luni", "vmsk"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [0, 149, 270, 189],
+        "mascara": [139486572, 0, 1487903380, 1063482732, 56]
+      },
+      {
+        "tipo": "camada",
+        "nome": "Foto",
+        "opacidade": 255,
+        "blocos": ["PlLd", "SoLd", "luni", "vmsk"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [0, 0, 270, 338],
+        "mascara": [71724916, 0, 872143321, 1862270976, 118]
+      },
+      {
+        "tipo": "camada",
+        "nome": "Fundo",
+        "opacidade": 255,
+        "blocos": ["SoCo", "luni"],
+        "modo": "norm",
+        "oculta": false,
+        "presa": false,
+        "pixel": [0, 0, 270, 338],
+        "mascara": [88503662, 0, 855364575, 1684996096, 83]
+      }
+    ]
+  }
+]

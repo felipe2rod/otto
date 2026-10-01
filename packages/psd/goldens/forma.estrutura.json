@@ -1,0 +1,101 @@
+[
+  {
+    "tipo": "camada",
+    "nome": "Com filtro",
+    "opacidade": 255,
+    "blocos": ["luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [201, 186, 178, 108],
+    "mascara": [172191597, 0, 1781464979, 543582572, 56]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Girada",
+    "opacidade": 204,
+    "blocos": ["SoCo", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [35, 197, 130, 76],
+    "mascara": [105343346, 0, 838524891, 1633968384, 83]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Com traço e sombra",
+    "opacidade": 255,
+    "blocos": ["SoCo", "lfx2", "lrFX", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [259, 109, 122, 72],
+    "mascara": [306409325, 0, 757838072, 544502369, 32]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Degradê radial",
+    "opacidade": 255,
+    "blocos": ["GdFl", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [139, 109, 102, 72],
+    "mascara": [239363431, 0, 305003517, 1918985279, 105]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Degradê linear",
+    "opacidade": 255,
+    "blocos": ["GdFl", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [19, 109, 102, 72],
+    "mascara": [239363431, 0, 304612359, 1918985279, 101]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Elipse",
+    "opacidade": 255,
+    "blocos": ["SoCo", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [259, 19, 122, 72],
+    "mascara": [105213033, 0, 838655204, 1886610688, 83]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Arredondado",
+    "opacidade": 255,
+    "blocos": ["SoCo", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [139, 19, 102, 72],
+    "mascara": [188838514, 0, 1495265789, 1701080942, 56]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Retângulo",
+    "opacidade": 255,
+    "blocos": ["SoCo", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [19, 19, 102, 72],
+    "mascara": [156394868, 0, 1662818956, 1064200053, 56]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Fundo",
+    "opacidade": 255,
+    "blocos": ["SoCo", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 0, 400, 300],
+    "mascara": [88503662, 0, 855364575, 1684996096, 83]
+  }
+]

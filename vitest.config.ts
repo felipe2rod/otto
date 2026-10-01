@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     projects: [
       'packages/documento',
+      'packages/psd',
       'packages/render',
       'packages/shared',
       'apps/api',

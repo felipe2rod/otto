@@ -1,0 +1,27 @@
+{
+  "name": "@otto/psd",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Núcleo: mapeamento Otto → PSD, relatório de exportação e a porta FormatoDeArquivoEmCamadas (ADR 028). Dono: especialista-grafico",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "exportar:pecas": "tsx src/comandos/exportar-pecas.ts"
+  },
+  "dependencies": {
+    "@otto/documento": "workspace:*",
+    "@otto/render": "workspace:*",
+    "ag-psd": "^31.0.2",
+    "canvaskit-wasm": "^0.42.0"
+  },
+  "devDependencies": {
+    "@webtoon/psd": "^0.4.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

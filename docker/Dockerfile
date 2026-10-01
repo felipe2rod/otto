@@ -31,6 +31,7 @@ RUN mkdir -p \
       /workspace/apps/web/node_modules \
       /workspace/apps/web/.next \
       /workspace/packages/documento/node_modules \
+      /workspace/packages/psd/node_modules \
       /workspace/packages/render/node_modules \
       /workspace/packages/shared/node_modules \
       /dados/arquivos \
@@ -45,6 +46,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY packages/documento/package.json packages/documento/
+COPY packages/psd/package.json packages/psd/
 COPY packages/render/package.json packages/render/
 COPY packages/shared/package.json packages/shared/
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \

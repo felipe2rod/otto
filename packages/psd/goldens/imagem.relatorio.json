@@ -1,0 +1,114 @@
+{
+  "arquivos": ["imagem.psd"],
+  "camadas": [
+    {
+      "prancheta": "Peça",
+      "camada": "Fundo",
+      "tipo": "prancheta",
+      "destino": "nativo-editavel",
+      "mapeamento": "fundo-da-prancheta",
+      "observacao": "camada de preenchimento sólido"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Cobrir",
+      "idDoNo": "a7008974-e726-84b8-b3c9-2d5d734d3a18",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Conter",
+      "idDoNo": "5313fb87-e640-85bb-a981-08a8ff4d2d44",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Recorte em elipse",
+      "idDoNo": "e4c6430d-bbea-8c82-aebe-2d07efa470f6",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial (elipse)"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Com filtros",
+      "idDoNo": "b7ed6118-ba3c-85e1-be4d-f30cc437cd19",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial; filtros inteligentes: desfoque, ruído"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Com ajuste de cor",
+      "idDoNo": "187ba8b3-4a9f-888e-9aa8-efc718bcf542",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Com ajuste de cor: brilho e contraste",
+      "tipo": "ajuste",
+      "destino": "nativo-editavel",
+      "mapeamento": "ajuste-de-cor-da-foto",
+      "observacao": "camada de ajuste presa à foto por máscara de recorte; o Photoshop recalcula com a fórmula dele"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Com ajuste de cor: saturação",
+      "tipo": "ajuste",
+      "destino": "nativo-editavel",
+      "mapeamento": "ajuste-de-cor-da-foto",
+      "observacao": "camada de ajuste presa à foto por máscara de recorte; o Photoshop recalcula com a fórmula dele"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Sujeito",
+      "idDoNo": "7d09fa06-8782-8f0e-b574-5be5b8d15f39",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial; máscara do sujeito; sombra projetada como efeito de camada"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "PNG com alfa, girada",
+      "idDoNo": "63cf129d-48f7-840b-8b05-1e415ac04e7d",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (600 × 800 px); corte da caixa como máscara vetorial; girada 10°"
+    }
+  ],
+  "tokens": [],
+  "fontes": [],
+  "substituicoes": [],
+  "emFalta": {
+    "fontes": [],
+    "imagens": []
+  },
+  "imagens": [],
+  "avisos": [
+    {
+      "codigo": "objeto-inteligente",
+      "texto": "As fotos saem como objeto inteligente, com a imagem original embutida, e os filtros como filtros inteligentes."
+    },
+    {
+      "codigo": "recalculo-do-photoshop",
+      "texto": "Modos de mesclagem, camadas de ajuste e efeitos são recalculados pelo Photoshop quando a camada é editada, e podem variar um pouco do que o Otto mostra."
+    },
+    {
+      "codigo": "sem-perfil-de-cor",
+      "texto": "O arquivo sai em RGB de 8 bits, sem perfil de cor embutido. O Otto trabalha em sRGB: se o Photoshop perguntar, escolha sRGB."
+    }
+  ]
+}

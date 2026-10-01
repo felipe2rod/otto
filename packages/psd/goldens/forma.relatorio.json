@@ -1,0 +1,122 @@
+{
+  "arquivos": ["forma.psd"],
+  "camadas": [
+    {
+      "prancheta": "Peça",
+      "camada": "Fundo",
+      "tipo": "prancheta",
+      "destino": "nativo-editavel",
+      "mapeamento": "fundo-da-prancheta",
+      "observacao": "camada de preenchimento sólido"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Retângulo",
+      "idDoNo": "954a8b38-00ba-8ee7-a7ad-8d1280b04af0",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo)"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Arredondado",
+      "idDoNo": "b3210ca7-81a6-8c84-98c2-3459bbc8d30d",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo, raio 18)"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Elipse",
+      "idDoNo": "90fc1754-7df5-8edc-9176-2e9198ef5af5",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (elipse)"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Degradê linear",
+      "idDoNo": "bc5bf914-555f-81d5-b6f3-d97c4bb75655",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo), preenchimento em degradê linear"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Degradê radial",
+      "idDoNo": "8a0f7dfa-b767-8259-999e-e562387cc11d",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo), preenchimento em degradê radial"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Com traço e sombra",
+      "idDoNo": "e90423a6-4732-8973-80eb-556866790994",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo, raio 12); sombra projetada, traço interno como efeito de camada"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Girada",
+      "idDoNo": "11e40fca-c9b1-8f8a-afb2-7a7f892f11b1",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo); girada 12°"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Com filtro",
+      "idDoNo": "bd2eedeb-b406-8991-a206-adbeb973d0f9",
+      "tipo": "forma",
+      "destino": "raster-com-aviso",
+      "mapeamento": "filtro-fora-de-foto",
+      "observacao": "forma com filtro (desfoque): no Photoshop, filtro editável só existe em objeto inteligente"
+    }
+  ],
+  "tokens": [
+    {
+      "nome": "fundo",
+      "valor": "#fafaf9",
+      "usadoEm": ["Peça / Fundo"]
+    },
+    {
+      "nome": "marca",
+      "valor": "#c2410c",
+      "usadoEm": ["Peça / Retângulo"]
+    }
+  ],
+  "fontes": [],
+  "substituicoes": [],
+  "emFalta": {
+    "fontes": [],
+    "imagens": []
+  },
+  "imagens": [],
+  "avisos": [
+    {
+      "codigo": "virou-pixel",
+      "texto": "Algumas camadas saíram como pixel, sem edição no Photoshop. A lista de camadas diz quais e por quê."
+    },
+    {
+      "codigo": "tokens-viram-valor",
+      "texto": "As cores da identidade viraram valor fixo: o PSD não tem variável de cor."
+    },
+    {
+      "codigo": "recalculo-do-photoshop",
+      "texto": "Modos de mesclagem, camadas de ajuste e efeitos são recalculados pelo Photoshop quando a camada é editada, e podem variar um pouco do que o Otto mostra."
+    },
+    {
+      "codigo": "sem-perfil-de-cor",
+      "texto": "O arquivo sai em RGB de 8 bits, sem perfil de cor embutido. O Otto trabalha em sRGB: se o Photoshop perguntar, escolha sRGB."
+    }
+  ]
+}

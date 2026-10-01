@@ -1,0 +1,113 @@
+{
+  "arquivos": ["efeitos.psd"],
+  "camadas": [
+    {
+      "prancheta": "Peça",
+      "camada": "Fundo",
+      "tipo": "prancheta",
+      "destino": "nativo-editavel",
+      "mapeamento": "fundo-da-prancheta",
+      "observacao": "camada de preenchimento sólido"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Brilho externo",
+      "idDoNo": "ecb71991-ef63-8c8a-b862-797a5e8eec41",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo, raio 14); brilho externo como efeito de camada"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Brilho interno",
+      "idDoNo": "4c08c19e-bcb5-872e-8f2c-ba0b43e1acbb",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (elipse); brilho interno como efeito de camada"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Sombra interna",
+      "idDoNo": "4808ec42-b8be-8b5c-926d-69a81c44690c",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo, raio 14); sombra interna como efeito de camada"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Sobreposição de cor",
+      "idDoNo": "194d1d55-25f7-89bb-b7c9-bcc4db3200b0",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo), preenchimento em degradê linear; sobreposição de cor como efeito de camada"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Sobreposição de degradê",
+      "idDoNo": "b0fcb9e5-d115-868d-9330-4473d985e47b",
+      "tipo": "imagem",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:imagem",
+      "observacao": "objeto inteligente com a foto original embutida (1280 × 853 px); corte da caixa como máscara vetorial; sobreposição de degradê como efeito de camada"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Sombra projetada",
+      "idDoNo": "f9bec4c8-c3b4-8e0b-8099-827d72271da3",
+      "tipo": "forma",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:forma",
+      "observacao": "forma vetorial (retângulo); sombra projetada como efeito de camada"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Texto com efeitos",
+      "idDoNo": "9f16f130-b3cc-8a20-9de2-4613e762c557",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, Anton-Regular, 80 px; sombra interna, brilho externo, sobreposição de degradê como efeito de camada"
+    }
+  ],
+  "tokens": [],
+  "fontes": [
+    {
+      "familia": "Anton",
+      "peso": 400,
+      "postScript": "Anton-Regular",
+      "arquivo": "Anton-Regular.ttf"
+    }
+  ],
+  "substituicoes": [],
+  "emFalta": {
+    "fontes": [],
+    "imagens": []
+  },
+  "imagens": [],
+  "avisos": [
+    {
+      "codigo": "atualizar-texto",
+      "texto": "Ao abrir, o Photoshop pode avisar que as camadas de texto precisam ser atualizadas. Escolha \"Atualizar\": o texto continua editável."
+    },
+    {
+      "codigo": "instalar-fontes",
+      "texto": "Para editar o texto no Photoshop, as fontes listadas neste relatório precisam estar instaladas. Sem elas o arquivo abre com a aparência certa, mas o texto não pode ser editado sem trocar de fonte."
+    },
+    {
+      "codigo": "objeto-inteligente",
+      "texto": "As fotos saem como objeto inteligente, com a imagem original embutida, e os filtros como filtros inteligentes."
+    },
+    {
+      "codigo": "recalculo-do-photoshop",
+      "texto": "Modos de mesclagem, camadas de ajuste e efeitos são recalculados pelo Photoshop quando a camada é editada, e podem variar um pouco do que o Otto mostra."
+    },
+    {
+      "codigo": "sem-perfil-de-cor",
+      "texto": "O arquivo sai em RGB de 8 bits, sem perfil de cor embutido. O Otto trabalha em sRGB: se o Photoshop perguntar, escolha sRGB."
+    }
+  ]
+}

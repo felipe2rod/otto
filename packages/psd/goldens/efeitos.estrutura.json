@@ -1,0 +1,91 @@
+[
+  {
+    "tipo": "camada",
+    "nome": "Texto com efeitos",
+    "opacidade": 255,
+    "blocos": ["TySh", "lfx2", "lrFX", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [17, 197, 366, 103],
+    "texto": "OTTO",
+    "mascara": [290743672, 0, 1578679021, 1953439843, 102]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Sombra projetada",
+    "opacidade": 255,
+    "blocos": ["SoCo", "lfx2", "lrFX", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [279, 114, 102, 72],
+    "mascara": [273903469, 0, 1612644349, 1651663136, 101]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Sobreposição de degradê",
+    "opacidade": 255,
+    "blocos": ["PlLd", "SoLd", "lfx2", "lrFX", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [149, 114, 102, 72],
+    "mascara": [391343970, 0, 1544933341, 1919250543, 111]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Sobreposição de cor",
+    "opacidade": 255,
+    "blocos": ["GdFl", "lfx2", "lrFX", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [19, 114, 102, 72],
+    "mascara": [324235106, 0, 1612042205, 1919250543, 111]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Sombra interna",
+    "opacidade": 255,
+    "blocos": ["SoCo", "lfx2", "lrFX", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [279, 19, 102, 72],
+    "mascara": [240349037, 0, 1528497400, 1651663136, 114]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Brilho interno",
+    "opacidade": 255,
+    "blocos": ["SoCo", "lfx2", "lrFX", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [149, 19, 102, 72],
+    "mascara": [239235689, 0, 1529610748, 1818783520, 114]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Brilho externo",
+    "opacidade": 255,
+    "blocos": ["SoCo", "lfx2", "lrFX", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [19, 19, 102, 72],
+    "mascara": [239235689, 0, 1463157244, 1818783520, 114]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Fundo",
+    "opacidade": 255,
+    "blocos": ["SoCo", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 0, 400, 300],
+    "mascara": [88503662, 0, 855364575, 1684996096, 83]
+  }
+]

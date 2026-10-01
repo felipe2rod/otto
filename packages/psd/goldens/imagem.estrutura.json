@@ -1,0 +1,112 @@
+[
+  {
+    "tipo": "camada",
+    "nome": "PNG com alfa, girada",
+    "opacidade": 255,
+    "blocos": ["PlLd", "SoLd", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [168, 85, 64, 76],
+    "mascara": [340807239, 0, 202448415, 543387501, 97]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Sujeito",
+    "opacidade": 255,
+    "blocos": ["PlLd", "SoLd", "lfx2", "lrFX", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [269, 154, 122, 132],
+    "mascara": [0, 0, 400, 300, 0]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Com ajuste de cor: saturação",
+    "opacidade": 255,
+    "blocos": ["hue2", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": true,
+    "pixel": [0, 0, 1, 1],
+    "mascara": [474181485, 0, 1462826419, 543255157, 100]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Com ajuste de cor: brilho e contraste",
+    "opacidade": 255,
+    "blocos": ["CgEd", "brit", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": true,
+    "pixel": [0, 0, 1, 1],
+    "mascara": [625176429, 0, 1311831475, 543255157, 100]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Com ajuste de cor",
+    "opacidade": 255,
+    "blocos": ["PlLd", "SoLd", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [139, 154, 122, 132],
+    "mascara": [289632109, 0, 1647375795, 543255157, 100]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Com filtros",
+    "opacidade": 255,
+    "blocos": ["PlLd", "SoLd", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 145, 140, 150],
+    "mascara": [188968813, 0, 1764687878, 543582572, 56]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Recorte em elipse",
+    "opacidade": 255,
+    "blocos": ["PlLd", "SoLd", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [269, 9, 122, 132],
+    "mascara": [290612579, 0, 252905405, 1869771877, 101]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Conter",
+    "opacidade": 255,
+    "blocos": ["PlLd", "SoLd", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [139, 9, 122, 132],
+    "mascara": [105082734, 0, 838785503, 1952805376, 118]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Cobrir",
+    "opacidade": 255,
+    "blocos": ["PlLd", "SoLd", "luni", "vmsk"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [9, 9, 122, 132],
+    "mascara": [105082722, 0, 838785515, 1919513088, 118]
+  },
+  {
+    "tipo": "camada",
+    "nome": "Fundo",
+    "opacidade": 255,
+    "blocos": ["SoCo", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [0, 0, 400, 300],
+    "mascara": [88503662, 0, 855364575, 1684996096, 83]
+  }
+]

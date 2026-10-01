@@ -1,0 +1,67 @@
+{
+  "arquivos": ["vetor.psd"],
+  "camadas": [
+    {
+      "prancheta": "Peça",
+      "camada": "Fundo",
+      "tipo": "prancheta",
+      "destino": "nativo-editavel",
+      "mapeamento": "fundo-da-prancheta",
+      "observacao": "camada de preenchimento sólido"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Estrela",
+      "idDoNo": "a1d52db2-54b9-8578-9c57-7f36e1e0f54d",
+      "tipo": "vetor",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:vetor",
+      "observacao": "vetor: grupo com 1 camada de forma"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Anel",
+      "idDoNo": "439281a0-e6de-87ac-b1a7-c2a85465c432",
+      "tipo": "vetor",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:vetor",
+      "observacao": "vetor: grupo com 1 camada de forma"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Onda",
+      "idDoNo": "7f368d48-4f9f-881c-8ad1-5ebbb148b9a1",
+      "tipo": "vetor",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:vetor",
+      "observacao": "vetor: grupo com 1 camada de forma, 1 com traçado vetorial"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Logo",
+      "idDoNo": "a7d323df-3b36-8689-b241-066cc6c0eb9c",
+      "tipo": "vetor",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:vetor",
+      "observacao": "vetor: grupo com 2 camadas de forma, 1 com traçado vetorial; girada -6°; sombra projetada como efeito de camada"
+    }
+  ],
+  "tokens": [],
+  "fontes": [],
+  "substituicoes": [],
+  "emFalta": {
+    "fontes": [],
+    "imagens": []
+  },
+  "imagens": [],
+  "avisos": [
+    {
+      "codigo": "recalculo-do-photoshop",
+      "texto": "Modos de mesclagem, camadas de ajuste e efeitos são recalculados pelo Photoshop quando a camada é editada, e podem variar um pouco do que o Otto mostra."
+    },
+    {
+      "codigo": "sem-perfil-de-cor",
+      "texto": "O arquivo sai em RGB de 8 bits, sem perfil de cor embutido. O Otto trabalha em sRGB: se o Photoshop perguntar, escolha sRGB."
+    }
+  ]
+}
