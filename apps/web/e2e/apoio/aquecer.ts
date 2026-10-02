@@ -46,13 +46,26 @@ async function arquivarSobras(): Promise<void> {
   }
 }
 
+/** Arquivos de PSD de teste enviados e não importados ocupam o limite de importações abertas da conta: saem aqui. */
+async function desistirDeImportacoesDeTeste(): Promise<void> {
+  const r = await fetch(`${api}/api/importacoes`).catch(() => undefined);
+  if (!r?.ok) return;
+  const catalogo = r.headers.get('x-otto-catalogo') ?? '2';
+  const { itens } = (await r.json()) as { itens: { id: string; estado: string; arquivo: { nome: string } }[] };
+  for (const i of itens)
+    if (i.estado === 'enviada' && i.arquivo.nome.startsWith('e2e'))
+      await fetch(`${api}/api/importacoes/${i.id}`, { method: 'DELETE', headers: { 'X-Otto-Cliente': 'editor', 'X-Otto-Catalogo': catalogo } }).catch(() => undefined);
+}
+
 export default async function aquecer(): Promise<void> {
   await esperar('/api/saude/pronto', (s) => s === 200);
   await arquivarSobras();
+  await desistirDeImportacoesDeTeste();
   await esperar('/', (s) => s === 200);
   await esperar('/editor', (s) => s === 200);
   // a rota do editor compila mesmo para uma peça que não existe
   await esperar('/editor/p/00000000-0000-7000-8000-000000000000', (s) => s < 500);
   await esperar('/editor/novo', (s) => s === 200);
   await esperar('/editor/marcas', (s) => s === 200);
+  await esperar('/editor/importar', (s) => s === 200);
 }

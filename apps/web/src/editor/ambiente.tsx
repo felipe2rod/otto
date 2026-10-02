@@ -31,6 +31,8 @@ export interface AmbienteDoEditor {
   avisar(texto: string): void;
   /** Camadas e pranchetas tocadas pela tarefa do Otto que está viva: ganham a marca em âmbar até a revisão acabar. */
   tocadosPeloOtto: Pick<Armazem<ReadonlySet<string>>, 'obter' | 'assinar'>;
+  /** Camadas que tinham edição no PSD de origem e vieram como imagem: o painel de Camadas as aponta. */
+  vieramComoImagem: Pick<Armazem<ReadonlySet<string>>, 'obter' | 'assinar'>;
   /** O que o canvas deixou de mostrar (fonte ou imagem que não chegou). */
   faltas: Pick<Armazem<FaltasDoRender>, 'obter' | 'assinar'>;
   /** Envia o arquivo e troca a imagem da camada de foto, por operação do catálogo. */

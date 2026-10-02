@@ -15,6 +15,7 @@ export const pecas = {
   novaPeca: 'Nova peça',
   criando: 'Criando…',
   pecaEmBranco: 'Peça em branco',
+  importarPsd: 'Importar PSD',
   filtro: {
     rotulo: 'Marca',
     todas: 'Todas as marcas',

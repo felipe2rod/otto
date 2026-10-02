@@ -177,4 +177,10 @@ describe('ler o relatório', () => {
   it('sem pedido de pacote, não há lista de fontes do pacote', () => {
     expect(lerRelatorio(vazio).pacote).toBeUndefined();
   });
+
+  it('o aviso de imagem em resolução menor (peça grande no vetor) tem frase da tela', () => {
+    const r = lerRelatorio({ ...vazio, avisos: [{ codigo: 'imagem-em-resolucao-menor', texto: 'frase do servidor' }] }, 'pdf');
+    expect(r.observacoes).toEqual([t.observacoes.doCodigo['imagem-em-resolucao-menor']]);
+    expect(t.observacoes.doCodigo['imagem-em-resolucao-menor']).toBeTruthy();
+  });
 });

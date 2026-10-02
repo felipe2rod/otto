@@ -31,6 +31,8 @@ export interface PecaAberta {
   arvore: Documento;
   /** Se há o que desfazer e refazer, como a API disse ao abrir. */
   historico: Historico;
+  /** Presente quando a peça nasceu de um PSD importado: o relatório está na importação. */
+  importacaoId?: string;
 }
 
 export type ResultadoDeAbrir = { estado: 'aberta'; peca: PecaAberta } | { estado: 'nao_encontrada' } | { estado: 'erro'; codigo: string };
@@ -104,7 +106,14 @@ export function criarApiDePecas(cliente: Cliente): ApiDePecas {
       if (r.ok)
         return {
           estado: 'aberta',
-          peca: { id: r.dados.id, nome: r.dados.nome, versao: r.dados.versao, arvore: r.dados.arvore, historico: { podeDesfazer: r.dados.podeDesfazer, podeRefazer: r.dados.podeRefazer } },
+          peca: {
+            id: r.dados.id,
+            nome: r.dados.nome,
+            versao: r.dados.versao,
+            arvore: r.dados.arvore,
+            historico: { podeDesfazer: r.dados.podeDesfazer, podeRefazer: r.dados.podeRefazer },
+            ...(r.dados.importacaoId ? { importacaoId: r.dados.importacaoId } : {}),
+          },
         };
       return r.status === 404 ? { estado: 'nao_encontrada' } : { estado: 'erro', codigo: r.codigo };
     },

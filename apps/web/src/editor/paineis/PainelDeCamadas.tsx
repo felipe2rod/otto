@@ -7,6 +7,7 @@
 import type { Documento, No, Prancheta } from '@otto/documento';
 import { type KeyboardEvent, memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { editor as textos } from '../../textos/editor';
+import { importar as textosDeImportar } from '../../textos/importar';
 import { otto as textosDoOtto } from '../../textos/otto';
 import { type AmbienteDoEditor, useAmbiente } from '../ambiente';
 import { type DestinoNoPainel, loteDeBloqueio, loteDeDesagrupar, loteDeRenomear, loteDeReordenar, loteDeSoltarNoPainel, loteDeVisibilidade } from '../nucleo/acoes';
@@ -74,6 +75,8 @@ interface PropriedadesDaLinha {
   semFonte: boolean;
   /** A camada (ou prancheta) foi tocada pela tarefa viva do Otto. */
   doOtto: boolean;
+  /** Tinha edição no PSD de origem e veio como imagem. */
+  veioComoImagem: boolean;
   /** A camada arrastada vai cair acima ou abaixo desta linha. */
   destino: 'acima' | 'abaixo' | 'dentro' | null;
   topo: number;
@@ -85,7 +88,7 @@ interface PropriedadesDaLinha {
 }
 
 const LinhaDaArvore = memo(function LinhaDaArvore(props: PropriedadesDaLinha) {
-  const { linha, idNoDom, ativa, recolhida, travado, renomeando, semFonte, doOtto, destino, topo, ambiente, aoAlternarGrupo, aoRenomear, aoApertar, aoPassar } = props;
+  const { linha, idNoDom, ativa, recolhida, travado, renomeando, semFonte, doOtto, veioComoImagem, destino, topo, ambiente, aoAlternarGrupo, aoRenomear, aoApertar, aoPassar } = props;
   const ehGrupo = linha.tipo === 'prancheta' || linha.no.tipo === 'grupo';
   const nome = linha.tipo === 'prancheta' ? linha.prancheta.nome : linha.no.nome;
   const rotulo = linha.tipo === 'prancheta' ? textos.camadas.prancheta(nome, linha.prancheta.largura, linha.prancheta.altura) : textos.camadas.linha(nome, textos.camadas.tipos[linha.no.tipo]);
@@ -164,6 +167,11 @@ const LinhaDaArvore = memo(function LinhaDaArvore(props: PropriedadesDaLinha) {
           {semFonte && (
             <span className={estilos.marcaDeFalta} title={textos.camadas.fonteEmFalta} role="img" aria-label={textos.camadas.fonteEmFalta}>
               !
+            </span>
+          )}
+          {veioComoImagem && (
+            <span className={estilos.marca} title={textosDeImportar.relatorio.marcaNaCamada} role="img" aria-label={textosDeImportar.relatorio.marcaNaCamada} data-veio-como-imagem>
+              ▨
             </span>
           )}
           {/* a marca não depende só da cor: tem o ponto e o texto */}
@@ -252,6 +260,7 @@ export function PainelDeCamadas() {
   const fontesEmFalta = useArmazem(ambiente.faltas, (f) => f.emFalta.fontes);
   const semFonte = useMemo(() => new Set(fontesEmFalta.flatMap((f) => f.camadas)), [fontesEmFalta]);
   const tocados = useArmazem(ambiente.tocadosPeloOtto, (t) => t);
+  const comoImagem = useArmazem(ambiente.vieramComoImagem, (t) => t);
   const [destino, setDestino] = useState<Destino | null>(null);
   /** A camada apertada, e onde: vira arraste quando o ponteiro anda. */
   const arraste = useRef<{ id: string; y: number; andou: boolean } | null>(null);
@@ -408,6 +417,7 @@ export function PainelDeCamadas() {
                 renomeando={renomeando === linha.id}
                 semFonte={linha.tipo === 'no' && semFonte.has(linha.caminho)}
                 doOtto={tocados.has(linha.id)}
+                veioComoImagem={comoImagem.has(linha.id)}
                 destino={destino?.id === linha.id ? destino.onde : null}
                 aoApertar={apertar}
                 aoPassar={passar}

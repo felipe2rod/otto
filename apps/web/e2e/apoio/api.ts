@@ -30,6 +30,7 @@ export interface PecaDoServidor {
   versao: number;
   podeDesfazer: boolean;
   podeRefazer: boolean;
+  importacaoId?: string;
   arvore: { pranchetas: PranchetaDoServidor[] };
 }
 
@@ -53,6 +54,20 @@ export interface ExportacaoDoServidor {
   pacote?: boolean;
   estado: string;
   arquivos: { nome: string; tipo: string; bytes: number; baixar: string }[];
+}
+
+export interface ImportacaoDoServidor {
+  id: string;
+  estado: string;
+  arquivo: { nome: string };
+  documentoId?: string;
+  pedido?: { fontes?: unknown[] };
+  relatorio?: {
+    camadas: { camada: string; destino: string; mapeamento: string; idDoNo?: string }[];
+    substituicoes: { camada: string; pedida: string; usada: { familia: string } }[];
+    emFalta: { fontes: { postScript: string; camadas: string[] }[] };
+    avisos: { codigo: string }[];
+  };
 }
 
 const CLIENTE = { 'X-Otto-Cliente': 'editor' };
@@ -221,6 +236,39 @@ export class Api {
     const r = await this.http.post(`${this.base}/api/arquivos`, { headers: { ...(await this.cabecalhos()), 'Content-Type': 'image/png' }, data: bytes });
     if (!r.ok()) throw new Error(`enviar imagem: ${r.status()} ${await r.text()}`);
     return (await r.json()) as { sha256: string; largura: number; altura: number };
+  }
+
+  /** Pede a exportação da peça em PSD e espera ficar pronta. Devolve o caminho de cada arquivo (para o navegador baixar). */
+  async exportarPsd(id: string): Promise<{ nome: string; baixar: string }[]> {
+    const r = await this.http.post(`${this.base}/api/documentos/${id}/exportacoes`, { headers: await this.cabecalhos(), data: { formato: 'psd' } });
+    if (!r.ok()) throw new Error(`exportar: ${r.status()} ${await r.text()}`);
+    const { id: exportacaoId } = (await r.json()) as { id: string };
+    for (let volta = 0; volta < 90; volta++) {
+      const e = (await (await this.http.get(`${this.base}/api/exportacoes/${exportacaoId}`)).json()) as ExportacaoDoServidor;
+      if (e.estado === 'pronta') return e.arquivos;
+      if (e.estado === 'falhou') throw new Error('a exportação falhou');
+      await new Promise((seguir) => setTimeout(seguir, 1000));
+    }
+    throw new Error('a exportação não ficou pronta em 90 s');
+  }
+
+  // ---------- importações ----------
+
+  async importacoes(): Promise<ImportacaoDoServidor[]> {
+    const r = await this.http.get(`${this.base}/api/importacoes`);
+    return ((await r.json()) as { itens: ImportacaoDoServidor[] }).itens;
+  }
+
+  /** O relatório da importação que criou a peça. */
+  async importacaoDaPeca(id: string): Promise<ImportacaoDoServidor> {
+    const r = await this.http.get(`${this.base}/api/documentos/${id}/importacao`);
+    if (!r.ok()) throw new Error(`importação da peça: ${r.status()} ${await r.text()}`);
+    return (await r.json()) as ImportacaoDoServidor;
+  }
+
+  /** Desiste de um arquivo enviado e não importado (só vale nesse estado; nos outros, não faz nada). */
+  async desistirDaImportacao(id: string): Promise<void> {
+    await this.http.delete(`${this.base}/api/importacoes/${id}`, { headers: await this.cabecalhos() }).catch(() => undefined);
   }
 
   async exportacoes(id: string): Promise<ExportacaoDoServidor[]> {

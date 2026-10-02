@@ -300,6 +300,8 @@ interface Ferramentas {
    * a peça é arquivada (com a tarefa viva encerrada antes), a marca e o briefing são apagados.
    */
   descartar: { peca(id: string): void; marca(id: string): void; briefing(id: string): void };
+  /** No fim do teste, desiste dos arquivos de PSD enviados e não importados cujo nome começa por este prefixo. */
+  limparImportacoes: (prefixo: string) => void;
 }
 
 export const test = base.extend<Ferramentas>({
@@ -332,6 +334,12 @@ export const test = base.extend<Ferramentas>({
     }
     for (const id of briefings) await api.apagarBriefing(id);
     for (const id of marcas) await api.apagarMarca(id);
+  },
+  limparImportacoes: async ({ api }, usar) => {
+    const prefixos: string[] = [];
+    await usar((prefixo) => void prefixos.push(prefixo));
+    if (prefixos.length === 0) return;
+    for (const i of await api.importacoes().catch(() => [])) if (i.estado === 'enviada' && prefixos.some((p) => i.arquivo.nome.startsWith(p))) await api.desistirDaImportacao(i.id);
   },
   editor: async ({ page, api }, usar) => {
     const erros: string[] = [];

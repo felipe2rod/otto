@@ -102,6 +102,10 @@ export function Pecas({ inicial, agora, api: apiDeFora, irPara = (endereco) => w
       <button type="button" className={estilos.botao} disabled={ocupado} onClick={() => void criar()}>
         {textos.pecaEmBranco}
       </button>
+      {/* trazer para o Otto a peça que já existe: enviar o arquivo, decidir as fontes, abrir */}
+      <a className={estilos.botao} href="/editor/importar">
+        {textos.importarPsd}
+      </a>
       <a className={estilos.principal} href="/editor/novo">
         {textos.novaPeca}
       </a>

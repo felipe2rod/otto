@@ -1,9 +1,12 @@
 // De onde o editor tira a peça, os recursos e para onde manda cada lote. Em /editor/p/[id] é a
 // API; na bancada de desenvolvimento, um documento de exemplo local. O editor não sabe qual é.
+
+import type { Importacao } from '@otto/shared';
 import { criarApiDeArquivos, type EnvioDeArquivos } from '../api/arquivos';
 import { criarCliente } from '../api/cliente';
 import { type ApiDeExportacoes, criarApiDeExportacoes } from '../api/exportacoes';
 import { type ApiDeImagens, type ApiDeTexturas, criarApiDeFontes, criarApiDeImagens, criarApiDeTexturas } from '../api/imagens';
+import { criarApiDeImportacoes } from '../api/importacoes';
 import { type ApiDeLotes, criarApiDeLotes } from '../api/lotes';
 import { criarApiDePecas, type ResultadoDeAbrir } from '../api/pecas';
 import { type ApiDeTarefas, criarApiDeTarefas } from '../api/tarefas';
@@ -27,6 +30,8 @@ export interface FonteDaPeca {
   imagens?: ApiDeImagens;
   /** As texturas da biblioteca. Ausente: o editor não as oferece. */
   texturas?: ApiDeTexturas;
+  /** A importação que criou a peça, com o relatório. Ausente: o editor não mostra relatório de importação. */
+  importacao?(pecaId: string): Promise<Importacao | undefined>;
   /** Bytes de imagem e de fonte para o motor. */
   recursos: RecursosDoRender;
   /** A biblioteca e, se houver, o catálogo (`naBiblioteca: false` é o que ainda não foi baixado). */
@@ -49,6 +54,7 @@ export function criarFonteDaApi(pecaId: string): FonteDaPeca {
     lotes: criarApiDeLotes(cliente, pecaId),
     imagens: criarApiDeImagens(cliente),
     texturas: criarApiDeTexturas(cliente),
+    importacao: criarApiDeImportacoes(cliente).daPeca,
     recursos: criarRecursosDoRender(),
     listarFontes() {
       // uma busca só por sessão; lista vazia é falha (a biblioteca nunca é vazia): a próxima chamada tenta de novo

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { caixaDe } from '@otto/documento';
-import type { EventoDaTarefa, Exportacao, ImagemTrazida, RelatorioDeExportacao, ResultadoDaBuscaDeImagens, Tarefa } from '@otto/shared';
+import type { EventoDaTarefa, Exportacao, ImagemTrazida, Importacao, RelatorioDeExportacao, ResultadoDaBuscaDeImagens, Tarefa } from '@otto/shared';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { EventoDoFluxo } from '../api/fluxo';
@@ -10,6 +10,7 @@ import { imagens as textosDeImagens, texturas as textosDeTexturas } from '../tex
 import { editor as textos } from '../textos/editor';
 import { erros } from '../textos/erros';
 import { exportar as textosDeExportar } from '../textos/exportar';
+import { importar as textosDeImportar } from '../textos/importar';
 import { otto as textosDoOtto } from '../textos/otto';
 import { montarDocumentoDeExemplo } from './bancada/documentoDeExemplo';
 import type { MotorDeRender, RecursosEmFalta } from './canvas/motor';
@@ -99,6 +100,7 @@ function montar(
     tarefas?: Partial<NonNullable<FonteDaPeca['tarefas']>>;
     imagens?: Partial<NonNullable<FonteDaPeca['imagens']>>;
     texturas?: Partial<NonNullable<FonteDaPeca['texturas']>>;
+    importacao?: FonteDaPeca['importacao'];
   } = {},
 ) {
   const motor = { ...motorFalso(), ...opcoes.motor };
@@ -126,6 +128,7 @@ function montar(
         }
       : {}),
     ...(opcoes.renomear ? { renomear: opcoes.renomear } : {}),
+    ...(opcoes.importacao ? { importacao: opcoes.importacao } : {}),
     ...(opcoes.texturas
       ? {
           texturas: {
@@ -838,6 +841,105 @@ describe('casca do editor: texturas', () => {
     const sem = montar({ abrir: aberta, lotes: {}, arquivos: {} });
     await waitFor(() => expect(sem.motor.definirDocumento).toHaveBeenCalled());
     expect(within(screen.getByRole('toolbar', { name: textos.ferramentas.rotulo })).queryByRole('button', { name: textosDeTexturas.abrir })).toBeNull();
+  });
+});
+
+describe('casca do editor: peça importada de um PSD', () => {
+  const [fundo, texto] = [EXEMPLO.pranchetas[0]?.filhos[0], EXEMPLO.pranchetas[0]?.filhos.at(-1)];
+  if (!fundo || !texto) throw new Error('faltam camadas no exemplo');
+  const t = textosDeImportar.relatorio;
+  const ID_DA_IMPORTACAO = '0199a000-0000-7000-8000-0000000000d1';
+  const IMPORTACAO: Importacao = {
+    id: ID_DA_IMPORTACAO,
+    estado: 'pronta',
+    arquivo: { nome: 'campanha.psd', bytes: 1000, formato: 'psd', largura: 1080, altura: 1350, camadas: 3 },
+    fontes: [],
+    documentoId: ID_DA_IMPORTACAO,
+    criadaEm: '2026-10-02T12:00:00.000Z',
+    relatorio: {
+      arquivo: { formato: 'psd', largura: 1080, altura: 1350, camadas: 3, conversaoDeCor: 'sem-perfil' },
+      camadas: [
+        { prancheta: 'Feed', camada: 'Background', idDoNo: fundo.id, tipo: 'imagem', destino: 'imagem', mapeamento: 'psd:camada-de-pixels' },
+        { prancheta: 'Feed', camada: 'Chamada', idDoNo: texto.id, tipo: 'imagem', destino: 'imagem', mapeamento: 'psd:texto-sem-fonte', observacao: 'FRASE DO SERVIDOR' },
+        { prancheta: 'Feed', camada: 'Inverter 1', destino: 'ignorado', mapeamento: 'psd:ajuste-desconhecido' },
+      ],
+      fontes: [],
+      substituicoes: [],
+      emFalta: { fontes: [{ postScript: 'Gotham-Black', camadas: ['Feed / Chamada'] }] },
+      avisos: [
+        { codigo: 'sem-perfil-de-cor', texto: 'x' },
+        { codigo: 'virou-imagem', texto: 'x' },
+      ],
+    },
+  };
+  const importada: ResultadoDeAbrir = {
+    estado: 'aberta',
+    peca: { ...(aberta as Extract<ResultadoDeAbrir, { estado: 'aberta' }>).peca, importacaoId: ID_DA_IMPORTACAO, historico: { podeDesfazer: false, podeRefazer: false } },
+  };
+  const abrir = async (opcoes: Parameters<typeof montar>[0] = {}) => {
+    const importacao = vi.fn(async () => IMPORTACAO as Importacao | undefined);
+    const m = montar({ abrir: importada, lotes: {}, importacao, ...opcoes });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    return { ...m, importacao };
+  };
+  const relatorio = () => screen.queryByRole('dialog', { name: t.titulo });
+  afterEach(() => window.localStorage.clear());
+
+  it('na primeira vez que a peça importada abre, o relatório aparece: o que virou imagem e por quê, o que ficou de fora, sem a frase do servidor', async () => {
+    const { importacao } = await abrir();
+    const dialogo = await screen.findByRole('dialog', { name: t.titulo });
+    expect(importacao).toHaveBeenCalledWith('a1');
+    expect(dialogo.textContent).toContain(t.doArquivo('campanha.psd'));
+    expect(dialogo.textContent).toContain(t.resumo(0, 1, 1));
+    expect(within(dialogo).getByRole('heading', { name: t.virouImagem.titulo(1) })).toBeDefined();
+    expect(dialogo.textContent).toContain(t.virouImagem.fonteEmFalta('Gotham-Black'));
+    expect(within(dialogo).getByRole('heading', { name: t.deFora.titulo(1) })).toBeDefined();
+    expect(dialogo.textContent).toContain(t.observacoes.doCodigo['sem-perfil-de-cor']);
+    expect(dialogo.textContent).not.toContain('FRASE DO SERVIDOR');
+  });
+
+  it('"ver" na linha do que virou imagem seleciona a camada e fecha o relatório', async () => {
+    await abrir();
+    const dialogo = await screen.findByRole('dialog', { name: t.titulo });
+    fireEvent.click(within(dialogo).getByRole('button', { name: t.verCamada('Feed / Chamada') }));
+    expect(relatorio()).toBeNull();
+    expect(screen.getByRole('treeitem', { name: new RegExp(`^${texto.nome}`) }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('a camada que virou imagem fica apontada no painel de Camadas; a que já era imagem no arquivo, não', async () => {
+    await abrir();
+    await screen.findByRole('dialog', { name: t.titulo });
+    const linha = (nome: string) => screen.getByRole('treeitem', { name: new RegExp(`^${nome}`) });
+    expect(within(linha(texto.nome)).getByRole('img', { name: t.marcaNaCamada })).toBeDefined();
+    expect(within(linha(fundo.nome)).queryByRole('img', { name: t.marcaNaCamada })).toBeNull();
+  });
+
+  it('fechado, o relatório não abre sozinho de novo, e continua consultável pelo botão do topo', async () => {
+    const primeira = await abrir();
+    fireEvent.click(within(await screen.findByRole('dialog', { name: t.titulo })).getByRole('button', { name: t.fechar }));
+    expect(relatorio()).toBeNull();
+    primeira.tela.unmount();
+
+    await abrir();
+    const botao = await screen.findByRole('button', { name: t.abrir });
+    expect(relatorio()).toBeNull();
+    fireEvent.click(botao);
+    expect(relatorio()).not.toBeNull();
+  });
+
+  it('peça que não veio de PSD não tem relatório nem botão; relatório que não carrega não trava a peça', async () => {
+    const comum = montar({ abrir: aberta, lotes: {}, importacao: vi.fn(async () => IMPORTACAO) });
+    await waitFor(() => expect(comum.motor.definirDocumento).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: t.abrir })).toBeNull();
+    expect(relatorio()).toBeNull();
+    cleanup();
+
+    const { lotes } = await abrir({ importacao: vi.fn(async () => undefined) });
+    await act(async () => undefined);
+    expect(relatorio()).toBeNull();
+    fireEvent.click(screen.getByRole('treeitem', { name: new RegExp(`^${texto.nome}`) }));
+    await act(async () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+    expect(vi.mocked(lotes?.enviar as Lotes['enviar']).mock.calls).toHaveLength(1);
   });
 });
 

@@ -142,6 +142,8 @@ export const exportar = {
         'recalculo-do-photoshop': 'Modos de mesclagem, ajustes e efeitos vão como parâmetros. Outro programa refaz a conta com a fórmula dele, e a cor pode variar um pouco do que o canvas mostra.',
         'sem-perfil-de-cor': 'O arquivo vai em RGB de 8 bits, sem perfil de cor embutido. O Otto trabalha em sRGB.',
         'texto-em-linhas': 'O texto vai como texto, gravado linha a linha, na quebra que o canvas mostra. As linhas não ficam ligadas num parágrafo: mudar a largura depois não refaz a quebra.',
+        'imagem-em-resolucao-menor':
+          'As camadas que viraram imagem saíram na resolução do documento, e não no dobro dela como de costume: a prancheta é grande demais para o dobro. Ao ampliar o arquivo, essas imagens perdem nitidez antes do resto.',
       } as Readonly<Record<string, string>>,
     },
     todas: {

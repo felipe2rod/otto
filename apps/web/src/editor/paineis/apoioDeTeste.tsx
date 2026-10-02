@@ -39,6 +39,7 @@ export function ambienteDeTeste(
     faltas: criarArmazem<FaltasDoRender>(opcoes.faltas ?? SEM_FALTAS),
     avisar: vi.fn(),
     tocadosPeloOtto: criarArmazem<ReadonlySet<string>>(new Set(opcoes.tocadosPeloOtto ?? [])),
+    vieramComoImagem: criarArmazem<ReadonlySet<string>>(new Set()),
     trocarImagem: vi.fn(async () => undefined),
     inserirArquivos: vi.fn(async () => undefined),
     listarFontes: async () => [

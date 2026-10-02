@@ -3,6 +3,7 @@ import { type ApiDeArquivos, criarApiDeArquivos } from '../api/arquivos';
 import { type ApiDeCadastros, criarApiDeCadastros } from '../api/cadastros';
 import { criarCliente } from '../api/cliente';
 import { type ApiDeFontes, type ApiDeImagens, criarApiDeFontes, criarApiDeImagens } from '../api/imagens';
+import { type ApiDeImportacoes, criarApiDeImportacoes } from '../api/importacoes';
 import { type ApiDePecas, criarApiDePecas } from '../api/pecas';
 import { type ApiDeTarefas, criarApiDeTarefas } from '../api/tarefas';
 
@@ -11,6 +12,7 @@ export interface Servicos {
   arquivos: ApiDeArquivos;
   fontes: ApiDeFontes;
   imagens: ApiDeImagens;
+  importacoes: ApiDeImportacoes;
   pecas: Pick<ApiDePecas, 'criar' | 'criarComTarefa'>;
   /** As tarefas de uma peça. Os limites da conta não dependem da peça. */
   tarefas(pecaId: string): Pick<ApiDeTarefas, 'limites' | 'daPeca'>;
@@ -23,6 +25,7 @@ export function criarServicos(): Servicos {
     arquivos: criarApiDeArquivos(cliente),
     fontes: criarApiDeFontes(cliente),
     imagens: criarApiDeImagens(cliente),
+    importacoes: criarApiDeImportacoes(cliente),
     pecas: criarApiDePecas(cliente),
     tarefas: (pecaId) => criarApiDeTarefas(cliente, pecaId),
   };

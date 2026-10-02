@@ -22,7 +22,7 @@ export interface Cliente {
   escrever<T>(esquema: Esquema<T>, metodo: Metodo, caminho: string, corpo?: unknown): Promise<Resposta<T>>;
   escrever(esquema: null, metodo: Metodo, caminho: string, corpo?: unknown): Promise<Resposta<undefined>>;
   /** POST com o arquivo no corpo, como bytes, e o tipo dele no Content-Type (imagem e SVG). */
-  enviarBytes<T>(esquema: Esquema<T>, caminho: string, corpo: Blob, tipo: string): Promise<Resposta<T>>;
+  enviarBytes<T>(esquema: Esquema<T>, caminho: string, corpo: Blob, tipo: string, cabecalhos?: Record<string, string>): Promise<Resposta<T>>;
 }
 
 type Metodo = 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -36,8 +36,14 @@ export function criarCliente(opcoes: { fetch?: Buscar; base?: string; cabecalhos
   const buscar = opcoes.fetch ?? ((endereco, init) => fetch(endereco, init));
   const base = opcoes.base ?? '';
 
-  async function pedir<T>(esquema: Esquema<T> | null, metodo: 'GET' | Metodo, caminho: string, corpo?: unknown, bytes?: { corpo: Blob; tipo: string }): Promise<Resposta<T | undefined>> {
-    const cabecalhos: Record<string, string> = { Accept: 'application/json', ...opcoes.cabecalhos };
+  async function pedir<T>(
+    esquema: Esquema<T> | null,
+    metodo: 'GET' | Metodo,
+    caminho: string,
+    corpo?: unknown,
+    bytes?: { corpo: Blob; tipo: string; cabecalhos?: Record<string, string> | undefined },
+  ): Promise<Resposta<T | undefined>> {
+    const cabecalhos: Record<string, string> = { Accept: 'application/json', ...opcoes.cabecalhos, ...bytes?.cabecalhos };
     if (metodo !== 'GET') {
       cabecalhos[CABECALHOS.cliente.nome] = CABECALHOS.cliente.valor;
       cabecalhos[CABECALHOS.catalogo] = String(VERSAO_DO_CATALOGO);
@@ -70,6 +76,7 @@ export function criarCliente(opcoes: { fetch?: Buscar; base?: string; cabecalhos
   return {
     ler: (esquema, caminho) => pedir(esquema, 'GET', caminho),
     escrever: (esquema: Esquema<unknown> | null, metodo: Metodo, caminho: string, corpo?: unknown) => pedir(esquema, metodo, caminho, corpo),
-    enviarBytes: (esquema: Esquema<unknown>, caminho: string, corpo: Blob, tipo: string) => pedir(esquema, 'POST', caminho, undefined, { corpo, tipo }),
+    enviarBytes: (esquema: Esquema<unknown>, caminho: string, corpo: Blob, tipo: string, cabecalhos?: Record<string, string>) =>
+      pedir(esquema, 'POST', caminho, undefined, { corpo, tipo, cabecalhos }),
   } as Cliente;
 }

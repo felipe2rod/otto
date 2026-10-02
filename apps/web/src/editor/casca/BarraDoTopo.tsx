@@ -4,6 +4,7 @@
 import { useRef, useState } from 'react';
 import { editor as textos } from '../../textos/editor';
 import { exportar as textosDeExportar } from '../../textos/exportar';
+import { importar as textosDeImportar } from '../../textos/importar';
 import type { EstadoDaPecaAberta } from '../Editor';
 import type { EstadoDoExportador, Exportador } from '../exportar/exportador';
 import { type Armazem, useArmazem } from '../nucleo/armazem';
@@ -26,9 +27,24 @@ export interface PropriedadesDoTopo {
   aoRefazer: () => void;
   /** Renomear a peça. Ausente: o nome é só texto. */
   aoRenomear?: (nome: string) => void;
+  /** Abrir o relatório da importação que criou a peça. Ausente: a peça não veio de um PSD. */
+  aoVerImportacao?: () => void;
 }
 
-export function BarraDoTopo({ nomeDaPeca, estado, historico, faltas, aoExportar, exportador, paineisVisiveis, aoAlternarPaineis, aoDesfazer, aoRefazer, aoRenomear }: PropriedadesDoTopo) {
+export function BarraDoTopo({
+  nomeDaPeca,
+  estado,
+  historico,
+  faltas,
+  aoExportar,
+  exportador,
+  paineisVisiveis,
+  aoAlternarPaineis,
+  aoDesfazer,
+  aoRefazer,
+  aoRenomear,
+  aoVerImportacao,
+}: PropriedadesDoTopo) {
   const [renomeando, setRenomeando] = useState(false);
   const e = useArmazem(estado, (x) => x);
   const f = useArmazem(faltas, (x) => x);
@@ -65,6 +81,11 @@ export function BarraDoTopo({ nomeDaPeca, estado, historico, faltas, aoExportar,
       )}
       <span className={estilos.espaco} />
       <AvisosDoRender faltas={f} />
+      {aoVerImportacao && (
+        <button type="button" className={estilos.botao} data-abre-relatorio-de-importacao onClick={aoVerImportacao}>
+          {textosDeImportar.relatorio.abrir}
+        </button>
+      )}
       <button type="button" className={estilos.botao} disabled={!podeReverter || !h.podeDesfazer} title={textos.topo.atalhoDeDesfazer} onClick={aoDesfazer}>
         {textos.topo.desfazer}
       </button>

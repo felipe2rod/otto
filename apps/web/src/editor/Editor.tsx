@@ -10,6 +10,7 @@
 import { type Documento, type Medidor, type Operacao, todasAsCamadas } from '@otto/documento';
 import type { Tarefa } from '@otto/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { lerRelatorioDeImportacao, type RelatorioDeImportacaoNaTela } from '../importar/relatorio';
 import { editor as textos } from '../textos/editor';
 import { erros } from '../textos/erros';
 import { duracao, otto as textosDoOtto } from '../textos/otto';
@@ -30,6 +31,7 @@ import { criarExportador } from './exportar/exportador';
 import { criarFonteDaApi, type FonteDaPeca } from './fonteDaPeca';
 import { DialogoDeImagens } from './imagens/DialogoDeImagens';
 import { DialogoDeTexturas } from './imagens/DialogoDeTexturas';
+import { DialogoDoRelatorio } from './importar/DialogoDoRelatorio';
 import { loteDeMoverPorSeta, loteDeRemover, loteDeReordenar } from './nucleo/acoes';
 import { criarArmazem, useArmazem } from './nucleo/armazem';
 import { resolverAtalho } from './nucleo/atalhos';
@@ -99,6 +101,23 @@ function fraseDaTrava(tarefa: Pick<Tarefa, 'estado'> | undefined): string | unde
   return tarefa?.estado === 'aguardando_confirmacao' ? textosDoOtto.trava.aguardando : textosDoOtto.trava.trabalhando;
 }
 
+const chaveDoRelatorio = (pecaId: string): string => `otto.importacao.vista.${pecaId}`;
+/** O relatório de importação já foi visto neste navegador? Sem armazenamento, vale "não": mostrar de novo é o erro menor. */
+function relatorioJaVisto(pecaId: string): boolean {
+  try {
+    return window.localStorage.getItem(chaveDoRelatorio(pecaId)) !== null;
+  } catch {
+    return false;
+  }
+}
+function marcarRelatorioVisto(pecaId: string): void {
+  try {
+    window.localStorage.setItem(chaveDoRelatorio(pecaId), '1');
+  } catch {
+    // navegador sem armazenamento: o relatório continua consultável pelo topo
+  }
+}
+
 export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = detectarWebGL }: PropriedadesDoEditor) {
   const [fontePadrao] = useState(() => (fonteDeFora ? undefined : criarFonteDaApi(pecaId)));
   const fonte = (fonteDeFora ?? fontePadrao) as FonteDaPeca;
@@ -117,6 +136,11 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   // a exportação em andamento mora aqui, não no diálogo: fechar o diálogo não a interrompe
   const [exportador] = useState(() => (fonte.exportacoes ? criarExportador({ api: fonte.exportacoes }) : undefined));
   const [exportando, setExportando] = useState(false);
+  /** Fechar o relatório marca que ele já foi visto: não abre sozinho de novo nesta peça, neste navegador. */
+  const fecharRelatorio = () => {
+    marcarRelatorioVisto(pecaId);
+    setVendoRelatorio(false);
+  };
   const [buscandoImagem, setBuscandoImagem] = useState(false);
   const [vendoTexturas, setVendoTexturas] = useState(false);
 
@@ -128,6 +152,11 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   // A tarefa do Otto: as camadas que ela tocou (a marca em âmbar), a peça de antes (para "segure
   // para ver o antes") e o aviso do navegador.
   const [tocadosPeloOtto] = useState(() => criarArmazem<ReadonlySet<string>>(SEM_TOCADOS));
+  /** As camadas que tinham edição no PSD de origem e vieram como imagem (do relatório de importação). */
+  const [vieramComoImagem] = useState(() => criarArmazem<ReadonlySet<string>>(SEM_TOCADOS));
+  /** O relatório da importação que criou a peça, quando ela veio de um PSD. */
+  const [importacao, setImportacao] = useState<{ arquivo: string; relatorio: RelatorioDeImportacaoNaTela } | null>(null);
+  const [vendoRelatorio, setVendoRelatorio] = useState(false);
   const [antes] = useState(() => criarArmazem<Documento | null>(null));
   const [avisoDoNavegador] = useState(() => criarArmazem<EstadoDoAviso>('indisponivel'));
   const nomeRef = useRef<string | undefined>(undefined);
@@ -240,6 +269,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       somenteLeitura,
       faltas,
       tocadosPeloOtto,
+      vieramComoImagem,
       listarFontes: () => fonte.listarFontes(),
       trazerFonte: async (familia: string, peso: number) => (await fonte.trazerFonte?.(familia, peso)) ?? false,
       inserirImagemTrazida: envio.inserirDoBanco,
@@ -249,7 +279,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       inserirArquivos: envio.inserir,
       trocarImagem: envio.trocarImagem,
     };
-  }, [iface, documento, somenteLeitura, faltas, tocadosPeloOtto, fonte, aviso, enviando, selecionarPorNome]);
+  }, [iface, documento, somenteLeitura, faltas, tocadosPeloOtto, vieramComoImagem, fonte, aviso, enviando, selecionarPorNome]);
 
   // Abre a peça e cria a sessão do documento. Sem WebGL nem busca: a peça não abre assim.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `tentativa` existe para o "tentar de novo" repetir a busca
@@ -320,13 +350,25 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       pararDeOuvir = sessao.assinar(espelhar);
       espelhar();
       setSituacao({ estado: 'aberta', nome: aberta.peca.nome });
+      // Peça que veio de um PSD: o relatório diz o que virou imagem e o que ficou de fora. Ele aparece
+      // sozinho na primeira vez que a peça abre neste navegador, e fica no topo para consultar depois.
+      // Se não carregar, a peça abre do mesmo jeito.
+      if (aberta.peca.importacaoId && fonte.importacao) {
+        void fonte.importacao(pecaId).then((lida) => {
+          if (desmontado || !lida?.relatorio) return;
+          const relatorio = lerRelatorioDeImportacao(lida.relatorio);
+          vieramComoImagem.definir(new Set(relatorio.idsQueViraramImagem));
+          setImportacao({ arquivo: lida.arquivo.nome, relatorio });
+          if (!relatorioJaVisto(pecaId)) setVendoRelatorio(true);
+        });
+      }
     });
     return () => {
       desmontado = true;
       pararDeOuvir?.();
       sessaoRef.current = undefined;
     };
-  }, [fonte, pecaId, comWebGL, documento, estado, somenteLeitura, faltas, aviso, historico, tentativa]);
+  }, [fonte, pecaId, comWebGL, documento, estado, somenteLeitura, faltas, aviso, historico, tentativa, vieramComoImagem]);
 
   const nome = situacao.estado === 'aberta' ? situacao.nome : undefined;
   nomeRef.current = nome;
@@ -612,6 +654,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
           aoAlternarPaineis={iface.alternarPaineis}
           aoDesfazer={() => void reverter('desfazer')}
           aoRefazer={() => void reverter('refazer')}
+          {...(importacao ? { aoVerImportacao: () => setVendoRelatorio(true) } : {})}
         />
 
         <p className={estilos.telaEstreita}>{textos.avisos.telaEstreita}</p>
@@ -722,6 +765,17 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
           </div>
         )}
 
+        {vendoRelatorio && importacao && (
+          <DialogoDoRelatorio
+            arquivo={importacao.arquivo}
+            relatorio={importacao.relatorio}
+            aoVer={(idDoNo) => {
+              fecharRelatorio();
+              iface.selecionar({ tipo: 'camadas', ids: [idDoNo] });
+            }}
+            aoFechar={fecharRelatorio}
+          />
+        )}
         {buscandoImagem && fonte.imagens && <DialogoDeImagens api={fonte.imagens} aoFechar={() => setBuscandoImagem(false)} />}
         {vendoTexturas && fonte.texturas && <DialogoDeTexturas api={fonte.texturas} aoFechar={() => setVendoTexturas(false)} />}
 

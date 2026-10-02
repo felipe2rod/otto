@@ -152,6 +152,11 @@ describe('peças: criar, renomear, duplicar e excluir', () => {
     expect(api.criar).not.toHaveBeenCalled();
   });
 
+  it('"Importar PSD" fica ao lado de "Nova peça" e leva à tela de importar', () => {
+    montar(comDuas);
+    expect(screen.getByRole('link', { name: textos.importarPsd }).getAttribute('href')).toBe('/editor/importar');
+  });
+
   it('a peça em branco fica em segundo plano: cria e abre o editor da peça criada', async () => {
     const { api, irPara } = montar(comDuas);
     await act(async () => fireEvent.click(screen.getByRole('button', { name: textos.pecaEmBranco })));
