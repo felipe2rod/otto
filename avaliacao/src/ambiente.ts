@@ -16,21 +16,6 @@ export const RAIZ = path.resolve(import.meta.dirname, '../..');
 const PASTA_DE_FONTES = path.join(RAIZ, 'apps/api/recursos/fontes');
 const PASTA_DE_ARQUIVOS = path.join(RAIZ, 'poc/dados/arquivos');
 
-/** Para que serve cada família da biblioteca base (veio de poc/src/render/fontes.ts). */
-const USO_DAS_FONTES: Record<string, string> = {
-  Anton: 'título condensado de impacto; esporte, varejo, urgência',
-  'Bebas Neue': 'título condensado só em caixa alta; evento, esporte, sinalização',
-  'Archivo Black': 'título largo e pesado; tecnologia, promoção, marca jovem',
-  'Alfa Slab One': 'serifa grossa de cartaz; comida de rua, cerveja, retrô',
-  'DM Serif Display': 'serifada de título elegante; gastronomia, moda, beleza',
-  'Abril Fatface': 'didone de alto contraste; revista, cultura, luxo',
-  'Instrument Serif': 'serifada condensada contemporânea; editorial, arquitetura, arte, marca premium',
-  'IBM Plex Sans': 'texto, subtítulo, botão (300 leve em corpo grande, 400 texto, 500 subtítulo, 600 sobretítulo, 700 botão e preço)',
-  'IBM Plex Sans Condensed': 'informação densa, etiqueta, preço grande',
-  'IBM Plex Serif': 'texto serifado e título sóbrio; editorial, institucional',
-  'Space Mono': 'monoespaçada; detalhe técnico, data, numeração',
-};
-
 function fontesDaBiblioteca(): { arquivos: FonteDeArquivo[]; familias: FamiliaDeFonte[] } {
   const indice = JSON.parse(readFileSync(path.join(PASTA_DE_FONTES, 'indice.json'), 'utf8')) as { fontes: { familia: string; peso: number; arquivo: string }[] };
   const arquivos = indice.fontes.map((f) => ({ familia: f.familia, peso: f.peso, bytes: new Uint8Array(readFileSync(path.join(PASTA_DE_FONTES, f.arquivo))) }));
@@ -40,7 +25,8 @@ function fontesDaBiblioteca(): { arquivos: FonteDeArquivo[]; familias: FamiliaDe
       f.familia,
       [...(porFamilia.get(f.familia) ?? []), f.peso].sort((a, b) => a - b),
     );
-  return { arquivos, familias: [...porFamilia.entries()].map(([familia, pesos]) => ({ familia, pesos, ...(USO_DAS_FONTES[familia] ? { uso: USO_DAS_FONTES[familia] } : {}) })) };
+  // o uso de cada família entra no prompt pelo próprio pacote do agente (fontes-base.ts)
+  return { arquivos, familias: [...porFamilia.entries()].map(([familia, pesos]) => ({ familia, pesos })) };
 }
 
 function codificarJpeg(sessao: Sessao, render: RenderEmPixels, qualidade = 85): Uint8Array {

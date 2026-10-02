@@ -1,12 +1,14 @@
 // O que entra e o que sai do ciclo do agente, como dado validado por zod: a entrada da tarefa, o plano,
 // o preparo (o que se guarda entre a primeira parte e o "pode"), os eventos de progresso e o resultado.
+// É o que o servidor grava e o editor mostra. Este arquivo só importa zod e dois esquemas leves: é a entrada
+// `@otto/agente/contrato`, para quem quer os tipos e a validação sem carregar o ciclo nem o prompt.
 // É o que o servidor grava e o editor mostra. Nada aqui cita modelo, fornecedor ou custo em texto de tela.
 //
 // ADR 031: `EventoDaTarefa`, `Plano`, `Preparo` e `Entrega` carregam conteúdo do trabalho (texto de plano,
 // nome de camada, operações). Vão para o banco, sob a conta. Não vão para log nem para evento de uso.
 import { z } from 'zod';
-import { Direcao } from './direcao';
-import { EsforcoCriativoSchema } from './esforco';
+import { Direcao } from './direcao-esquema';
+import { EsforcoCriativoSchema } from './esforco-niveis';
 
 // ---------- entrada ----------
 
@@ -190,7 +192,8 @@ export const EventoDaTarefa = z.discriminatedUnion('tipo', [
   z.object({ tipo: z.literal('lote'), loteId: z.string(), descricao: z.string(), tocados: z.array(z.string()), operacoes: z.array(z.unknown()), versao: z.number().optional() }),
   z.object({ tipo: z.literal('lote-recusado'), motivo: z.enum(MOTIVOS_DE_RECUSA), detalhe: z.string().optional() }),
   z.object({ tipo: z.literal('render'), pranchetaId: z.string(), detalhe: z.boolean() }),
-  z.object({ tipo: z.literal('verificacao'), avisos: z.array(AvisoDoLint), novos: z.number() }),
+  /** `pranchetas`: ids das pranchetas conferidas nesta verificação, para o painel dizer qual foi conferida e com que resultado. */
+  z.object({ tipo: z.literal('verificacao'), avisos: z.array(AvisoDoLint), novos: z.number(), pranchetas: z.array(z.string()).optional() }),
   z.object({ tipo: z.literal('imagem'), acao: z.enum(['busca', 'trazida', 'sujeito']), resultados: z.number().optional(), arquivo: z.string().optional() }),
   z.object({ tipo: z.literal('revisao'), rodada: z.number(), texto: z.string() }),
   z.object({ tipo: z.literal('erro'), codigo: z.string(), ferramenta: z.string().optional() }),
@@ -217,3 +220,6 @@ export const ResultadoDaTarefa = z.object({
   custo: CustoDaTarefa,
 });
 export type ResultadoDaTarefa = z.infer<typeof ResultadoDaTarefa>;
+
+export { ARQUETIPOS_ACEITOS, Direcao } from './direcao-esquema';
+export { ESFORCOS_CRIATIVOS, type EsforcoCriativo, EsforcoCriativoSchema } from './esforco-niveis';

@@ -18,7 +18,11 @@ export type MotivoDeRecusa = (typeof MOTIVOS_DE_RECUSA)[number];
 export type Veredito = { ok: true } | { ok: false; motivo: MotivoDeRecusa; mensagem: string };
 
 export interface Guarda {
-  /** O lote que leva `antes` a `depois` cabe no plano? Não muda estado. */
+  /**
+   * O lote que leva `antes` a `depois` cabe no plano? Não muda estado.
+   * `depois` tem de ser o resultado de `aplicarLote(antes, ...)`: o que mudou é lido por identidade, e só
+   * `aplicarLote` garante que o que não mudou continua sendo o mesmo objeto. Duas leituras da porta não servem.
+   */
   conferir(antes: Documento, depois: Documento): Veredito;
   /** Chame depois de o lote ser gravado: fixa a prancheta do ajuste pontual. */
   registrar(antes: Documento, depois: Documento): void;

@@ -10,6 +10,8 @@ import { RESUMO_DA_ENTREGA_PARCIAL } from './textos';
 /** O que o designer respondeu ao "pode". */
 export type RespostaAoPode = 'pode' | 'cancelar' | { ajustar: string };
 
+/** `alavancas` vale nas duas partes: a 4 muda a direção; as outras, a execução. */
+/** `alavancas` vale nas duas partes: a 4 muda a direção; as outras, a execução. */
 export interface OpcoesDaTarefa extends OpcoesDaExecucao {
   /** Chamado quando o preparo pede confirmação. Ausente: aprova sempre (avaliação e teste). */
   confirmar?(preparo: Preparo): Promise<RespostaAoPode> | RespostaAoPode;
@@ -18,7 +20,7 @@ export interface OpcoesDaTarefa extends OpcoesDaExecucao {
 export async function rodarTarefa(amb: AmbienteDaTarefa, entrada: EntradaDaTarefa, opcoes: OpcoesDaTarefa = {}): Promise<{ preparo: Preparo | undefined; resultado: ResultadoDaTarefa }> {
   let preparo: Preparo | undefined;
   try {
-    preparo = await prepararTarefa(amb, entrada);
+    preparo = await prepararTarefa(amb, entrada, opcoes.alavancas ? { alavancas: opcoes.alavancas } : {});
     while (preparo.pedeConfirmacao && opcoes.confirmar) {
       const resposta = await opcoes.confirmar(preparo);
       if (resposta === 'pode') break;
@@ -26,7 +28,7 @@ export async function rodarTarefa(amb: AmbienteDaTarefa, entrada: EntradaDaTaref
         const resumo = RESUMO_DA_ENTREGA_PARCIAL.cancelada.semAlteracoes;
         return { preparo, resultado: { fim: 'cancelada', entrega: { resumo, pendencias: [] }, conferida: false, lotes: 0, custo: preparo.custo } };
       }
-      preparo = await prepararTarefa(amb, entrada, { ajuste: { anterior: preparo, texto: resposta.ajustar } });
+      preparo = await prepararTarefa(amb, entrada, { ajuste: { anterior: preparo, texto: resposta.ajustar }, ...(opcoes.alavancas ? { alavancas: opcoes.alavancas } : {}) });
     }
   } catch (e) {
     if (!(e instanceof ErroDoModelo)) throw e;
@@ -46,5 +48,11 @@ export async function rodarTarefa(amb: AmbienteDaTarefa, entrada: EntradaDaTaref
     };
     return { preparo, resultado: { fim, entrega: { resumo, pendencias: [] }, conferida: false, lotes: 0, ...(fim === 'erro' ? { erro: e.codigo } : {}), custo } };
   }
-  return { preparo, resultado: await executarTarefa(amb, entrada, preparo, opcoes.esquemaDasOperacoes ? { esquemaDasOperacoes: opcoes.esquemaDasOperacoes } : {}) };
+  return {
+    preparo,
+    resultado: await executarTarefa(amb, entrada, preparo, {
+      ...(opcoes.esquemaDasOperacoes ? { esquemaDasOperacoes: opcoes.esquemaDasOperacoes } : {}),
+      ...(opcoes.alavancas ? { alavancas: opcoes.alavancas } : {}),
+    }),
+  };
 }

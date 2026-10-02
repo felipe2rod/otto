@@ -116,6 +116,13 @@ describe('uma tarefa de briefing, do começo ao fim', () => {
     expect(JSON.stringify(partes)).not.toContain('Vou montar o Feed');
   });
 
+  it('as fontes da conta vão ao agente e ao diretor com o uso de cada família, mesmo que a porta não diga', async () => {
+    const { modelo } = await rodar(passos);
+    expect(modelo.pedidos[1]?.sistema[1]).toContain('"Anton" pesos 400: título condensado de impacto');
+    const diretor = modelo.pedidos[0]?.mensagens[0];
+    expect(diretor?.papel === 'usuario' && diretor.partes[0]?.tipo === 'texto' && diretor.partes[0].texto).toContain('- Anton (pesos 400): título condensado de impacto');
+  });
+
   it('o prefixo do sistema é o mesmo em todas as chamadas do agente', async () => {
     const { modelo } = await rodar(passos);
     const doAgente = modelo.pedidos.filter((p) => p.papel === 'agente');

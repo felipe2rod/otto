@@ -1,6 +1,6 @@
 {
   "nome": "briefing-dois-formatos",
-  "descricao": "Escrito à mão para o worker e o editor desenvolverem sem gastar token: briefing de dois formatos, sem foto (não depende de banco de imagens). Passa por tudo: direção de arte, o \"pode\" (dois formatos), produção em lotes, verificação que acusa e correção, segunda conferência, ajustes e entrega com uma pendência. As durações imitam a tarefa de briefing medida com Claude em 2026-10-02; com velocidade 1 a tarefa leva perto de 7 minutos. Comece de um documento vazio e use os ids do roteiro (idsDoRoteiro).",
+  "descricao": "Escrito à mão para o worker e o editor desenvolverem sem gastar token: briefing de dois formatos, sem foto (não depende de banco de imagens). Passa por tudo: direção de arte, o \"pode\" (dois formatos), produção em lotes, verificação que acusa e correção, segunda conferência, ajustes e entrega com uma pendência. Com velocidade 1 a tarefa leva perto de 7 minutos. Serve em peça vazia e em peça que já tem pranchetas: os nomes das pranchetas novas se adaptam (\"Feed 2\" se já houver \"Feed\") e nada do que existia é tocado. As contagens de tokens imitam a tarefa de briefing medida com Claude em 2026-10-02.",
   "entrada": {
     "tipo": "briefing",
     "esforco": "REFINED",
@@ -88,8 +88,14 @@
   "passos": [
     {
       "papel": "diretor",
-      "texto": "{\"leituraDaMarca\": \"Verde-garrafa como cor de marca, creme como papel e amarelo-mostarda só como acento. Título em serifada de display, texto em grotesca neutra. Sem foto: a marca fala por cor chapada e tipografia. Tom acolhedor e direto.\", \"conceito\": \"A hora de abrir como letreiro de fachada: o \\\"7h\\\" enorme em mostarda sobre o verde da marca, como placa pintada à mão.\", \"assinatura\": \"Um disco mostarda sangrando pelo canto superior direito do bloco verde, como o sol das sete, repetido no mesmo canto em Feed e Story.\", \"arquetipo\": \"C\", \"porque\": \"A mensagem é verbal e curta, e não há foto: a tipografia é a imagem, e o bloco de cor dá o peso de cartaz.\", \"hierarquia\": [\"título, com o \\\"7h\\\" em acento\", \"subtítulo\", \"chamada no botão\", \"rodapé\"], \"paleta\": {\"dominante\": \"#0F3B2C\", \"apoio\": \"#F4EFE3\", \"acento\": \"#F4C430\", \"texto\": \"#17171C\"}, \"tipografia\": {\"titulo\": {\"familia\": \"DM Serif Display\", \"peso\": 400, \"caixaAlta\": false, \"espacamento\": -10}, \"texto\": {\"familia\": \"IBM Plex Sans\", \"peso\": 500}}, \"imagem\": {\"papel\": \"sem imagem: peça tipográfica e de formas\", \"buscarPor\": [], \"tratamento\": \"nenhum\"}, \"forma\": \"bloco verde sangrado no topo, disco mostarda, botão pílula verde com texto creme, sem fios\", \"tecnicas\": [\"Tipografia como imagem\"], \"evitar\": [\"foto de banco\", \"sombra e brilho\", \"mais de um acento por prancheta\"]}",
-      "duracaoMs": 62000
+      "texto": "{\"leituraDaMarca\": \"Verde-garrafa como cor de marca, creme como papel e amarelo-mostarda só como acento. Título em serifada de display, texto em grotesca neutra. Sem foto: a marca fala por cor chapada e tipografia. Tom acolhedor e direto.\", \"conceito\": \"A hora de abrir como letreiro de fachada: o \\\"7h\\\" enorme em mostarda sobre o verde da marca, como placa pintada à mão.\", \"assinatura\": \"Um disco mostarda sangrando pelo canto superior direito do bloco verde, como o sol das sete, repetido no mesmo canto em todos os formatos.\", \"arquetipo\": \"C\", \"porque\": \"A mensagem é verbal e curta, e não há foto: a tipografia é a imagem, e o bloco de cor dá o peso de cartaz.\", \"hierarquia\": [\"título, com o \\\"7h\\\" em acento\", \"subtítulo\", \"chamada no botão\", \"rodapé\"], \"paleta\": {\"dominante\": \"#0F3B2C\", \"apoio\": \"#F4EFE3\", \"acento\": \"#F4C430\", \"texto\": \"#17171C\"}, \"tipografia\": {\"titulo\": {\"familia\": \"DM Serif Display\", \"peso\": 400, \"caixaAlta\": false, \"espacamento\": -10}, \"texto\": {\"familia\": \"IBM Plex Sans\", \"peso\": 500}}, \"imagem\": {\"papel\": \"sem imagem: peça tipográfica e de formas\", \"buscarPor\": [], \"tratamento\": \"nenhum\"}, \"forma\": \"bloco verde sangrado no topo, disco mostarda, botão pílula verde com texto creme, sem fios\", \"tecnicas\": [\"Tipografia como imagem\"], \"evitar\": [\"foto de banco\", \"sombra e brilho\", \"mais de um acento por prancheta\"]}",
+      "duracaoMs": 62000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 0,
+        "cacheCriado": 4754,
+        "saida": 5722
+      }
     },
     {
       "papel": "agente",
@@ -98,47 +104,53 @@
         {
           "nome": "aplicarOperacoes",
           "argumentos": {
-            "descricao": "Tokens da marca e as duas pranchetas",
+            "descricao": "Tokens da peça e as duas pranchetas",
             "operacoes": [
               {
                 "op": "definirToken",
-                "nome": "primaria",
+                "nome": "horario-verde",
                 "valor": "#0F3B2C"
               },
               {
                 "op": "definirToken",
-                "nome": "fundo",
+                "nome": "horario-creme",
                 "valor": "#F4EFE3"
               },
               {
                 "op": "definirToken",
-                "nome": "acento",
+                "nome": "horario-mostarda",
                 "valor": "#F4C430"
               },
               {
                 "op": "definirToken",
-                "nome": "texto",
+                "nome": "horario-tinta",
                 "valor": "#17171C"
               },
               {
                 "op": "criarPrancheta",
-                "nome": "Feed",
+                "nome": "{{nova:Feed}}",
                 "largura": 1080,
                 "altura": 1350,
-                "fundo": "token:fundo"
+                "fundo": "token:horario-creme"
               },
               {
                 "op": "criarPrancheta",
-                "nome": "Story",
+                "nome": "{{nova:Story}}",
                 "largura": 1080,
                 "altura": 1920,
-                "fundo": "token:fundo"
+                "fundo": "token:horario-creme"
               }
             ]
           }
         }
       ],
-      "duracaoMs": 41000
+      "duracaoMs": 41000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 0,
+        "cacheCriado": 44370,
+        "saida": 3485
+      }
     },
     {
       "papel": "agente",
@@ -151,7 +163,7 @@
             "operacoes": [
               {
                 "op": "criarNo",
-                "prancheta": "Feed",
+                "prancheta": "{{nova:Feed}}",
                 "no": {
                   "tipo": "forma",
                   "forma": "retangulo",
@@ -160,12 +172,12 @@
                   "y": 0,
                   "largura": 1080,
                   "altura": 800,
-                  "preenchimento": "token:primaria"
+                  "preenchimento": "token:horario-verde"
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Feed",
+                "prancheta": "{{nova:Feed}}",
                 "no": {
                   "tipo": "forma",
                   "forma": "elipse",
@@ -174,12 +186,12 @@
                   "y": -120,
                   "largura": 380,
                   "altura": 380,
-                  "preenchimento": "token:acento"
+                  "preenchimento": "token:horario-mostarda"
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Feed",
+                "prancheta": "{{nova:Feed}}",
                 "no": {
                   "tipo": "texto",
                   "nome": "Título",
@@ -192,20 +204,20 @@
                   "peso": 400,
                   "tamanho": 190,
                   "entrelinha": 0.95,
-                  "cor": "token:fundo",
+                  "cor": "token:horario-creme",
                   "espacamento": -10,
                   "trechos": [
                     {
                       "inicio": 11,
                       "fim": 13,
-                      "cor": "token:acento"
+                      "cor": "token:horario-mostarda"
                     }
                   ]
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Feed",
+                "prancheta": "{{nova:Feed}}",
                 "no": {
                   "tipo": "texto",
                   "nome": "Subtítulo",
@@ -218,12 +230,12 @@
                   "peso": 500,
                   "tamanho": 46,
                   "entrelinha": 1.3,
-                  "cor": "token:texto"
+                  "cor": "token:horario-tinta"
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Feed",
+                "prancheta": "{{nova:Feed}}",
                 "no": {
                   "tipo": "forma",
                   "forma": "retangulo",
@@ -232,13 +244,13 @@
                   "y": 1070,
                   "largura": 440,
                   "altura": 96,
-                  "raio": 48,
-                  "preenchimento": "token:primaria"
+                  "preenchimento": "token:horario-verde",
+                  "raio": 48
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Feed",
+                "prancheta": "{{nova:Feed}}",
                 "no": {
                   "tipo": "texto",
                   "nome": "Chamada",
@@ -251,13 +263,13 @@
                   "peso": 700,
                   "tamanho": 32,
                   "entrelinha": 1.3,
-                  "cor": "token:fundo",
+                  "cor": "token:horario-creme",
                   "alinhamento": "centro"
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Feed",
+                "prancheta": "{{nova:Feed}}",
                 "no": {
                   "tipo": "texto",
                   "nome": "Rodapé",
@@ -270,14 +282,20 @@
                   "peso": 400,
                   "tamanho": 28,
                   "entrelinha": 1.3,
-                  "cor": "token:texto"
+                  "cor": "token:horario-tinta"
                 }
               }
             ]
           }
         }
       ],
-      "duracaoMs": 78000
+      "duracaoMs": 78000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 44370,
+        "cacheCriado": 6867,
+        "saida": 6630
+      }
     },
     {
       "papel": "agente",
@@ -285,11 +303,17 @@
         {
           "nome": "renderizar",
           "argumentos": {
-            "prancheta": "Feed"
+            "prancheta": "{{nova:Feed}}"
           }
         }
       ],
-      "duracaoMs": 4000
+      "duracaoMs": 4000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 51237,
+        "cacheCriado": 1206,
+        "saida": 340
+      }
     },
     {
       "papel": "agente",
@@ -302,7 +326,7 @@
             "operacoes": [
               {
                 "op": "criarNo",
-                "prancheta": "Story",
+                "prancheta": "{{nova:Story}}",
                 "no": {
                   "tipo": "forma",
                   "forma": "retangulo",
@@ -311,12 +335,12 @@
                   "y": 0,
                   "largura": 1080,
                   "altura": 1120,
-                  "preenchimento": "token:primaria"
+                  "preenchimento": "token:horario-verde"
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Story",
+                "prancheta": "{{nova:Story}}",
                 "no": {
                   "tipo": "forma",
                   "forma": "elipse",
@@ -325,12 +349,12 @@
                   "y": -140,
                   "largura": 440,
                   "altura": 440,
-                  "preenchimento": "token:acento"
+                  "preenchimento": "token:horario-mostarda"
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Story",
+                "prancheta": "{{nova:Story}}",
                 "no": {
                   "tipo": "texto",
                   "nome": "Título",
@@ -343,20 +367,20 @@
                   "peso": 400,
                   "tamanho": 220,
                   "entrelinha": 0.95,
-                  "cor": "token:fundo",
+                  "cor": "token:horario-creme",
                   "espacamento": -10,
                   "trechos": [
                     {
                       "inicio": 11,
                       "fim": 13,
-                      "cor": "token:acento"
+                      "cor": "token:horario-mostarda"
                     }
                   ]
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Story",
+                "prancheta": "{{nova:Story}}",
                 "no": {
                   "tipo": "texto",
                   "nome": "Subtítulo",
@@ -369,12 +393,12 @@
                   "peso": 500,
                   "tamanho": 50,
                   "entrelinha": 1.3,
-                  "cor": "token:texto"
+                  "cor": "token:horario-tinta"
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Story",
+                "prancheta": "{{nova:Story}}",
                 "no": {
                   "tipo": "forma",
                   "forma": "retangulo",
@@ -383,13 +407,13 @@
                   "y": 1390,
                   "largura": 480,
                   "altura": 104,
-                  "raio": 52,
-                  "preenchimento": "token:primaria"
+                  "preenchimento": "token:horario-verde",
+                  "raio": 52
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Story",
+                "prancheta": "{{nova:Story}}",
                 "no": {
                   "tipo": "texto",
                   "nome": "Chamada",
@@ -402,13 +426,13 @@
                   "peso": 700,
                   "tamanho": 36,
                   "entrelinha": 1.3,
-                  "cor": "token:fundo",
+                  "cor": "token:horario-creme",
                   "alinhamento": "centro"
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Story",
+                "prancheta": "{{nova:Story}}",
                 "no": {
                   "tipo": "forma",
                   "forma": "retangulo",
@@ -417,12 +441,12 @@
                   "y": 1580,
                   "largura": 1080,
                   "altura": 340,
-                  "preenchimento": "token:primaria"
+                  "preenchimento": "token:horario-verde"
                 }
               },
               {
                 "op": "criarNo",
-                "prancheta": "Story",
+                "prancheta": "{{nova:Story}}",
                 "no": {
                   "tipo": "texto",
                   "nome": "Rodapé",
@@ -435,14 +459,20 @@
                   "peso": 400,
                   "tamanho": 30,
                   "entrelinha": 1.3,
-                  "cor": "token:texto"
+                  "cor": "token:horario-tinta"
                 }
               }
             ]
           }
         }
       ],
-      "duracaoMs": 52000
+      "duracaoMs": 52000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 52443,
+        "cacheCriado": 4878,
+        "saida": 4420
+      }
     },
     {
       "papel": "agente",
@@ -450,7 +480,7 @@
         {
           "nome": "renderizar",
           "argumentos": {
-            "prancheta": "Story"
+            "prancheta": "{{nova:Story}}"
           }
         },
         {
@@ -458,7 +488,13 @@
           "argumentos": {}
         }
       ],
-      "duracaoMs": 5000
+      "duracaoMs": 5000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 57321,
+        "cacheCriado": 1282,
+        "saida": 425
+      }
     },
     {
       "papel": "agente",
@@ -471,37 +507,61 @@
             "operacoes": [
               {
                 "op": "alterar",
-                "alvo": "Feed/Título",
+                "alvo": "{{nova:Feed}}/Título",
                 "props": {
                   "altura": 440
                 }
               },
               {
+                "op": "alinhar",
+                "alvos": ["{{nova:Feed}}/Botão", "{{nova:Feed}}/Chamada"],
+                "borda": "centro-vertical"
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Feed}}/Título"],
+                "borda": "esquerda",
+                "valor": 72
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Feed}}/Subtítulo"],
+                "borda": "esquerda",
+                "valor": 72
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Feed}}/Rodapé"],
+                "borda": "esquerda",
+                "valor": 72
+              },
+              {
                 "op": "alterar",
-                "alvo": "Story/Título",
+                "alvo": "{{nova:Story}}/Título",
                 "props": {
                   "altura": 510
                 }
               },
               {
                 "op": "alinhar",
-                "alvos": ["Feed/Botão", "Feed/Chamada"],
+                "alvos": ["{{nova:Story}}/Botão", "{{nova:Story}}/Chamada"],
                 "borda": "centro-vertical"
               },
               {
                 "op": "alinhar",
-                "alvos": ["Story/Botão", "Story/Chamada"],
-                "borda": "centro-vertical"
-              },
-              {
-                "op": "alinhar",
-                "alvos": ["Feed/Título", "Feed/Subtítulo", "Feed/Rodapé"],
+                "alvos": ["{{nova:Story}}/Título"],
                 "borda": "esquerda",
                 "valor": 72
               },
               {
                 "op": "alinhar",
-                "alvos": ["Story/Título", "Story/Subtítulo", "Story/Rodapé"],
+                "alvos": ["{{nova:Story}}/Subtítulo"],
+                "borda": "esquerda",
+                "valor": 72
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Story}}/Rodapé"],
                 "borda": "esquerda",
                 "valor": 72
               }
@@ -509,7 +569,13 @@
           }
         }
       ],
-      "duracaoMs": 24000
+      "duracaoMs": 24000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 58603,
+        "cacheCriado": 2736,
+        "saida": 2040
+      }
     },
     {
       "papel": "agente",
@@ -517,13 +583,13 @@
         {
           "nome": "renderizar",
           "argumentos": {
-            "prancheta": "Feed"
+            "prancheta": "{{nova:Feed}}"
           }
         },
         {
           "nome": "renderizar",
           "argumentos": {
-            "prancheta": "Story"
+            "prancheta": "{{nova:Story}}"
           }
         },
         {
@@ -531,7 +597,13 @@
           "argumentos": {}
         }
       ],
-      "duracaoMs": 6000
+      "duracaoMs": 6000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 61339,
+        "cacheCriado": 1359,
+        "saida": 510
+      }
     },
     {
       "papel": "agente",
@@ -545,12 +617,24 @@
           }
         }
       ],
-      "duracaoMs": 9000
+      "duracaoMs": 9000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 62698,
+        "cacheCriado": 1588,
+        "saida": 765
+      }
     },
     {
       "papel": "revisor",
-      "texto": "A peça atingiu a profundidade esperada para REFINED: há uma ideia (a hora como letreiro), um herói inequívoco (o \"7h\") e a assinatura (o disco) se repete nos dois formatos. Faltam dois ajustes de execução.\n\n1. Feed / Disco e Story / Disco: o disco está tímido e solto no canto. Aumente (Feed 460, Story 540) e desça até a borda de baixo dele ficar na altura do topo do título, para o olho ligar o disco ao \"7h\". Motivo: a assinatura precisa conversar com o herói.\n2. Story / Título: no formato vertical o título pode crescer. Suba para 240 px, com a caixa em 560. Motivo: peso vertical e leitura em thumbnail.",
-      "duracaoMs": 64000
+      "texto": "A peça atingiu a profundidade esperada para o nível pedido: há uma ideia (a hora como letreiro), um herói inequívoco (o \"7h\") e a assinatura (o disco) se repete. Faltam dois ajustes de execução.\n\n1. Feed e Story / Disco: o disco está tímido e solto no canto. Aumente e desça até a borda de baixo dele chegar perto do topo do título, para o olho ligar o disco ao \"7h\". Motivo: a assinatura precisa conversar com o herói.\n2. Story / Título: no formato vertical o título pode crescer. Suba para 240 px, com a caixa em 560. Motivo: peso vertical e leitura em thumbnail.",
+      "duracaoMs": 64000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 0,
+        "cacheCriado": 8113,
+        "saida": 5984
+      }
     },
     {
       "papel": "agente",
@@ -563,7 +647,7 @@
             "operacoes": [
               {
                 "op": "alterar",
-                "alvo": "Feed/Disco",
+                "alvo": "{{nova:Feed}}/Disco",
                 "props": {
                   "x": 760,
                   "y": -150,
@@ -573,7 +657,7 @@
               },
               {
                 "op": "alterar",
-                "alvo": "Story/Disco",
+                "alvo": "{{nova:Story}}/Disco",
                 "props": {
                   "x": 700,
                   "y": -80,
@@ -583,7 +667,7 @@
               },
               {
                 "op": "alterar",
-                "alvo": "Story/Título",
+                "alvo": "{{nova:Story}}/Título",
                 "props": {
                   "tamanho": 240,
                   "altura": 560,
@@ -592,7 +676,7 @@
               },
               {
                 "op": "alinhar",
-                "alvos": ["Story/Título"],
+                "alvos": ["{{nova:Story}}/Título"],
                 "borda": "esquerda",
                 "valor": 72
               }
@@ -600,7 +684,13 @@
           }
         }
       ],
-      "duracaoMs": 47000
+      "duracaoMs": 47000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 64286,
+        "cacheCriado": 4496,
+        "saida": 3995
+      }
     },
     {
       "papel": "agente",
@@ -608,13 +698,13 @@
         {
           "nome": "renderizar",
           "argumentos": {
-            "prancheta": "Feed"
+            "prancheta": "{{nova:Feed}}"
           }
         },
         {
           "nome": "renderizar",
           "argumentos": {
-            "prancheta": "Story"
+            "prancheta": "{{nova:Story}}"
           }
         },
         {
@@ -622,7 +712,13 @@
           "argumentos": {}
         }
       ],
-      "duracaoMs": 5000
+      "duracaoMs": 5000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 68782,
+        "cacheCriado": 1282,
+        "saida": 425
+      }
     },
     {
       "papel": "agente",
@@ -635,13 +731,19 @@
               {
                 "texto": "O rodapé está em 28 px no Feed, o mínimo legível no celular. Se o endereço importar mais, vale subir o corpo.",
                 "tipo": "outro",
-                "camadas": ["Feed/Rodapé"]
+                "camadas": ["{{nova:Feed}}/Rodapé"]
               }
             ]
           }
         }
       ],
-      "duracaoMs": 11000
+      "duracaoMs": 11000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 70064,
+        "cacheCriado": 1742,
+        "saida": 935
+      }
     }
   ]
 }

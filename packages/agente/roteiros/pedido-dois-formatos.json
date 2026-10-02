@@ -1,0 +1,668 @@
+{
+  "nome": "pedido-dois-formatos",
+  "descricao": "Escrito à mão: pedido sobre a peça aberta que cria dois formatos novos (quadrado e banner), sem foto. O plano vem do passo de planejar e pede o \"pode\" (duas pranchetas). Depois: produção em lotes, verificação que acusa e correção, segunda conferência, ajuste e entrega. Com velocidade 1 leva perto de 6 minutos. Serve em peça vazia e em peça que já tem pranchetas: os nomes das pranchetas novas se adaptam (\"Feed 2\" se já houver \"Feed\") e nada do que existia é tocado. As contagens de tokens imitam a tarefa de briefing medida com Claude em 2026-10-02.",
+  "entrada": {
+    "tipo": "pedido",
+    "esforco": "REFINED",
+    "pedido": "Faz também um quadrado e um banner com o aviso do novo horário: \"Abrimos às 7h\"."
+  },
+  "ids": [
+    "0199b000-0000-7000-8000-000000000081",
+    "0199b000-0000-7000-8000-000000000082",
+    "0199b000-0000-7000-8000-000000000083",
+    "0199b000-0000-7000-8000-000000000084",
+    "0199b000-0000-7000-8000-000000000085",
+    "0199b000-0000-7000-8000-000000000086",
+    "0199b000-0000-7000-8000-000000000087",
+    "0199b000-0000-7000-8000-000000000088",
+    "0199b000-0000-7000-8000-000000000089",
+    "0199b000-0000-7000-8000-00000000008a",
+    "0199b000-0000-7000-8000-00000000008b",
+    "0199b000-0000-7000-8000-00000000008c",
+    "0199b000-0000-7000-8000-00000000008d",
+    "0199b000-0000-7000-8000-00000000008e",
+    "0199b000-0000-7000-8000-00000000008f",
+    "0199b000-0000-7000-8000-000000000090",
+    "0199b000-0000-7000-8000-000000000091",
+    "0199b000-0000-7000-8000-000000000092",
+    "0199b000-0000-7000-8000-000000000093",
+    "0199b000-0000-7000-8000-000000000094",
+    "0199b000-0000-7000-8000-000000000095",
+    "0199b000-0000-7000-8000-000000000096",
+    "0199b000-0000-7000-8000-000000000097",
+    "0199b000-0000-7000-8000-000000000098",
+    "0199b000-0000-7000-8000-000000000099",
+    "0199b000-0000-7000-8000-00000000009a",
+    "0199b000-0000-7000-8000-00000000009b",
+    "0199b000-0000-7000-8000-00000000009c",
+    "0199b000-0000-7000-8000-00000000009d",
+    "0199b000-0000-7000-8000-00000000009e",
+    "0199b000-0000-7000-8000-00000000009f",
+    "0199b000-0000-7000-8000-0000000000a0",
+    "0199b000-0000-7000-8000-0000000000a1",
+    "0199b000-0000-7000-8000-0000000000a2",
+    "0199b000-0000-7000-8000-0000000000a3",
+    "0199b000-0000-7000-8000-0000000000a4",
+    "0199b000-0000-7000-8000-0000000000a5",
+    "0199b000-0000-7000-8000-0000000000a6",
+    "0199b000-0000-7000-8000-0000000000a7"
+  ],
+  "passos": [
+    {
+      "papel": "planejador",
+      "texto": "{\"resumo\": \"Crio duas pranchetas novas com o aviso do horário, na mesma linguagem: um quadrado 1080×1080 e um banner 1200×628, recompostos para cada formato. Não mexo em nada do que já existe na peça.\", \"criar\": [{\"nome\": \"{{nova:Quadrado}}\", \"largura\": 1080, \"altura\": 1080}, {\"nome\": \"{{nova:Banner}}\", \"largura\": 1200, \"altura\": 628}], \"alterar\": [], \"remover\": []}",
+      "duracaoMs": 14000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 0,
+        "cacheCriado": 2890,
+        "saida": 1190
+      }
+    },
+    {
+      "papel": "agente",
+      "texto": "Dois formatos novos, sem tocar no que já existe: o quadrado com o bloco verde no topo, e o banner com o bloco à esquerda e o texto à direita.",
+      "chamadas": [
+        {
+          "nome": "aplicarOperacoes",
+          "argumentos": {
+            "descricao": "Tokens e as duas pranchetas",
+            "operacoes": [
+              {
+                "op": "definirToken",
+                "nome": "horario-verde",
+                "valor": "#0F3B2C"
+              },
+              {
+                "op": "definirToken",
+                "nome": "horario-creme",
+                "valor": "#F4EFE3"
+              },
+              {
+                "op": "definirToken",
+                "nome": "horario-mostarda",
+                "valor": "#F4C430"
+              },
+              {
+                "op": "definirToken",
+                "nome": "horario-tinta",
+                "valor": "#17171C"
+              },
+              {
+                "op": "criarPrancheta",
+                "nome": "{{nova:Quadrado}}",
+                "largura": 1080,
+                "altura": 1080,
+                "fundo": "token:horario-creme"
+              },
+              {
+                "op": "criarPrancheta",
+                "nome": "{{nova:Banner}}",
+                "largura": 1200,
+                "altura": 628,
+                "fundo": "token:horario-creme"
+              }
+            ]
+          }
+        }
+      ],
+      "duracaoMs": 36000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 0,
+        "cacheCriado": 44370,
+        "saida": 3060
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "aplicarOperacoes",
+          "argumentos": {
+            "descricao": "Quadrado: bloco verde, disco, título, subtítulo, botão e rodapé",
+            "operacoes": [
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Quadrado}}",
+                "no": {
+                  "tipo": "forma",
+                  "forma": "retangulo",
+                  "nome": "Bloco",
+                  "x": 0,
+                  "y": 0,
+                  "largura": 1080,
+                  "altura": 640,
+                  "preenchimento": "token:horario-verde"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Quadrado}}",
+                "no": {
+                  "tipo": "forma",
+                  "forma": "elipse",
+                  "nome": "Disco",
+                  "x": 830,
+                  "y": -110,
+                  "largura": 360,
+                  "altura": 360,
+                  "preenchimento": "token:horario-mostarda"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Quadrado}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Título",
+                  "conteudo": "Abrimos\nàs 7h",
+                  "x": 72,
+                  "y": 200,
+                  "largura": 936,
+                  "altura": 360,
+                  "fonte": "DM Serif Display",
+                  "peso": 400,
+                  "tamanho": 170,
+                  "entrelinha": 0.95,
+                  "cor": "token:horario-creme",
+                  "espacamento": -10,
+                  "trechos": [
+                    {
+                      "inicio": 11,
+                      "fim": 13,
+                      "cor": "token:horario-mostarda"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Quadrado}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Subtítulo",
+                  "conteudo": "Café coado na hora,\nde segunda a sábado",
+                  "x": 72,
+                  "y": 700,
+                  "largura": 800,
+                  "altura": 120,
+                  "fonte": "IBM Plex Sans",
+                  "peso": 500,
+                  "tamanho": 42,
+                  "entrelinha": 1.3,
+                  "cor": "token:horario-tinta"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Quadrado}}",
+                "no": {
+                  "tipo": "forma",
+                  "forma": "retangulo",
+                  "nome": "Botão",
+                  "x": 72,
+                  "y": 860,
+                  "largura": 420,
+                  "altura": 88,
+                  "preenchimento": "token:horario-verde",
+                  "raio": 44
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Quadrado}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Chamada",
+                  "conteudo": "Venha tomar o seu",
+                  "x": 72,
+                  "y": 874,
+                  "largura": 420,
+                  "altura": 44,
+                  "fonte": "IBM Plex Sans",
+                  "peso": 700,
+                  "tamanho": 30,
+                  "entrelinha": 1.3,
+                  "cor": "token:horario-creme",
+                  "alinhamento": "centro"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Quadrado}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Rodapé",
+                  "conteudo": "@cafeaurora · Rua das Flores, 120",
+                  "x": 72,
+                  "y": 1002,
+                  "largura": 900,
+                  "altura": 40,
+                  "fonte": "IBM Plex Sans",
+                  "peso": 400,
+                  "tamanho": 28,
+                  "entrelinha": 1.3,
+                  "cor": "token:horario-tinta"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "duracaoMs": 66000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 44370,
+        "cacheCriado": 5949,
+        "saida": 5610
+      }
+    },
+    {
+      "papel": "agente",
+      "texto": "Agora o banner, recomposto para a leitura horizontal.",
+      "chamadas": [
+        {
+          "nome": "aplicarOperacoes",
+          "argumentos": {
+            "descricao": "Banner: bloco verde à esquerda com o título, texto e botão à direita",
+            "operacoes": [
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Banner}}",
+                "no": {
+                  "tipo": "forma",
+                  "forma": "retangulo",
+                  "nome": "Bloco",
+                  "x": 0,
+                  "y": 0,
+                  "largura": 640,
+                  "altura": 628,
+                  "preenchimento": "token:horario-verde"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Banner}}",
+                "no": {
+                  "tipo": "forma",
+                  "forma": "elipse",
+                  "nome": "Disco",
+                  "x": 420,
+                  "y": -150,
+                  "largura": 300,
+                  "altura": 300,
+                  "preenchimento": "token:horario-mostarda"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Banner}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Título",
+                  "conteudo": "Abrimos\nàs 7h",
+                  "x": 56,
+                  "y": 190,
+                  "largura": 560,
+                  "altura": 280,
+                  "fonte": "DM Serif Display",
+                  "peso": 400,
+                  "tamanho": 130,
+                  "entrelinha": 0.95,
+                  "cor": "token:horario-creme",
+                  "espacamento": -10,
+                  "trechos": [
+                    {
+                      "inicio": 11,
+                      "fim": 13,
+                      "cor": "token:horario-mostarda"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Banner}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Subtítulo",
+                  "conteudo": "Café coado na hora,\nde segunda a sábado",
+                  "x": 700,
+                  "y": 150,
+                  "largura": 440,
+                  "altura": 110,
+                  "fonte": "IBM Plex Sans",
+                  "peso": 500,
+                  "tamanho": 36,
+                  "entrelinha": 1.3,
+                  "cor": "token:horario-tinta"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Banner}}",
+                "no": {
+                  "tipo": "forma",
+                  "forma": "retangulo",
+                  "nome": "Botão",
+                  "x": 700,
+                  "y": 300,
+                  "largura": 380,
+                  "altura": 80,
+                  "preenchimento": "token:horario-verde",
+                  "raio": 40
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Banner}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Chamada",
+                  "conteudo": "Venha tomar o seu",
+                  "x": 700,
+                  "y": 314,
+                  "largura": 380,
+                  "altura": 44,
+                  "fonte": "IBM Plex Sans",
+                  "peso": 700,
+                  "tamanho": 30,
+                  "entrelinha": 1.3,
+                  "cor": "token:horario-creme",
+                  "alinhamento": "centro"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Banner}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Rodapé",
+                  "conteudo": "@cafeaurora · Rua das Flores, 120",
+                  "x": 700,
+                  "y": 520,
+                  "largura": 460,
+                  "altura": 42,
+                  "fonte": "IBM Plex Sans",
+                  "peso": 400,
+                  "tamanho": 29,
+                  "entrelinha": 1.3,
+                  "cor": "token:horario-tinta"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "duracaoMs": 58000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 50319,
+        "cacheCriado": 5337,
+        "saida": 4930
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "renderizar",
+          "argumentos": {
+            "prancheta": "{{nova:Quadrado}}"
+          }
+        },
+        {
+          "nome": "renderizar",
+          "argumentos": {
+            "prancheta": "{{nova:Banner}}"
+          }
+        },
+        {
+          "nome": "verificar",
+          "argumentos": {}
+        }
+      ],
+      "duracaoMs": 6000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 55656,
+        "cacheCriado": 1359,
+        "saida": 510
+      }
+    },
+    {
+      "papel": "agente",
+      "texto": "Corrijo o que a verificação acusou nos dois formatos.",
+      "chamadas": [
+        {
+          "nome": "aplicarOperacoes",
+          "argumentos": {
+            "descricao": "Caixas de título, chamada centrada no botão e bordas esquerdas alinhadas",
+            "operacoes": [
+              {
+                "op": "alterar",
+                "alvo": "{{nova:Quadrado}}/Título",
+                "props": {
+                  "altura": 400
+                }
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Quadrado}}/Botão", "{{nova:Quadrado}}/Chamada"],
+                "borda": "centro-vertical"
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Quadrado}}/Título"],
+                "borda": "esquerda",
+                "valor": 72
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Quadrado}}/Subtítulo"],
+                "borda": "esquerda",
+                "valor": 72
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Quadrado}}/Rodapé"],
+                "borda": "esquerda",
+                "valor": 72
+              },
+              {
+                "op": "alterar",
+                "alvo": "{{nova:Banner}}/Título",
+                "props": {
+                  "altura": 300
+                }
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Banner}}/Botão", "{{nova:Banner}}/Chamada"],
+                "borda": "centro-vertical"
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Banner}}/Título"],
+                "borda": "esquerda",
+                "valor": 56
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Banner}}/Subtítulo"],
+                "borda": "esquerda",
+                "valor": 700
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Banner}}/Rodapé"],
+                "borda": "esquerda",
+                "valor": 700
+              }
+            ]
+          }
+        }
+      ],
+      "duracaoMs": 27000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 57015,
+        "cacheCriado": 2966,
+        "saida": 2295
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "renderizar",
+          "argumentos": {
+            "prancheta": "{{nova:Quadrado}}"
+          }
+        },
+        {
+          "nome": "renderizar",
+          "argumentos": {
+            "prancheta": "{{nova:Banner}}"
+          }
+        },
+        {
+          "nome": "verificar",
+          "argumentos": {}
+        }
+      ],
+      "duracaoMs": 6000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 59981,
+        "cacheCriado": 1359,
+        "saida": 510
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "entregar",
+          "argumentos": {
+            "resumo": "Quadrado e banner montados com o aviso do horário.",
+            "pendencias": []
+          }
+        }
+      ],
+      "duracaoMs": 8000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 61340,
+        "cacheCriado": 1512,
+        "saida": 680
+      }
+    },
+    {
+      "papel": "revisor",
+      "texto": "A peça atingiu a profundidade esperada para o nível pedido: há uma ideia (a hora como letreiro), um herói inequívoco (o \"7h\") e a assinatura (o disco) se repete. Faltam dois ajustes de execução.\n\n1. Quadrado / Disco: o disco está tímido e solto no canto. Aumente e desça até a borda de baixo dele chegar perto do topo do título, para o olho ligar o disco ao \"7h\". Motivo: a assinatura precisa conversar com o herói.\n2. Banner / Disco: no banner o disco some atrás do título. Reduza para 240 e leve para o canto superior direito do bloco. Motivo: a assinatura precisa aparecer inteira.",
+      "duracaoMs": 59000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 0,
+        "cacheCriado": 8113,
+        "saida": 5984
+      }
+    },
+    {
+      "papel": "agente",
+      "texto": "Aplico as duas.",
+      "chamadas": [
+        {
+          "nome": "aplicarOperacoes",
+          "argumentos": {
+            "descricao": "Ajustes da segunda conferência: disco do quadrado maior, disco do banner menor e no canto",
+            "operacoes": [
+              {
+                "op": "alterar",
+                "alvo": "{{nova:Quadrado}}/Disco",
+                "props": {
+                  "x": 780,
+                  "y": -140,
+                  "largura": 440,
+                  "altura": 440
+                }
+              },
+              {
+                "op": "alterar",
+                "alvo": "{{nova:Banner}}/Disco",
+                "props": {
+                  "x": 480,
+                  "y": -110,
+                  "largura": 240,
+                  "altura": 240
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "duracaoMs": 29000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 62852,
+        "cacheCriado": 3118,
+        "saida": 2465
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "renderizar",
+          "argumentos": {
+            "prancheta": "{{nova:Quadrado}}"
+          }
+        },
+        {
+          "nome": "renderizar",
+          "argumentos": {
+            "prancheta": "{{nova:Banner}}"
+          }
+        },
+        {
+          "nome": "verificar",
+          "argumentos": {}
+        }
+      ],
+      "duracaoMs": 6000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 65970,
+        "cacheCriado": 1359,
+        "saida": 510
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "entregar",
+          "argumentos": {
+            "resumo": "Quadrado e banner prontos, na mesma linguagem do aviso: bloco verde, \"Abrimos às 7h\" com o \"7h\" em mostarda e o disco no canto.",
+            "pendencias": [
+              {
+                "texto": "No banner o rodapé está em 29 px, o mínimo legível no celular. Se o endereço importar, vale tirar o subtítulo e dar o espaço a ele.",
+                "tipo": "outro",
+                "camadas": ["{{nova:Banner}}/Rodapé"]
+              }
+            ]
+          }
+        }
+      ],
+      "duracaoMs": 10000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 67329,
+        "cacheCriado": 1665,
+        "saida": 850
+      }
+    }
+  ]
+}

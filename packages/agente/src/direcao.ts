@@ -7,35 +7,14 @@
 // - o material chega entre cercas com o código da tarefa (material.ts);
 // - as técnicas oferecidas ao diretor são só as que o ambiente executa;
 // - a direção pode ser refeita com um ajuste do designer ("ajustar a direção", no "pode").
-import { z } from 'zod';
 import { chamar, type MeiosDeChamada } from './chamada';
+import { Direcao } from './direcao-esquema';
 import { type EsforcoCriativo, notaDeEsforcoParaODiretor } from './esforco';
 import { REGRA_DO_MATERIAL } from './material';
-import type { MensagemDoModelo, ModeloDoAgente, ParteDeConteudo } from './portas';
+import type { MensagemDoModelo, ModeloDoAgente, ParteDeConteudo, Raciocinio } from './portas';
 import { ARQUETIPOS, CAPACIDADES_MINIMAS, type Capacidades, tecnicasDeEstudio } from './prompt/repertorio';
 
-const Hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'cor em #RRGGBB');
-
-export const ARQUETIPOS_ACEITOS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'livre'] as const;
-
-export const Direcao = z.object({
-  leituraDaMarca: z.string().min(20).describe('o que a identidade já decidiu: cor e papel de cada uma, título (família, peso, caixa, tracking), forma, foto, densidade, tom'),
-  conceito: z.string().min(10).describe('a ideia visual da peça em uma frase (não é descrição de layout)'),
-  assinatura: z.string().min(10).describe('o traço visual próprio desta peça, que se repete em todos os formatos e a faz reconhecível'),
-  arquetipo: z.enum(ARQUETIPOS_ACEITOS),
-  porque: z.string().min(10),
-  hierarquia: z.array(z.string()).min(2).max(5),
-  paleta: z.object({ dominante: Hex, apoio: Hex, acento: Hex, texto: Hex }),
-  tipografia: z.object({
-    titulo: z.object({ familia: z.string().min(2), peso: z.number(), caixaAlta: z.boolean(), espacamento: z.number() }),
-    texto: z.object({ familia: z.string().min(2), peso: z.number() }),
-  }),
-  imagem: z.object({ papel: z.string(), buscarPor: z.array(z.string()).max(4), tratamento: z.string() }),
-  forma: z.string().describe('botão, raio dos cantos, fios, formas de apoio'),
-  tecnicas: z.array(z.string()).max(4),
-  evitar: z.array(z.string()).min(1).max(8),
-});
-export type Direcao = z.infer<typeof Direcao>;
+export { ARQUETIPOS_ACEITOS, Direcao } from './direcao-esquema';
 
 export function promptDoDiretor(capacidades: Capacidades): string {
   return `Você é diretor de arte sênior de um estúdio brasileiro. Antes de qualquer peça ser montada, você define a direção de arte que um designer vai executar num editor em camadas. O designer é competente, mas segue a sua direção ao pé da letra: se ela for vaga, a peça sai genérica.
@@ -145,6 +124,8 @@ export interface PedidoDeDirecao {
   referencias: ParteDeConteudo[];
   esforco?: EsforcoCriativo;
   capacidades: Capacidades;
+  /** Esforço de raciocínio da chamada. Padrão: alto. */
+  raciocinio?: Raciocinio;
   /** "Ajustar a direção": a direção que o designer viu e o que ele pediu para mudar (já cercado). */
   ajuste?: { anterior: Direcao; pedidoDoDesigner: string };
 }
@@ -164,7 +145,7 @@ export async function dirigirArte(meios: MeiosDeChamada, modelo: ModeloDoAgente,
     });
   const mensagens: MensagemDoModelo[] = [{ papel: 'usuario', partes }];
   for (let tentativa = 0; tentativa < 2; tentativa++) {
-    const r = await chamar(meios, modelo, { papel: 'diretor', sistema: [promptDoDiretor(pedido.capacidades)], mensagens, ferramentas: [], raciocinio: 'alto' });
+    const r = await chamar(meios, modelo, { papel: 'diretor', sistema: [promptDoDiretor(pedido.capacidades)], mensagens, ferramentas: [], raciocinio: pedido.raciocinio ?? 'alto' });
     const lida = lerDirecao(r.texto);
     if (lida.ok) return lida.direcao;
     mensagens.push(

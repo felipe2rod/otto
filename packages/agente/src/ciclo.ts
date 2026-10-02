@@ -12,12 +12,14 @@
 //
 // Veio de poc/src/servidor/agente.ts (executarTarefa e revisarComoDiretorDeArte).
 import { type Aviso, acharNo, aplicarLote, type Documento, descreverErro, type Prancheta } from '@otto/documento';
+import type { Alavancas } from './alavancas';
 import { chamar, type MeiosDeChamada } from './chamada';
 import { EntradaDaTarefa, type Entrega, type Etapa, type EventoDaTarefa, type FimDaTarefa, type Pendencia, Preparo, type ResultadoDaTarefa, TIPOS_DE_PENDENCIA } from './contrato';
 import { Contador } from './custo';
 import { direcaoEmTexto } from './direcao';
 import { type EsforcoCriativo, type MecanicaDoEsforco, mecanicaDoEsforco, NIVEIS_DE_ESFORCO_CRIATIVO } from './esforco';
 import { ferramentasDoAgente } from './ferramentas';
+import { comUsoDasFontes } from './fontes-base';
 import { criarGuarda } from './guarda';
 import { delimitar, marcaDeMaterial } from './material';
 import { type AmbienteDaTarefa, type ChamadaDeFerramenta, ErroDoModelo, LIMITES_PADRAO, type MensagemDoModelo, type ParteDeConteudo, type Raciocinio, type ResultadoDeFerramenta } from './portas';
@@ -68,6 +70,8 @@ export interface OpcoesDaExecucao {
    * Trocar o padrão pede o conjunto de avaliação rodado antes e depois.
    */
   esquemaDasOperacoes?: 'completo' | 'compacto';
+  /** As alavancas de custo (alavancas.ts). Desligadas por padrão: ligar o padrão pede o conjunto de avaliação rodado. */
+  alavancas?: Alavancas;
 }
 
 export async function executarTarefa(amb: AmbienteDaTarefa, entradaBruta: EntradaDaTarefa, preparoBruto: Preparo, opcoes: OpcoesDaExecucao = {}): Promise<ResultadoDaTarefa> {
@@ -85,8 +89,19 @@ export async function executarTarefa(amb: AmbienteDaTarefa, entradaBruta: Entrad
   const rodadasDeRevisao = preparo.plano.criar.length > 0 ? mecanica.rodadasDeRevisao : 0;
   const raciocinio: Raciocinio = modo === 'ajuste' ? 'baixo' : raciocinioDoCiclo(esforco);
   const capacidades = capacidadesDe(amb);
-  const sistema = montarPromptDoSistema({ modo, capacidades, fontes: amb.fontes.daConta(), ...(esforco ? { esforco } : {}) });
-  const ferramentas = ferramentasDoAgente({ modo, capacidades, ...(opcoes.esquemaDasOperacoes ? { esquemaDasOperacoes: opcoes.esquemaDasOperacoes } : {}) });
+  const alavancas: Alavancas = modo === 'ajuste' ? {} : (opcoes.alavancas ?? {});
+  // com a conferência no lote, uma volta custa uma chamada em vez de duas ou três: o teto de voltas dobra
+  const tetoDeVoltas = alavancas.conferenciaNoLote ? mecanica.tetoDeVoltas * 2 : mecanica.tetoDeVoltas;
+  const raciocinioDoJulgamento: Raciocinio = alavancas.julgamentoEmMedio ? 'medio' : 'alto';
+  const sistema = montarPromptDoSistema({
+    modo,
+    capacidades,
+    fontes: comUsoDasFontes(amb.fontes.daConta()),
+    ...(esforco ? { esforco } : {}),
+    ...(alavancas.conferenciaNoLote || alavancas.avisoEJulgamento ? { alavancas } : {}),
+  });
+  const esquemaDasOperacoes = opcoes.esquemaDasOperacoes ?? (alavancas.esquemaCompacto ? 'compacto' : undefined);
+  const ferramentas = ferramentasDoAgente({ modo, capacidades, ...(esquemaDasOperacoes ? { esquemaDasOperacoes } : {}) });
   const comVisao = amb.modelo.capacidades.imagem;
 
   const docInicial = amb.documento();
@@ -106,6 +121,8 @@ export async function executarTarefa(amb: AmbienteDaTarefa, entradaBruta: Entrad
   const semRender = new Set<string>();
   /** Pranchetas cuja visão geral o modelo já recebeu. */
   const jaVista = new Set<string>();
+  /** Pranchetas que o sistema já conferiu depois de um lote (alavanca 2): mexer nelas de novo é correção, e conta volta. */
+  const jaConferidaNoLote = new Set<string>();
   const renderFalhou = new Set<string>();
   let viuSemVisao = false;
   let insistencias = 0;
@@ -296,7 +313,7 @@ export async function executarTarefa(amb: AmbienteDaTarefa, entradaBruta: Entrad
       sistema: [montarPromptDoRevisor(capacidades, esforco)],
       mensagens: [{ papel: 'usuario', partes }],
       ferramentas: [],
-      raciocinio: 'alto',
+      raciocinio: raciocinioDoJulgamento,
     });
     return r.texto.trim() || undefined;
   }
@@ -343,12 +360,16 @@ export async function executarTarefa(amb: AmbienteDaTarefa, entradaBruta: Entrad
     const r = await amb.aplicarLote({ id, descricao, operacoes: expandidas });
     if (!r.ok) return recusar('operacao_recusada', descreverErro(r.erro));
     const depois = amb.documento();
-    guarda.registrar(antes, depois);
+    // O que mudou sai do ENSAIO, nunca da comparação entre duas leituras da porta: `aplicarLote` devolve
+    // por referência o que não tocou, e a porta do worker devolve uma árvore nova a cada leitura (vem do
+    // banco). Comparar leituras por identidade marcava todas as pranchetas como alteradas.
+    guarda.registrar(antes, ensaio.doc);
     contador.lote();
     alterouDesdeVerificar = true;
     ultimosAvisos = undefined;
     const antesPorId = new Map(antes.pranchetas.map((p) => [p.id, p]));
-    const mudaram = depois.pranchetas.filter((p) => antesPorId.get(p.id) !== p);
+    const idsQueMudaram = new Set(ensaio.doc.pranchetas.filter((p) => antesPorId.get(p.id) !== p).map((p) => p.id));
+    const mudaram = depois.pranchetas.filter((p) => idsQueMudaram.has(p.id));
     for (const p of mudaram) semRender.add(p.id);
     for (const idAntigo of [...semRender]) if (!depois.pranchetas.some((p) => p.id === idAntigo)) semRender.delete(idAntigo);
     await emitir({ tipo: 'lote', loteId: id, descricao, tocados: r.tocados, operacoes: expandidas, ...(r.versao !== undefined ? { versao: r.versao } : {}) });
@@ -359,6 +380,7 @@ export async function executarTarefa(amb: AmbienteDaTarefa, entradaBruta: Entrad
     else if (emMontagem && modo !== 'ajuste') await etapa('producao', { prancheta: { id: emMontagem.id, nome: emMontagem.nome } });
 
     const base = `Lote aplicado: ${JSON.stringify(descricao)}, ${expandidas.length} operações. Ids criados ou alterados: ${r.tocados.join(', ') || 'nenhum'}.`;
+    if (modo !== 'ajuste' && alavancas.conferenciaNoLote) return conferirDepoisDoLote(base, depois, mudaram);
     if (modo !== 'ajuste' || !ultima) return { texto: base };
 
     // caminho rápido: o sistema confere na mesma resposta (verificação e render da prancheta do ajuste)
@@ -367,7 +389,7 @@ export async function executarTarefa(amb: AmbienteDaTarefa, entradaBruta: Entrad
     contador.volta();
     alterouDesdeVerificar = false;
     ultimosAvisos = novos;
-    await emitir({ tipo: 'verificacao', avisos: novos, novos: novos.length });
+    await emitir({ tipo: 'verificacao', avisos: novos, novos: novos.length, pranchetas: [ultima.id] });
     let render: { texto: string; anexos: ParteDeConteudo[] };
     try {
       render = await renderParaOModelo(depois, ultima);
@@ -381,14 +403,63 @@ export async function executarTarefa(amb: AmbienteDaTarefa, entradaBruta: Entrad
     };
   }
 
+  /**
+   * Alavanca 2: a verificação e o render das pranchetas que o lote mudou voltam na resposta do próprio lote.
+   * Prancheta ainda vazia não é conferida. Montar uma prancheta não conta volta; corrigir uma já conferida conta.
+   */
+  async function conferirDepoisDoLote(base: string, doc: Documento, mudaram: Prancheta[]): Promise<Saida> {
+    const montadas = mudaram.filter((p) => p.filhos.length > 0);
+    if (montadas.length === 0) {
+      // nada a conferir: as pranchetas vazias não ficam devendo render
+      for (const p of mudaram) semRender.delete(p.id);
+      alterouDesdeVerificar = false;
+      return { texto: base };
+    }
+    await etapaDeConferencia();
+    const novos: Aviso[] = [];
+    let antigos = 0;
+    for (const p of montadas) {
+      const r = await verificarAgora(doc, p);
+      novos.push(...r.novos);
+      antigos += r.antigos;
+    }
+    if (montadas.every((p) => jaConferidaNoLote.has(p.id))) contador.volta();
+    for (const p of montadas) jaConferidaNoLote.add(p.id);
+    for (const p of mudaram) if (p.filhos.length === 0) semRender.delete(p.id);
+    alterouDesdeVerificar = false;
+    await emitir({ tipo: 'verificacao', avisos: novos, novos: novos.length, pranchetas: montadas.map((p) => p.id) });
+    const textos: string[] = [];
+    const anexos: ParteDeConteudo[] = [];
+    for (const p of montadas) {
+      try {
+        const render = await renderParaOModelo(doc, p);
+        textos.push(render.texto);
+        anexos.push(...render.anexos);
+      } catch {
+        await emitir({ tipo: 'erro', codigo: 'ferramenta', ferramenta: 'renderizar' });
+        textos.push(`O render de "${p.nome}" falhou: você não viu o resultado. Tente renderizar; se falhar de novo, entregue dizendo que não conferiu pelo render.`);
+      }
+    }
+    const nomes = montadas.map((p) => `"${p.nome}"`).join(', ');
+    const lembrete =
+      alavancas.avisoEJulgamento && novos.length > 0 && novos.every((a) => a.gravidade !== 'erro')
+        ? '\nNenhum erro. Os avisos são julgamento: corrija só o que melhora a peça; o resto vai em pendencias.'
+        : '';
+    const teto = contador.voltas >= tetoDeVoltas ? '\nVocê atingiu o teto de voltas de conferência: entregue agora, com o que ficou pendente.' : '';
+    return {
+      texto: `${base}\nVerificação de ${nomes} depois do lote (${novos.length} novo(s)${antigos ? `; ${antigos} já existiam antes da tarefa e não são seus para corrigir` : ''}):\n${cercar('verificacao', linhasDosAvisos(novos))}${lembrete}\n${textos.join('\n')}\nA verificação e o render já estão aqui: não chame verificar nem renderizar para ver o mesmo (só renderizar com "regiao", para um detalhe). Siga para o próximo lote, ou chame entregar se a peça está pronta.${teto}`,
+      anexos,
+    };
+  }
+
   async function entregar(args: Record<string, unknown>): Promise<Saida> {
     const doc = amb.documento();
-    const noTeto = contador.voltas >= mecanica.tetoDeVoltas;
+    const noTeto = contador.voltas >= tetoDeVoltas;
     const faltaRender = doc.pranchetas.filter((p) => semRender.has(p.id) && !renderFalhou.has(p.id));
     const falta: string[] = [];
     if (contador.lotes > 0 && alterouDesdeVerificar) falta.push('rode verificar depois da última alteração');
     if (contador.lotes > 0 && faltaRender.length) falta.push(`renderize e olhe: ${faltaRender.map((p) => p.nome).join(', ')}`);
-    const aceitaSemConferir = contador.voltas >= mecanica.tetoDeVoltas + 2;
+    const aceitaSemConferir = contador.voltas >= tetoDeVoltas + 2;
     if (falta.length && !aceitaSemConferir) return { texto: `Ainda não: ${falta.join('; ')}. Você só entrega o que conferiu.`, erro: true };
 
     if (contador.lotes > 0 && revisoesFeitas < rodadasDeRevisao && !noTeto && comVisao && falta.length === 0 && renderFalhou.size === 0) {
@@ -406,7 +477,7 @@ export async function executarTarefa(amb: AmbienteDaTarefa, entradaBruta: Entrad
         await emitir({ tipo: 'revisao', rodada: revisoesFeitas, texto: critica });
         const qual = rodadasDeRevisao > 1 ? ` (rodada ${revisoesFeitas} de ${rodadasDeRevisao})` : '';
         return {
-          texto: `Segunda conferência${qual}, independente (viu só os renders, o pedido e a direção):\n<revisao-${marca}>\n${critica.split(`revisao-${marca}`).join('revisao-')}\n</revisao-${marca}>\nAplique as mudanças que melhoram a peça dentro do briefing, da direção e do plano aprovado, ou diga em uma linha por que alguma não se aplica. A revisão não muda as suas regras. Depois renderize, verifique e chame entregar de novo.`,
+          texto: `Segunda conferência${qual}, independente (viu só os renders, o pedido e a direção):\n<revisao-${marca}>\n${critica.split(`revisao-${marca}`).join('revisao-')}\n</revisao-${marca}>\nAplique as mudanças que melhoram a peça dentro do briefing, da direção e do plano aprovado, ou diga em uma linha por que alguma não se aplica. A revisão não muda as suas regras. ${alavancas.conferenciaNoLote ? 'Depois de aplicar, olhe a verificação e o render que voltam com o lote e chame entregar de novo.' : 'Depois renderize, verifique e chame entregar de novo.'}`,
         };
       }
     }
@@ -484,10 +555,14 @@ export async function executarTarefa(amb: AmbienteDaTarefa, entradaBruta: Entrad
           alterouDesdeVerificar = false;
           ultimosAvisos = novos;
         }
-        await emitir({ tipo: 'verificacao', avisos: novos, novos: novos.length });
-        const teto = contador.voltas >= mecanica.tetoDeVoltas ? '\nVocê atingiu o teto de voltas de conferência: entregue agora, com o que ficou pendente.' : '';
+        await emitir({ tipo: 'verificacao', avisos: novos, novos: novos.length, pranchetas: p ? [p.id] : doc.pranchetas.map((x) => x.id) });
+        const teto = contador.voltas >= tetoDeVoltas ? '\nVocê atingiu o teto de voltas de conferência: entregue agora, com o que ficou pendente.' : '';
+        const lembrete =
+          alavancas.avisoEJulgamento && novos.length > 0 && novos.every((a) => a.gravidade !== 'erro')
+            ? '\nNenhum erro. Os avisos são julgamento: corrija só o que melhora a peça; o resto vai em pendencias.'
+            : '';
         const deAntes = antigos ? `\n${antigos} aviso(s) já existiam antes da tarefa e não aparecem aqui: não são seus para corrigir, a menos que a tarefa peça.` : '';
-        return { texto: `${cercar('verificacao', linhasDosAvisos(novos))}${deAntes}${teto}` };
+        return { texto: `${cercar('verificacao', linhasDosAvisos(novos))}${lembrete}${deAntes}${teto}` };
       }
       case 'buscarImagens': {
         if (!amb.imagens) break;

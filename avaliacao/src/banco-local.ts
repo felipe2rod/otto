@@ -5,6 +5,7 @@
 // A busca é por etiqueta: as etiquetas saem do endereço de origem da foto. O agente busca em inglês e as
 // etiquetas estão em português; um vocabulário curto faz a ponte. Com outro banco, troque este adaptador:
 // a porta é BancoDeImagens, de @otto/agente.
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { BancoDeImagens, ImagemEncontrada, ImagemParaOModelo } from '../../packages/agente/src/index';
@@ -84,12 +85,22 @@ function etiquetasDe(url: string): string[] {
 export interface BancoLocal extends BancoDeImagens {
   /** Quantas fotos o banco tem. Zero: a pasta não existe nesta máquina. */
   readonly total: number;
-  /** Bytes de um arquivo já trazido (ou de qualquer arquivo da pasta), pelo hash. */
+  /** Fotos de banco que estão no disco mas cujo conteúdo não bate mais com o hash do nome (disco corrompido): ficam fora. */
+  readonly corrompidas: string[];
+  /** Metadados que não são mais JSON: não dá para saber se eram foto de banco. */
+  readonly metasIlegiveis: number;
+  /** Bytes de um arquivo da pasta, pelo hash. Só devolve se o conteúdo ainda bate com o hash. */
   bytes(hash: string): Uint8Array | undefined;
 }
 
 export function criarBancoLocal(pasta: string, previa: (bytes: Uint8Array) => ImagemParaOModelo | undefined): BancoLocal {
   const fotos: { meta: MetaDeArquivo; etiquetas: string[]; busca: Set<string> }[] = [];
+  const corrompidas: string[] = [];
+  let metasIlegiveis = 0;
+  const integro = (hash: string): boolean =>
+    createHash('sha256')
+      .update(readFileSync(path.join(pasta, hash)))
+      .digest('hex') === hash;
   if (existsSync(pasta)) {
     for (const nome of readdirSync(pasta).sort()) {
       if (!nome.endsWith('.json')) continue;
@@ -98,19 +109,27 @@ export function criarBancoLocal(pasta: string, previa: (bytes: Uint8Array) => Im
         if (!meta.origem?.url || !/^image\/(jpeg|png|webp)$/.test(meta.tipo) || !existsSync(path.join(pasta, meta.hash))) continue;
         // só foto de banco: textura gerada, captura de site e envio de designer não são resultado de busca
         if (!/pixabay/i.test(meta.origem.banco)) continue;
+        // o disco deste repositório já trocou o conteúdo de arquivos: foto cujo conteúdo não bate com o hash não entra
+        if (!integro(meta.hash)) {
+          corrompidas.push(meta.hash);
+          continue;
+        }
         const etiquetas = etiquetasDe(meta.origem.url);
         fotos.push({ meta, etiquetas, busca: new Set(etiquetas.map(semAcento)) });
       } catch {
         // meta ilegível: a foto fica fora do banco
+        metasIlegiveis++;
       }
     }
   }
   const bytes = (hash: string): Uint8Array | undefined => {
     const arquivo = path.join(pasta, hash);
-    return /^[0-9a-f]{64}$/.test(hash) && existsSync(arquivo) ? new Uint8Array(readFileSync(arquivo)) : undefined;
+    return /^[0-9a-f]{64}$/.test(hash) && existsSync(arquivo) && integro(hash) ? new Uint8Array(readFileSync(arquivo)) : undefined;
   };
   return {
     total: fotos.length,
+    corrompidas,
+    metasIlegiveis,
     bytes,
     async buscar(consulta, orientacao) {
       const termos = semAcento(consulta)

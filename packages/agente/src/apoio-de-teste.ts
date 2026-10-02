@@ -119,3 +119,13 @@ export const DIRECAO_VALIDA = {
   tecnicas: ['película em degradê só na faixa do texto'],
   evitar: ['duotone', 'serifa', 'caixa alta no título'],
 };
+
+/**
+ * Faz a porta `documento()` devolver uma árvore nova a cada leitura, como a porta do worker (que lê do banco):
+ * nenhum objeto é o mesmo de uma leitura para a outra. O ciclo não pode depender de identidade entre leituras.
+ */
+export function comArvoreReconstruida<T extends AmbienteDaTarefa>(amb: T): T {
+  const ler = amb.documento;
+  amb.documento = () => structuredClone(ler());
+  return amb;
+}

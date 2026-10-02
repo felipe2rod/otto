@@ -1,0 +1,452 @@
+{
+  "nome": "criar-uma-peca",
+  "descricao": "Escrito à mão: pedido livre que cria UMA peça (uma prancheta, sem foto). Não pede o \"pode\": criar é sempre um formato só. Passa pela direção de arte, produção, verificação que acusa e correção, segunda conferência, ajuste e entrega com uma pendência. Com velocidade 1 leva perto de 5 minutos. Serve em peça vazia e em peça que já tem pranchetas: os nomes das pranchetas novas se adaptam (\"Feed 2\" se já houver \"Feed\") e nada do que existia é tocado. As contagens de tokens imitam a tarefa de briefing medida com Claude em 2026-10-02.",
+  "entrada": {
+    "tipo": "criar",
+    "esforco": "REFINED",
+    "pedido": "Aviso para o Café Aurora, só com tipografia, verde e creme: \"Abrimos às 7h\"."
+  },
+  "ids": [
+    "0199b000-0000-7000-8000-000000000041",
+    "0199b000-0000-7000-8000-000000000042",
+    "0199b000-0000-7000-8000-000000000043",
+    "0199b000-0000-7000-8000-000000000044",
+    "0199b000-0000-7000-8000-000000000045",
+    "0199b000-0000-7000-8000-000000000046",
+    "0199b000-0000-7000-8000-000000000047",
+    "0199b000-0000-7000-8000-000000000048",
+    "0199b000-0000-7000-8000-000000000049",
+    "0199b000-0000-7000-8000-00000000004a",
+    "0199b000-0000-7000-8000-00000000004b",
+    "0199b000-0000-7000-8000-00000000004c",
+    "0199b000-0000-7000-8000-00000000004d",
+    "0199b000-0000-7000-8000-00000000004e",
+    "0199b000-0000-7000-8000-00000000004f",
+    "0199b000-0000-7000-8000-000000000050",
+    "0199b000-0000-7000-8000-000000000051",
+    "0199b000-0000-7000-8000-000000000052",
+    "0199b000-0000-7000-8000-000000000053",
+    "0199b000-0000-7000-8000-000000000054",
+    "0199b000-0000-7000-8000-000000000055",
+    "0199b000-0000-7000-8000-000000000056",
+    "0199b000-0000-7000-8000-000000000057",
+    "0199b000-0000-7000-8000-000000000058",
+    "0199b000-0000-7000-8000-000000000059",
+    "0199b000-0000-7000-8000-00000000005a",
+    "0199b000-0000-7000-8000-00000000005b",
+    "0199b000-0000-7000-8000-00000000005c",
+    "0199b000-0000-7000-8000-00000000005d",
+    "0199b000-0000-7000-8000-00000000005e",
+    "0199b000-0000-7000-8000-00000000005f",
+    "0199b000-0000-7000-8000-000000000060",
+    "0199b000-0000-7000-8000-000000000061",
+    "0199b000-0000-7000-8000-000000000062",
+    "0199b000-0000-7000-8000-000000000063",
+    "0199b000-0000-7000-8000-000000000064",
+    "0199b000-0000-7000-8000-000000000065",
+    "0199b000-0000-7000-8000-000000000066",
+    "0199b000-0000-7000-8000-000000000067"
+  ],
+  "passos": [
+    {
+      "papel": "diretor",
+      "texto": "{\"leituraDaMarca\": \"Verde-garrafa como cor de marca, creme como papel e amarelo-mostarda só como acento. Título em serifada de display, texto em grotesca neutra. Sem foto: a marca fala por cor chapada e tipografia. Tom acolhedor e direto.\", \"conceito\": \"A hora de abrir como letreiro de fachada: o \\\"7h\\\" enorme em mostarda sobre o verde da marca, como placa pintada à mão.\", \"assinatura\": \"Um disco mostarda sangrando pelo canto superior direito do bloco verde, como o sol das sete, repetido no mesmo canto em todos os formatos.\", \"arquetipo\": \"C\", \"porque\": \"A mensagem é verbal e curta, e não há foto: a tipografia é a imagem, e o bloco de cor dá o peso de cartaz.\", \"hierarquia\": [\"título, com o \\\"7h\\\" em acento\", \"subtítulo\", \"chamada no botão\", \"rodapé\"], \"paleta\": {\"dominante\": \"#0F3B2C\", \"apoio\": \"#F4EFE3\", \"acento\": \"#F4C430\", \"texto\": \"#17171C\"}, \"tipografia\": {\"titulo\": {\"familia\": \"DM Serif Display\", \"peso\": 400, \"caixaAlta\": false, \"espacamento\": -10}, \"texto\": {\"familia\": \"IBM Plex Sans\", \"peso\": 500}}, \"imagem\": {\"papel\": \"sem imagem: peça tipográfica e de formas\", \"buscarPor\": [], \"tratamento\": \"nenhum\"}, \"forma\": \"bloco verde sangrado no topo, disco mostarda, botão pílula verde com texto creme, sem fios\", \"tecnicas\": [\"Tipografia como imagem\"], \"evitar\": [\"foto de banco\", \"sombra e brilho\", \"mais de um acento por prancheta\"]}",
+      "duracaoMs": 58000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 0,
+        "cacheCriado": 4754,
+        "saida": 5722
+      }
+    },
+    {
+      "papel": "agente",
+      "texto": "Uma peça só, em feed, tipográfica: bloco verde no topo com o título em creme e o \"7h\" em mostarda, disco mostarda no canto. O pedido só traz o título; o subtítulo, a chamada e o rodapé eu escrevi, e vão nas pendências para você trocar.",
+      "chamadas": [
+        {
+          "nome": "aplicarOperacoes",
+          "argumentos": {
+            "descricao": "Tokens, prancheta e a peça inteira",
+            "operacoes": [
+              {
+                "op": "definirToken",
+                "nome": "horario-verde",
+                "valor": "#0F3B2C"
+              },
+              {
+                "op": "definirToken",
+                "nome": "horario-creme",
+                "valor": "#F4EFE3"
+              },
+              {
+                "op": "definirToken",
+                "nome": "horario-mostarda",
+                "valor": "#F4C430"
+              },
+              {
+                "op": "definirToken",
+                "nome": "horario-tinta",
+                "valor": "#17171C"
+              },
+              {
+                "op": "criarPrancheta",
+                "nome": "{{nova:Feed}}",
+                "largura": 1080,
+                "altura": 1350,
+                "fundo": "token:horario-creme"
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Feed}}",
+                "no": {
+                  "tipo": "forma",
+                  "forma": "retangulo",
+                  "nome": "Bloco",
+                  "x": 0,
+                  "y": 0,
+                  "largura": 1080,
+                  "altura": 800,
+                  "preenchimento": "token:horario-verde"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Feed}}",
+                "no": {
+                  "tipo": "forma",
+                  "forma": "elipse",
+                  "nome": "Disco",
+                  "x": 820,
+                  "y": -120,
+                  "largura": 380,
+                  "altura": 380,
+                  "preenchimento": "token:horario-mostarda"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Feed}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Título",
+                  "conteudo": "Abrimos\nàs 7h",
+                  "x": 72,
+                  "y": 290,
+                  "largura": 936,
+                  "altura": 400,
+                  "fonte": "DM Serif Display",
+                  "peso": 400,
+                  "tamanho": 190,
+                  "entrelinha": 0.95,
+                  "cor": "token:horario-creme",
+                  "espacamento": -10,
+                  "trechos": [
+                    {
+                      "inicio": 11,
+                      "fim": 13,
+                      "cor": "token:horario-mostarda"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Feed}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Subtítulo",
+                  "conteudo": "Café coado na hora,\nde segunda a sábado",
+                  "x": 72,
+                  "y": 880,
+                  "largura": 800,
+                  "altura": 130,
+                  "fonte": "IBM Plex Sans",
+                  "peso": 500,
+                  "tamanho": 46,
+                  "entrelinha": 1.3,
+                  "cor": "token:horario-tinta"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Feed}}",
+                "no": {
+                  "tipo": "forma",
+                  "forma": "retangulo",
+                  "nome": "Botão",
+                  "x": 72,
+                  "y": 1070,
+                  "largura": 440,
+                  "altura": 96,
+                  "preenchimento": "token:horario-verde",
+                  "raio": 48
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Feed}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Chamada",
+                  "conteudo": "Venha tomar o seu",
+                  "x": 72,
+                  "y": 1086,
+                  "largura": 440,
+                  "altura": 48,
+                  "fonte": "IBM Plex Sans",
+                  "peso": 700,
+                  "tamanho": 32,
+                  "entrelinha": 1.3,
+                  "cor": "token:horario-creme",
+                  "alinhamento": "centro"
+                }
+              },
+              {
+                "op": "criarNo",
+                "prancheta": "{{nova:Feed}}",
+                "no": {
+                  "tipo": "texto",
+                  "nome": "Rodapé",
+                  "conteudo": "@cafeaurora · Rua das Flores, 120",
+                  "x": 72,
+                  "y": 1240,
+                  "largura": 900,
+                  "altura": 40,
+                  "fonte": "IBM Plex Sans",
+                  "peso": 400,
+                  "tamanho": 28,
+                  "entrelinha": 1.3,
+                  "cor": "token:horario-tinta"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "duracaoMs": 84000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 0,
+        "cacheCriado": 44370,
+        "saida": 7140
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "renderizar",
+          "argumentos": {
+            "prancheta": "{{nova:Feed}}"
+          }
+        },
+        {
+          "nome": "verificar",
+          "argumentos": {}
+        }
+      ],
+      "duracaoMs": 5000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 44370,
+        "cacheCriado": 1282,
+        "saida": 425
+      }
+    },
+    {
+      "papel": "agente",
+      "texto": "Caixa do título curta, chamada fora do centro do botão e bordas esquerdas a 2 px. Corrijo.",
+      "chamadas": [
+        {
+          "nome": "aplicarOperacoes",
+          "argumentos": {
+            "descricao": "Caixa do título, chamada centrada no botão e bordas esquerdas na margem",
+            "operacoes": [
+              {
+                "op": "alterar",
+                "alvo": "{{nova:Feed}}/Título",
+                "props": {
+                  "altura": 440
+                }
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Feed}}/Botão", "{{nova:Feed}}/Chamada"],
+                "borda": "centro-vertical"
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Feed}}/Título"],
+                "borda": "esquerda",
+                "valor": 72
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Feed}}/Subtítulo"],
+                "borda": "esquerda",
+                "valor": 72
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Feed}}/Rodapé"],
+                "borda": "esquerda",
+                "valor": 72
+              }
+            ]
+          }
+        }
+      ],
+      "duracaoMs": 19000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 45652,
+        "cacheCriado": 2354,
+        "saida": 1615
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "renderizar",
+          "argumentos": {
+            "prancheta": "{{nova:Feed}}"
+          }
+        },
+        {
+          "nome": "verificar",
+          "argumentos": {}
+        }
+      ],
+      "duracaoMs": 5000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 48006,
+        "cacheCriado": 1282,
+        "saida": 425
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "entregar",
+          "argumentos": {
+            "resumo": "Montei o aviso em feed, só com tipografia e cor.",
+            "pendencias": []
+          }
+        }
+      ],
+      "duracaoMs": 8000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 49288,
+        "cacheCriado": 1512,
+        "saida": 680
+      }
+    },
+    {
+      "papel": "revisor",
+      "texto": "A peça atingiu a profundidade esperada para o nível pedido: há uma ideia (a hora como letreiro), um herói inequívoco (o \"7h\") e a assinatura (o disco) se repete. Faltam dois ajustes de execução.\n\n1. Feed / Disco: o disco está tímido e solto no canto. Aumente e desça até a borda de baixo dele chegar perto do topo do título, para o olho ligar o disco ao \"7h\". Motivo: a assinatura precisa conversar com o herói.\n2. Feed / Subtítulo: está pequeno para o peso do bloco. Suba para 50 px, com a caixa em 140. Motivo: segunda leitura mais clara.",
+      "duracaoMs": 61000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 0,
+        "cacheCriado": 8113,
+        "saida": 5984
+      }
+    },
+    {
+      "papel": "agente",
+      "texto": "As duas mudanças melhoram a peça. Aplico.",
+      "chamadas": [
+        {
+          "nome": "aplicarOperacoes",
+          "argumentos": {
+            "descricao": "Ajustes da segunda conferência: disco maior e mais baixo, subtítulo maior",
+            "operacoes": [
+              {
+                "op": "alterar",
+                "alvo": "{{nova:Feed}}/Disco",
+                "props": {
+                  "x": 760,
+                  "y": -150,
+                  "largura": 460,
+                  "altura": 460
+                }
+              },
+              {
+                "op": "alterar",
+                "alvo": "{{nova:Feed}}/Subtítulo",
+                "props": {
+                  "tamanho": 50,
+                  "altura": 140
+                }
+              },
+              {
+                "op": "alinhar",
+                "alvos": ["{{nova:Feed}}/Subtítulo"],
+                "borda": "esquerda",
+                "valor": 72
+              }
+            ]
+          }
+        }
+      ],
+      "duracaoMs": 33000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 50800,
+        "cacheCriado": 3424,
+        "saida": 2805
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "renderizar",
+          "argumentos": {
+            "prancheta": "{{nova:Feed}}"
+          }
+        },
+        {
+          "nome": "verificar",
+          "argumentos": {}
+        }
+      ],
+      "duracaoMs": 5000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 54224,
+        "cacheCriado": 1282,
+        "saida": 425
+      }
+    },
+    {
+      "papel": "agente",
+      "chamadas": [
+        {
+          "nome": "entregar",
+          "argumentos": {
+            "resumo": "Aviso pronto em feed: bloco verde, \"Abrimos às 7h\" em creme com o \"7h\" em mostarda e o disco no canto.",
+            "pendencias": [
+              {
+                "texto": "O pedido só trazia o título. Escrevi o subtítulo (\"Café coado na hora, de segunda a sábado\"), a chamada (\"Venha tomar o seu\") e o rodapé com o endereço: troque pelos seus.",
+                "tipo": "texto_escrito_pelo_otto",
+                "camadas": ["{{nova:Feed}}/Subtítulo", "{{nova:Feed}}/Chamada", "{{nova:Feed}}/Rodapé"]
+              }
+            ]
+          }
+        }
+      ],
+      "duracaoMs": 10000,
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 55506,
+        "cacheCriado": 1665,
+        "saida": 850
+      }
+    }
+  ]
+}

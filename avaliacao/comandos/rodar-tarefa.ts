@@ -14,7 +14,9 @@
 //         --saida <pasta>              padrão: avaliacao/saida/<data>-<nome>
 //         --teto-de-custo <dólares>    padrão 3      --teto-de-tempo <minutos>   padrão 40
 //         --sem-banco                  roda sem banco de imagens
-//         --esquema compacto           mostra o catálogo de operações ao modelo só pelos nomes (para medir contra o completo)
+//         --alavancas <lista>          todas, nenhuma (padrão), ou números e nomes separados por vírgula:
+//                                      1 esquemaCompacto · 2 conferenciaNoLote · 3 avisoEJulgamento · 4 julgamentoEmMedio
+//         --esquema compacto           o mesmo que a alavanca 1
 //         --teto-de-tokens <n>         padrão 4000000
 //
 // A chave do fornecedor vem de LLM_API_KEY_DO, no .env da raiz. Ela nunca é impressa.
@@ -28,7 +30,9 @@ import {
   type EventoDaTarefa,
   fracaoDeCache,
   idsDoRoteiro,
+  lerAlavancas,
   type ModeloDoAgente,
+  NOMES_DAS_ALAVANCAS,
   type Roteiro,
   rodarTarefa,
   totalDeTokens,
@@ -160,9 +164,12 @@ async function principal(): Promise<void> {
   });
   const avisosIniciais = amb.verificarAgora();
 
+  const alavancas = lerAlavancas(args.get('alavancas'));
+  const ligadas = NOMES_DAS_ALAVANCAS.filter((n) => alavancas[n]);
+  console.log(`alavancas: ${ligadas.join(', ') || 'nenhuma'}`);
   console.log(`tarefa: ${entrada.tipo} · modelo: ${base.nome} · prompt: ${VERSAO_DO_PROMPT} · banco de imagens local: ${amb.imagens ? `${amb.banco.total} fotos` : 'não'}`);
   // o "pode" é aprovado sozinho: aqui se mede a tarefa inteira; o tempo de espera do designer não entra
-  const { preparo, resultado } = await rodarTarefa(amb, entrada, { confirmar: () => 'pode', ...(args.get('esquema') === 'compacto' ? { esquemaDasOperacoes: 'compacto' as const } : {}) });
+  const { preparo, resultado } = await rodarTarefa(amb, entrada, { confirmar: () => 'pode', alavancas, ...(args.get('esquema') === 'compacto' ? { esquemaDasOperacoes: 'compacto' as const } : {}) });
 
   // ---------- o que fica gravado ----------
   const final = amb.documento();
@@ -186,6 +193,7 @@ async function principal(): Promise<void> {
     tipo: entrada.tipo,
     modelo: base.nome,
     prompt: VERSAO_DO_PROMPT,
+    alavancas: ligadas,
     fim: resultado.fim,
     conferida: resultado.conferida,
     segundos: Math.round(c.duracaoMs / 1000),

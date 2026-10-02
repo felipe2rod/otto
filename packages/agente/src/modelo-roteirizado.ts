@@ -64,6 +64,82 @@ function esperarComTemporizador(ms: number, sinal?: AbortSignal): Promise<void> 
   });
 }
 
+// ---------- roteiro que se adapta à peça ----------
+//
+// Um roteiro escrito para desenvolver não sabe em que peça vai rodar. Para servir em qualquer uma, o passo
+// pode trazer marcas, trocadas pelo que o ciclo mandou ao modelo na primeira mensagem da conversa:
+//   {{prancheta}}   a prancheta da primeira camada de texto da peça (ou a primeira prancheta)
+//   {{texto}}       o nome dessa primeira camada de texto
+//   {{nova:Feed}}   "Feed" se a peça não tem prancheta com esse nome; senão "Feed 2", "Feed 3"...
+// O modelo de verdade lê o documento; o roteiro lê o mesmo texto, do mesmo lugar.
+
+export interface VariaveisDoPedido {
+  /** Nomes das pranchetas que a peça tinha quando a conversa começou. */
+  pranchetas: string[];
+  prancheta?: string;
+  texto?: string;
+}
+
+interface CamadaResumida {
+  nome?: unknown;
+  tipo?: unknown;
+  filhosDeBaixoParaCima?: unknown;
+}
+
+function primeiroTexto(camadas: unknown): string | undefined {
+  if (!Array.isArray(camadas)) return undefined;
+  for (const c of camadas as CamadaResumida[]) {
+    if (c?.tipo === 'texto' && typeof c.nome === 'string') return c.nome;
+    const dentro = primeiroTexto(c?.filhosDeBaixoParaCima);
+    if (dentro) return dentro;
+  }
+  return undefined;
+}
+
+/** O que o roteiro consegue saber da peça, pelo material "documento" da primeira mensagem do pedido. */
+export function variaveisDoPedido(pedido: Pick<PedidoAoModelo, 'mensagens'>): VariaveisDoPedido {
+  const primeira = pedido.mensagens[0];
+  const texto = primeira?.papel === 'usuario' ? primeira.partes.flatMap((p) => (p.tipo === 'texto' ? [p.texto] : [])).join('\n') : '';
+  const cerca = /<material-([0-9a-z]{8}) origem="documento">\n([\s\S]*?)\n<\/material-\1>/.exec(texto)?.[2];
+  if (!cerca) return { pranchetas: [] };
+  try {
+    const resumo = JSON.parse(cerca) as { pranchetas?: { nome?: unknown; camadasDeBaixoParaCima?: unknown }[] };
+    const lista = (resumo.pranchetas ?? []).filter((p): p is { nome: string; camadasDeBaixoParaCima?: unknown } => typeof p?.nome === 'string');
+    const comTexto = lista.map((p) => ({ prancheta: p.nome, texto: primeiroTexto(p.camadasDeBaixoParaCima) })).find((p) => p.texto);
+    const prancheta = comTexto?.prancheta ?? lista[0]?.nome;
+    return { pranchetas: lista.map((p) => p.nome), ...(prancheta ? { prancheta } : {}), ...(comTexto?.texto ? { texto: comTexto.texto } : {}) };
+  } catch {
+    // tarefa de criação: uma prancheta por linha, "Nome 1080×1350"
+    const pranchetas = cerca
+      .split('\n')
+      .map((l) => l.replace(/\s+\d+×\d+\s*$/, '').trim())
+      .filter(Boolean);
+    return { pranchetas, ...(pranchetas[0] ? { prancheta: pranchetas[0] } : {}) };
+  }
+}
+
+function nomeNovo(base: string, existentes: readonly string[]): string {
+  let nome = base;
+  for (let n = 2; existentes.includes(nome); n++) nome = `${base} ${n}`;
+  return nome;
+}
+
+/** Troca as marcas em todo texto do valor (em profundidade). Marca desconhecida fica como está. */
+function trocarMarcas<T>(valor: T, v: VariaveisDoPedido): T {
+  if (typeof valor === 'string') {
+    return valor.replace(/\{\{(prancheta|texto|nova:([^{}]+))\}\}/g, (_tudo, marca: string, base: string | undefined) => {
+      if (base !== undefined) return nomeNovo(base, v.pranchetas);
+      const achado = marca === 'prancheta' ? v.prancheta : v.texto;
+      if (achado === undefined)
+        throw new ErroDoModelo('resposta_invalida', marca === 'texto' ? 'o roteiro pede uma camada de texto e a peça não tem nenhuma' : 'o roteiro pede uma prancheta e a peça não tem nenhuma');
+      return achado;
+    }) as T;
+  }
+  if (Array.isArray(valor)) return valor.map((x) => trocarMarcas(x, v)) as T;
+  if (valor && typeof valor === 'object') return Object.fromEntries(Object.entries(valor).map(([k, x]) => [k, trocarMarcas(x, v)])) as T;
+  return valor;
+}
+
 export function criarModeloRoteirizado(roteiro: { passos: readonly Passo[] }, opcoes: OpcoesDoModeloRoteirizado = {}): ModeloRoteirizado {
   const pedidos: PedidoAoModelo[] = [];
   let proximo = 0;
@@ -87,9 +163,15 @@ export function criarModeloRoteirizado(roteiro: { passos: readonly Passo[] }, op
       if (demora > 0) await esperar(demora, pedido.sinal);
       if (pedido.sinal?.aborted) throw new ErroDoModelo('cancelada', 'cancelada');
       if (passo.erro) throw new ErroDoModelo(passo.erro, `falha roteirizada no passo ${indice + 1}`);
-      const chamadas = (passo.chamadas ?? []).map((c, i) => ({ id: c.id ?? `chamada-${indice + 1}-${i + 1}`, nome: c.nome, argumentos: c.argumentos }));
+      const temMarca = JSON.stringify([passo.texto ?? '', passo.chamadas ?? []]).includes('{{');
+      const variaveis = temMarca ? variaveisDoPedido(pedido) : { pranchetas: [] };
+      const chamadas = (passo.chamadas ?? []).map((c, i) => ({
+        id: c.id ?? `chamada-${indice + 1}-${i + 1}`,
+        nome: c.nome,
+        argumentos: temMarca ? trocarMarcas(c.argumentos, variaveis) : c.argumentos,
+      }));
       return {
-        texto: passo.texto ?? '',
+        texto: temMarca ? trocarMarcas(passo.texto ?? '', variaveis) : (passo.texto ?? ''),
         chamadas,
         uso: { entrada: 0, cacheLido: 0, cacheCriado: 0, saida: 0, ...passo.uso },
         parada: chamadas.length ? 'ferramentas' : 'fim',

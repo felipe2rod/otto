@@ -12,15 +12,13 @@
 
 export const NOME_DO_PACOTE = '@otto/agente' as const;
 
+export { type Alavancas, lerAlavancas, NOMES_DAS_ALAVANCAS, TODAS_AS_ALAVANCAS } from './alavancas';
 export type { MeiosDeChamada } from './chamada';
 export { executarTarefa, LADO_DA_VISAO_GERAL, LADO_DO_DETALHE, MECANICA_DO_AJUSTE, type OpcoesDaExecucao, raciocinioDoCiclo } from './ciclo';
 export * from './contrato';
 export { Contador, custoVazio, dolaresDoUso, fracaoDeCache, totalDeTokens } from './custo';
-export { ARQUETIPOS_ACEITOS, cartaoDaDirecao, Direcao, direcaoEmTexto, lerDirecao } from './direcao';
+export { cartaoDaDirecao, direcaoEmTexto, lerDirecao } from './direcao';
 export {
-  ESFORCOS_CRIATIVOS,
-  type EsforcoCriativo,
-  EsforcoCriativoSchema,
   esforcoDaOpcao,
   lerEsforco,
   type MecanicaDoEsforco,
@@ -30,6 +28,7 @@ export {
   type OpcaoDeCuidado,
 } from './esforco';
 export { ferramentasDoAgente, OPERACOES_DO_CATALOGO } from './ferramentas';
+export { comUsoDasFontes, USO_DAS_FONTES } from './fontes-base';
 export { criarGuarda, type Guarda, type MotivoDeRecusa, type Veredito } from './guarda';
 export { delimitar, marcaDeMaterial } from './material';
 export {
@@ -42,6 +41,8 @@ export {
   type Passo,
   type PassoDoRoteiro,
   type Roteiro,
+  type VariaveisDoPedido,
+  variaveisDoPedido,
 } from './modelo-roteirizado';
 export { lerPlano, motivosDoPode, planoDeCriacao, planoDoAjuste, planoDoBriefing } from './plano';
 export * from './portas';

@@ -5,11 +5,13 @@
 // A aprovação dispara a segunda parte (ciclo.ts), que começa conversa nova com o modelo tendo o preparo
 // na entrada. "Ajustar a direção" é chamar esta função de novo, com o preparo anterior e o texto do designer.
 import { acharNo, type Documento } from '@otto/documento';
+import type { Alavancas } from './alavancas';
 import type { MeiosDeChamada } from './chamada';
 import { EntradaDaTarefa, type EtapaPrevista, type EventoDaTarefa, type Plano, Preparo, VERSAO_DO_PREPARO } from './contrato';
 import { Contador } from './custo';
 import { cartaoDaDirecao, type Direcao, dirigirArte } from './direcao';
 import { type EsforcoCriativo, mecanicaDoEsforco } from './esforco';
+import { comUsoDasFontes } from './fontes-base';
 import { avisoDaMarca, delimitar, marcaDeMaterial } from './material';
 import { motivosDoPode, planejar, planoDeCriacao, planoDoAjuste, planoDoBriefing } from './plano';
 import { type AmbienteBase, ErroDoModelo, type FamiliaDeFonte, type ParteDeConteudo } from './portas';
@@ -33,7 +35,10 @@ export function resolverSelecao(doc: Documento, selecao: readonly string[] | und
   });
 }
 
-const linhasDeFontes = (fontes: readonly FamiliaDeFonte[]) => fontes.map((f) => `- ${f.familia} (pesos ${f.pesos.join(', ')})`).join('\n');
+const linhasDeFontes = (fontes: readonly FamiliaDeFonte[]) =>
+  comUsoDasFontes(fontes)
+    .map((f) => `- ${f.familia} (pesos ${f.pesos.join(', ')})${f.uso ? `: ${f.uso}` : ''}`)
+    .join('\n');
 
 /** Imagens do cliente que vieram no briefing (até três), para a direção e o revisor compararem a identidade. */
 export async function referenciasDoBriefing(amb: Pick<AmbienteBase, 'previaDeArquivo'>, briefing: unknown): Promise<ParteDeConteudo[]> {
@@ -71,6 +76,8 @@ export function etapasPrevistas(entrada: EntradaDaTarefa, plano: Plano): EtapaPr
 export interface OpcoesDoPreparo {
   /** "Ajustar a direção" (ou o plano): o preparo que o designer viu e o que ele pediu para mudar. */
   ajuste?: { anterior: Preparo; texto: string };
+  /** Só a 4 vale aqui: direção de arte em raciocínio médio. */
+  alavancas?: Alavancas;
 }
 
 export async function prepararTarefa(amb: AmbienteBase, entradaBruta: EntradaDaTarefa, opcoes: OpcoesDoPreparo = {}): Promise<Preparo> {
@@ -101,6 +108,7 @@ export async function prepararTarefa(amb: AmbienteBase, entradaBruta: EntradaDaT
       mensagem,
       referencias,
       capacidades,
+      ...(opcoes.alavancas?.julgamentoEmMedio ? { raciocinio: 'medio' as const } : {}),
       ...(esforco ? { esforco } : {}),
       ...(anterior && ajusteDoDesigner ? { ajuste: { anterior, pedidoDoDesigner: ajusteDoDesigner } } : {}),
     });

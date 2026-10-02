@@ -302,3 +302,23 @@ Ordem: primeiro o que bloqueia (1 a 4), depois o custo.
 | 13 | Memória do worker de render | Pico de RAM do CanvasKit no Node ao renderizar e exportar o documento maior do conjunto | Define o plano da seção 5 |
 
 O resultado vira uma linha por tarefa no registro do ADR 029 (tokens de entrada, saída, cache, imagens, voltas, resultado). Com isso, a tabela da seção 6 deixa de ser estimativa.
+
+## 10. Medições com Claude (2026-10-02)
+
+Primeira medição com o modelo de verdade, pelo comando `tarefa` de `avaliacao/` (documento em memória, render e verificação de verdade). Sonnet 5 (`anthropic-claude-5-sonnet`) pelo `/v1/messages`, com cache marcado em bloco. Preço da seção 3, câmbio da seção 7. **Uma execução de cada: não é média.** As saídas ficam em `avaliacao/saida/medicao-*` (fora do git).
+
+| Tarefa | Tempo | Chamadas | Entrada (do cache) | Cache escrito | Saída | Imagens | US$ | R$ |
+|---|---|---|---|---|---|---|---|---|
+| Ajuste pontual (caminho rápido), peça de 2 pranchetas e 18 camadas | 13 a 19 s | 2 a 3 | 25,2 a 39,2 mil (64% a 80%) | 4,9 a 14,1 mil | 0,8 a 1,0 mil | 1 a 2 | 0,024 a 0,050 | 0,13 a 0,26 |
+| Briefing do café, Feed e Story, nível `REFINED`, banco de imagens local: **linha de base** | 10 min 46 s | 35 | 2,60 milhões (95%) | 118,6 mil | 50,2 mil | 20 | 1,295 | 6,73 |
+| O mesmo briefing, com as quatro alavancas de custo ligadas | 5 min 51 s | 25 | 0,97 milhão (92%) | 77,3 mil | 29,3 mil | 18 | 0,665 | 3,46 |
+
+O ajuste pela API, medido pelo backend no mesmo dia: 13,1 s, 3 chamadas, US$ 0,0435.
+
+**Contra a estimativa da seção 6:** a tarefa de dois formatos custou R$ 6,73 na linha de base, quase cinco vezes o teto estimado (R$ 1,46), e R$ 3,46 com as alavancas. A estimativa supunha 8 a 12 chamadas; foram 35 e 25. O prefixo relido a cada chamada tinha 44 mil tokens (20 mil com o esquema compacto das operações), não os 15 a 20 mil supostos.
+
+**Composição do custo (linha de base):** saída 39%, leitura de cache 38%, escrita de cache 23%. Entrada cheia: 70 tokens na tarefa inteira.
+
+**As alavancas** (`packages/agente/src/alavancas.ts`, desligadas por padrão): esquema compacto de `aplicarOperacoes`; verificação e render do sistema na resposta do lote; aviso é julgamento, não erro; direção e segunda conferência em raciocínio médio. Foram medidas juntas, uma vez: tempo −46%, chamadas −29%, tokens −62%, custo −49%. Não dá para separar o efeito de cada uma com uma execução. O que os registros mostram: o prefixo caiu de 44,4 para 19,8 mil tokens; as chamadas do ciclo que só pediam render ou verificação caíram de 13 para 3; direção e segunda conferência, de 132 para 42 s; os lotes recusados por sintaxe subiram de 1 para 3. A qualidade visual das duas peças não foi julgada por rubrica.
+
+**O limite "por dia" do fornecedor se comporta como um balde de 4,5 milhões que se enche de novo.** O cabeçalho `x-ratelimit-remaining-tokens-per-day` mostrou 4.500.000 antes de qualquer tarefa (13h45 UTC), 2.252.161 logo depois da tarefa de 2,65 milhões (14h42 UTC), 4.500.000 de novo às 17h11 UTC, e 3.728.687 depois da tarefa de 1,0 milhão. O limite declarado continua 45.000.000. Leitura provável, com quatro observações: o teto prático é o balde (uma tarefa de linha de base consome metade dele), com reposição ao longo do dia. A confirmar com a DigitalOcean; até lá, o worker não deve contar com 45 milhões disponíveis de uma vez.

@@ -6,6 +6,7 @@
   "description": "Núcleo: ciclo do agente do Otto (ADR 029). Prompt, ferramentas, direção de arte, revisor, esforço e portas. Dono: treinador-do-otto",
   "exports": {
     ".": "./src/index.ts",
+    "./contrato": "./src/contrato.ts",
     "./adaptadores/claude": "./src/adaptadores/claude.ts",
     "./roteiros/*": "./roteiros/*"
   },

@@ -13,6 +13,7 @@ docker compose run --rm --no-deps teste pnpm --filter @otto/agente tarefa -- --c
 | Entrada | Para quem | O que tem |
 |---|---|---|
 | `@otto/agente` | worker, editor, testes | O ciclo, o contrato (zod), as portas e o modelo roteirizado (falso) |
+| `@otto/agente/contrato` | editor, `@otto/shared` | Só o contrato (zod e tipos): entrada, plano, preparo, eventos, pendência, resultado. Não alcança o ciclo nem o prompt |
 | `@otto/agente/adaptadores/claude` | quem monta o modelo de verdade | `criarModeloClaude({ chave, modelo?, endereco?, aoVerLimites? })` |
 | `@otto/agente/roteiros/*.json` | worker e editor em desenvolvimento | Tarefas de verdade gravadas, para reproduzir sem gastar token |
 
@@ -124,13 +125,25 @@ Tudo que vem de fora chega ao modelo entre cercas com um código da tarefa (`mat
 
 ```ts
 import { criarModeloRoteirizado, idsDoRoteiro } from '@otto/agente';
-import roteiro from '@otto/agente/roteiros/ajuste-titulo.json' with { type: 'json' };
+import roteiro from '@otto/agente/roteiros/criar-uma-peca.json' with { type: 'json' };
 
-const modelo = criarModeloRoteirizado(roteiro, { velocidade: 1 });   // 1: demora o que demorou na gravação; 0: responde na hora
-const amb = { ...portas, modelo, novoId: idsDoRoteiro(roteiro) };    // os ids da gravação, para os nós nascerem com os mesmos ids
+const modelo = criarModeloRoteirizado(roteiro, { velocidade: 1, preco });   // 1: demora o que demorou na gravação; 0: responde na hora
+const amb = { ...portas, modelo, novoId: idsDoRoteiro(roteiro) };
 ```
 
-Um roteiro gravado só se repete igual sobre o mesmo documento de partida, com as mesmas imagens disponíveis. `comGravacao(modelo, agora)` grava qualquer tarefa; o comando `tarefa` já deixa um `roteiro.json` em cada saída. Roteiro também pode ser escrito à mão, com passo como função do pedido.
+| Roteiro | Entrada | O que exercita | Onde roda |
+|---|---|---|---|
+| `ajuste-em-qualquer-peca.json` | `ajuste` | Caminho rápido em duas chamadas: põe em azul a primeira camada de texto da peça | Qualquer peça com uma camada de texto |
+| `ajuste-titulo.json` | `ajuste` | O ajuste gravado com Claude (título na cor de destaque, maior; entrega com pendência de contraste) | Só peça com prancheta "Feed", camada "Título" e token "destaque" |
+| `criar-uma-peca.json` | `criar` | Direção, uma prancheta, verificação que acusa e correção, segunda conferência, entrega com pendência. Sem "pode" | Peça vazia ou existente |
+| `briefing-dois-formatos.json` | `briefing` | O mesmo, com dois formatos e o "pode" | Peça vazia ou existente |
+| `pedido-dois-formatos.json` | `pedido` | Plano do modelo, "pode" por duas pranchetas, produção, correção, segunda conferência | Peça vazia ou existente |
+
+Todos sem foto (não dependem de banco de imagens), com duração e contagem de tokens em cada passo (o custo e o teto diário andam como numa tarefa de verdade: o briefing soma perto de 710 mil tokens e US$ 0,69 no preço do Sonnet 5).
+
+**O roteiro se adapta à peça.** O passo pode trazer marcas, trocadas pelo que o ciclo mandou ao modelo na primeira mensagem (o mesmo documento que o modelo de verdade lê): `{{prancheta}}` e `{{texto}}` são a prancheta e o nome da primeira camada de texto da peça; `{{nova:Feed}}` é "Feed" se a peça não tem prancheta com esse nome, senão "Feed 2", "Feed 3". Fora o `ajuste-titulo.json`, nenhum roteiro cita id de nó nem nome fixo, e nenhum toca no que já existia. Com entrada `criar`, use o roteiro de criar: `criar` planeja uma prancheta só, e um roteiro de dois formatos tem os lotes recusados.
+
+`comGravacao(modelo, agora)` grava qualquer tarefa de verdade; o comando `tarefa` deixa um `roteiro.json` em cada saída. Roteiro gravado cita ids e fotos: só se repete sobre o mesmo documento, com os ids da gravação (`idsDoRoteiro`).
 
 ## Modelo de verdade
 
@@ -145,6 +158,7 @@ Primeira medição com o modelo de verdade: Sonnet 5 pelo fornecedor de inferên
 | Ajuste pontual, peça de 2 pranchetas e 18 camadas (antes de avisar que o render já veio) | 19 s | 3 | 39,2 mil (64%) | 14,1 mil | 1,0 mil | 2 | 1 | 0,050 | 0,26 |
 | O mesmo ajuste, depois | 13 s | 2 | 25,2 mil (80%) | 4,9 mil | 0,8 mil | 1 | 1 | 0,024 | 0,13 |
 | Briefing do café, Feed e Story, nível `REFINED` (cuidadoso), com banco de imagens | 10 min 46 s | 35 (direção 1, ciclo 33, segunda conferência 1) | 2,60 milhões (95%) | 118,6 mil | 50,2 mil | 20 | 12 (1 recusado) | 1,295 | 6,73 |
+| O mesmo briefing, com as quatro alavancas ligadas (prompt `2026-10-02.3`) | 5 min 51 s | 25 (1, 23, 1) | 0,97 milhão (92%) | 77,3 mil | 29,3 mil | 18 | 12 (3 recusados) | 0,665 | 3,46 |
 
 O que os números dizem:
 
@@ -155,12 +169,27 @@ O que os números dizem:
 - Três das seis voltas de conferência foram gastas tentando calar um aviso (`faixa-vazia`) com enfeite. A tarefa bateu no teto de voltas e entregou com um erro de 4 px de caixa de texto, declarado nas pendências.
 - O caminho rápido cabe no minuto: 13 a 19 s num ajuste de um lote. Ajuste que pede dois ou três lotes não foi medido.
 
-Alavancas, em ordem do efeito esperado, **nenhuma medida ainda** (cada uma pede o conjunto rodado antes e depois):
+**Com as quatro alavancas ligadas, uma execução:** tempo −46%, chamadas −29%, tokens −62%, custo −49%, e a peça saiu sem erro de verificação (a da linha de base saiu com um). Não dá para separar o efeito de cada alavanca com uma execução; o que os registros mostram:
 
-1. Esquema compacto de `aplicarOperacoes` no ciclo inteiro (`--esquema compacto`): corta mais da metade do prefixo. O caminho rápido já usa. Risco: mais lote recusado por sintaxe.
-2. Conferência do sistema na resposta do lote também no ciclo inteiro (hoje só no ajuste): das 33 chamadas, 13 foram só para pedir render ou verificação.
-3. Dizer ao modelo que erro se corrige e aviso é julgamento: não gastar volta para zerar aviso.
-4. Direção e segunda conferência em raciocínio médio: são 132 s e 11,7 mil tokens de saída.
+- o prefixo caiu de 44,4 para 19,8 mil tokens (alavanca 1), e os lotes recusados por sintaxe subiram de 1 para 3;
+- as chamadas do ciclo que só pediam render ou verificação caíram de 13 para 3 (alavanca 2);
+- o modelo deixou um aviso de ritmo de 2 px nas pendências, dizendo que não gastaria outra rodada com ele (alavanca 3);
+- direção e segunda conferência caíram de 132 para 42 s e de 11,7 para 3,6 mil tokens de saída (alavanca 4). A direção ficou mais contida: o conceito perdeu o selo de preço da linha de base. Uma execução não diz se foi a alavanca.
+
+A qualidade visual das duas peças não foi julgada por rubrica, e isso é o que falta para ligar as alavancas por padrão. A 1 e a 2 não mexem no que o modelo decide; a 3 e a 4 mexem.
+
+## Alavancas de custo (`alavancas.ts`)
+
+Quatro opções, **desligadas por padrão**, para medir com e sem. Entram por `prepararTarefa(amb, entrada, { alavancas })` e `executarTarefa(amb, entrada, preparo, { alavancas })` (ou `rodarTarefa(..., { alavancas })`); `lerAlavancas('todas' | '1,3' | ...)` lê da configuração.
+
+| Alavanca | O que faz |
+|---|---|
+| 1 `esquemaCompacto` | `aplicarOperacoes` vai ao modelo só com o nome de cada operação; a sintaxe está nas receitas do prompt e o erro de validação volta legível |
+| 2 `conferenciaNoLote` | A resposta de cada lote já traz a verificação e o render das pranchetas que mudaram (as vazias não). Montar não conta volta; lote de correção conta; o teto de voltas dobra |
+| 3 `avisoEJulgamento` | O prompt diz que erro se corrige e aviso é julgamento: não se gasta volta nem se põe enfeite para calar aviso |
+| 4 `julgamentoEmMedio` | Direção de arte e segunda conferência em raciocínio médio, em vez de alto |
+
+No ajuste pontual elas não valem (ele já usa o esquema compacto e a conferência no lote).
 
 ## O que mudou em relação à POC
 

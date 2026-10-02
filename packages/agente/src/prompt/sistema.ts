@@ -8,20 +8,30 @@
 //
 // A POC punha a seção de esforço no meio do prompt (entre o caráter e as receitas): cada nível tinha um
 // prefixo próprio e o cache não era compartilhado. Aqui ela vem depois.
+import type { Alavancas } from '../alavancas';
 import { type EsforcoCriativo, secaoDeEsforcoCriativo } from '../esforco';
 import type { FamiliaDeFonte } from '../portas';
 import { CARATER } from './carater';
 import { ARQUETIPOS, type Capacidades, CRITERIOS_DE_PORTFOLIO, REGRAS_DE_DETALHE, receitasDoEditor, tecnicasDeEstudio } from './repertorio';
 
 /** O ciclo, dito ao modelo. As fases são as do ADR 029, item 2. */
-function modoDeTrabalho(capacidades: Capacidades): string {
+function modoDeTrabalho(capacidades: Capacidades, alavancas: Pick<Alavancas, 'conferenciaNoLote' | 'avisoEJulgamento'>): string {
+  const conferir = alavancas.conferenciaNoLote
+    ? 'O sistema já confere: a resposta de cada lote traz a verificação e o render das pranchetas que mudaram. Olhe de verdade a imagem e leia a verificação antes do próximo lote; não chame verificar nem renderizar para ver o mesmo. Peça recorte em tamanho real (renderizar com "regiao") onde há texto pequeno, botão, borda de máscara ou detalhe de foto.'
+    : 'Renderize cada prancheta que mudou e olhe de verdade a imagem; rode verificar; corrija; repita. Peça recorte em tamanho real onde há texto pequeno, botão, borda de máscara ou detalhe de foto.';
+  const teto = alavancas.conferenciaNoLote
+    ? 'Cada lote de correção conta uma volta de conferência; há um teto de voltas, e ao chegar nele, entregue com o que ficou pendente.'
+    : 'Há um teto de voltas de conferência; ao chegar nele, entregue com o que ficou pendente.';
+  const aviso = alavancas.avisoEJulgamento
+    ? ' Aviso é julgamento: corrija quando a correção melhora a peça; quando o aviso contraria a direção ou só se calaria com enfeite, deixe como está e diga em pendencias. Não gaste volta de conferência para zerar aviso, e nunca acrescente elemento só para calar uma regra.'
+    : '';
   return `# Como você trabalha
 O ciclo de uma tarefa: entender → planejar → fazer em lotes → conferir → entregar.
 
 - **Entender.** A tarefa chega com o que você precisa: o briefing ou o pedido, a direção de arte quando há, e o plano aprovado. O documento você lê com resumirDocumento: não suponha camada, id nem medida.
 - **Planejar.** Comece com uma mensagem de 3 a 6 linhas dizendo o que vai fazer; é o que o designer lê enquanto espera. Não faça pergunta: ninguém responde no meio da tarefa. Decida, e registre a dúvida em pendencias.
 - **Fazer.** Lotes pequenos e nomeados, com aplicarOperacoes: um lote por bloco coerente (tokens e prancheta; fundo e foto; tipografia; acabamento), nem a peça inteira num lote, nem uma operação por lote. O lote é uma transação: se uma operação falha, nada entra, e o erro diz qual operação e qual campo. Corrija só o que o erro aponta e mande de novo.
-- **Conferir.** Renderize cada prancheta que mudou e olhe de verdade a imagem; rode verificar; corrija; repita. Peça recorte em tamanho real onde há texto pequeno, botão, borda de máscara ou detalhe de foto. O verificador mede pela tinta (onde as letras aparecem) e é confiável: erro dele se corrige, não se discute. Há um teto de voltas de conferência; ao chegar nele, entregue com o que ficou pendente.
+- **Conferir.** ${conferir} O verificador mede pela tinta (onde as letras aparecem) e é confiável: erro dele se corrige, não se discute.${aviso} ${teto}
 - **Entregar.** Chame entregar com o resumo e as pendências. O sistema confere por conta própria o que sobrou na verificação e acrescenta às pendências.
 
 Chamadas que não dependem uma da outra vão juntas no mesmo passo (renderizar duas pranchetas e verificar, por exemplo). Cada passo é espera para o designer.
@@ -122,6 +132,8 @@ export interface OpcoesDoPromptDoSistema {
   esforco?: EsforcoCriativo;
   /** As fontes que a conta já tem. */
   fontes: readonly FamiliaDeFonte[];
+  /** Alavancas que mudam o texto do modo de trabalho (alavancas.ts). Ausentes: o prompt medido em 2026-10-02. */
+  alavancas?: Pick<Alavancas, 'conferenciaNoLote' | 'avisoEJulgamento'>;
 }
 
 function fontesDaConta(fontes: readonly FamiliaDeFonte[], capacidades: Capacidades): string {
@@ -138,7 +150,16 @@ export function montarPromptDoSistema(opcoes: OpcoesDoPromptDoSistema): string[]
   const estavel =
     opcoes.modo === 'ajuste'
       ? [CARATER, MODO_DE_AJUSTE, receitasDoEditor(capacidades), REGRAS_DE_DETALHE]
-      : [CARATER, modoDeTrabalho(capacidades), DIRECAO_DE_ARTE, receitasDoEditor(capacidades), tecnicasDeEstudio(capacidades), ARQUETIPOS, CRITERIOS_DE_PORTFOLIO, REGRAS_DE_DETALHE];
+      : [
+          CARATER,
+          modoDeTrabalho(capacidades, opcoes.alavancas ?? {}),
+          DIRECAO_DE_ARTE,
+          receitasDoEditor(capacidades),
+          tecnicasDeEstudio(capacidades),
+          ARQUETIPOS,
+          CRITERIOS_DE_PORTFOLIO,
+          REGRAS_DE_DETALHE,
+        ];
   const contexto = [...(opcoes.modo === 'tarefa' && opcoes.esforco ? [secaoDeEsforcoCriativo(opcoes.esforco)] : []), fontesDaConta(opcoes.fontes, capacidades)];
   return [estavel.join('\n\n'), contexto.join('\n\n')];
 }

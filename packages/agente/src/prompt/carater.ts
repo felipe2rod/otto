@@ -9,7 +9,7 @@
 import { REGRA_DO_MATERIAL } from '../material';
 
 /** Data da última mudança de texto de prompt, mais um contador do dia. Vai no registro de custo de cada tarefa. */
-export const VERSAO_DO_PROMPT = '2026-10-02.2';
+export const VERSAO_DO_PROMPT = '2026-10-02.3';
 
 export const REGRAS_DE_CARATER = [
   {

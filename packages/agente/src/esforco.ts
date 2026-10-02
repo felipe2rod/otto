@@ -13,11 +13,10 @@
 //
 // Veio de poc/src/servidor/esforco.ts (rodada 8). O que entrou na migração: as três opções da tela
 // (OPCOES_DE_CUIDADO), que caem em três dos sete níveis. Nenhum nível foi medido ainda.
-import { z } from 'zod';
 
-export const ESFORCOS_CRIATIVOS = ['SIMPLE', 'STANDARD', 'REFINED', 'CREATIVE', 'ADVANCED', 'CONCEPTUAL', 'ICONIC'] as const;
-export type EsforcoCriativo = (typeof ESFORCOS_CRIATIVOS)[number];
-export const EsforcoCriativoSchema = z.enum(ESFORCOS_CRIATIVOS);
+import { ESFORCOS_CRIATIVOS, type EsforcoCriativo, EsforcoCriativoSchema } from './esforco-niveis';
+
+export { ESFORCOS_CRIATIVOS, type EsforcoCriativo, EsforcoCriativoSchema };
 
 /** Aceita o nome em qualquer caixa; qualquer outra coisa (inclusive ausência) devolve undefined. */
 export function lerEsforco(valor: unknown): EsforcoCriativo | undefined {

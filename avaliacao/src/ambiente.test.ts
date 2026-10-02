@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { type Capacidades, criarModeloRoteirizado, type EntradaDaTarefa, ferramentasDoAgente, montarPromptDoSistema, rodarTarefa } from '../../packages/agente/src/index';
-import { nomesDeFornecedorEm } from '../../testes/fronteira/varredura';
+import { importsDe, nomesDeFornecedorEm } from '../../testes/fronteira/varredura';
 import { type AmbienteEmMemoria, criarAmbienteEmMemoria, RAIZ } from './ambiente';
 import { aplicarCriterios, CRITERIOS_AUTOMATICOS } from './avaliar';
 import { documentoDoCaso, lerCaso, lerCasos, TIPOS_DE_CASO } from './casos';
@@ -209,6 +209,25 @@ describe('regras do pacote do agente que precisam ler o disco', () => {
     // direção, plano e segunda conferência: pelos arquivos de prompt, que o teste de fronteira também varre
     for (const arquivo of ['direcao.ts', 'plano.ts', 'prompt/revisor.ts', 'prompt/mensagens.ts', 'textos.ts'])
       expect(nomesDeFornecedorEm(readFileSync(path.join(pasta, arquivo), 'utf8')), arquivo).toEqual([]);
+  });
+
+  it('a entrada @otto/agente/contrato só alcança zod e os dois esquemas leves: sem ciclo, sem prompt, sem adaptador', () => {
+    const vistos = new Set<string>();
+    const externos = new Set<string>();
+    const seguir = (arquivo: string) => {
+      if (vistos.has(arquivo)) return;
+      vistos.add(arquivo);
+      for (const modulo of importsDe(readFileSync(arquivo, 'utf8'))) {
+        if (modulo.startsWith('.')) seguir(`${path.resolve(path.dirname(arquivo), modulo)}.ts`);
+        else externos.add(modulo);
+      }
+    };
+    seguir(path.join(pasta, 'contrato.ts'));
+    expect([...vistos].map((a) => path.basename(a)).sort()).toEqual(['contrato.ts', 'direcao-esquema.ts', 'esforco-niveis.ts']);
+    expect([...externos]).toEqual(['zod']);
+    const manifesto = JSON.parse(readFileSync(path.join(RAIZ, 'packages/agente/package.json'), 'utf8')) as { exports: Record<string, string> };
+    expect(manifesto.exports['./contrato']).toBe('./src/contrato.ts');
+    expect(manifesto.exports['.']).toBe('./src/index.ts');
   });
 
   it('o preço e o endereço do fornecedor só existem no adaptador', () => {

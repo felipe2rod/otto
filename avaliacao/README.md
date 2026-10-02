@@ -17,6 +17,12 @@ docker compose run --rm --no-deps teste pnpm --filter @otto/agente tarefa -- --d
 # a mesma tarefa pelo roteiro gravado, sem gastar token
 docker compose run --rm --no-deps teste pnpm --filter @otto/agente tarefa -- --caso ajuste-titulo-em-destaque --roteiro packages/agente/roteiros/<nome>.json
 
+# medir uma mudança: a mesma tarefa com as alavancas de custo ligadas (todas, ou 1,3, ou pelo nome)
+docker compose run --rm --no-deps teste pnpm --filter @otto/agente tarefa -- --caso briefing-cafe --alavancas todas
+
+# as fotos de banco que a avaliação usa continuam íntegras?
+docker compose run --rm --no-deps teste pnpm --filter @otto/agente exec tsx ../../avaliacao/comandos/conferir-fotos.ts
+
 # somar o que já foi gravado: taxas, custo médio, piores casos
 docker compose run --rm --no-deps teste pnpm --filter @otto/agente avaliar
 
@@ -85,5 +91,5 @@ Três tipos (ADR 029, item 6). Só o primeiro roda sozinho hoje.
 ## De onde vêm as fotos e as fontes
 
 - **Fontes:** as 18 da biblioteca base (`apps/api/recursos/fontes`). Sem catálogo maior: o agente não recebe `buscarFontes`.
-- **Fotos:** `src/banco-local.ts` serve as 84 fotos de banco que as rodadas da POC já tinham baixado (`poc/dados/arquivos`, fora do git), com autor, licença e origem. A busca é por etiqueta. Numa máquina sem essa pasta, a tarefa roda sem banco de imagens e a peça sai tipográfica: os números não são comparáveis com os de uma máquina que tem as fotos.
+- **Fotos:** `src/banco-local.ts` serve as fotos de banco que as rodadas da POC já tinham baixado (`poc/dados/arquivos`, fora do git), com autor, licença e origem. Eram 84 na manhã de 2026-10-02 e 82 à tarde: o disco do repositório está trocando o conteúdo de arquivos dessa pasta. O banco confere o hash de cada foto e deixa de fora a que não bate; a pasta precisa de cópia fora deste disco. A busca é por etiqueta. Numa máquina sem essa pasta, a tarefa roda sem banco de imagens e a peça sai tipográfica: os números não são comparáveis com os de uma máquina que tem as fotos.
 - Sem recorte de sujeito, sem texturas, sem leitura de site: o agente não os recebe e o prompt não os cita.
