@@ -97,6 +97,9 @@ export const otto = {
       renderDeDetalhe: 'Olhou um detalhe do render',
       verificacaoLimpa: 'Verificação: nada a apontar',
       verificacao: (avisos: number): string => `Verificação: ${avisos} ${plural(avisos, { um: 'aviso', outros: 'avisos' })}`,
+      /** Com as pranchetas conferidas: "Feed conferido: nada a apontar", "Feed e Story conferidos: 2 avisos". */
+      conferida: (pranchetas: readonly string[], avisos: number): string =>
+        `${lista(pranchetas)} ${pranchetas.length === 1 ? 'conferido' : 'conferidos'}: ${avisos === 0 ? 'nada a apontar' : `${avisos} ${plural(avisos, { um: 'aviso', outros: 'avisos' })}`}`,
       imagem: { busca: 'Procurou imagem', trazida: 'Trouxe uma imagem', sujeito: 'Recortou o sujeito da foto' },
       erro: 'Um passo falhou. Tentei de novo.',
       segundaConferencia: 'Segunda conferência',
@@ -198,6 +201,7 @@ export const otto = {
     } as Readonly<Record<string, string>>,
     tentarDeNovo: 'Tentar de novo',
     voltarParaAntes: 'Voltar para antes desta tarefa',
+    comEsteBriefing: 'Nova peça com este briefing',
     comEdicoesDepois: (edicoes: number): string =>
       `Voltar para antes desta tarefa desfaz também ${edicoes} ${plural(edicoes, { um: 'alteração sua feita', outros: 'alterações suas feitas' })} depois.`,
     voltarMesmoAssim: 'Voltar mesmo assim',

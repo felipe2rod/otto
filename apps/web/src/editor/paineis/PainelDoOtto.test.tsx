@@ -186,6 +186,37 @@ describe('painel do Otto: a espera', () => {
     expect(document.querySelector('[data-ultima-fala]')).toBeNull();
   });
 
+  it('a verificação diz QUAL prancheta foi conferida e com que resultado; sem saber qual, diz só o resultado', () => {
+    const m = montar();
+    let atual = novaTarefaNaTela(tarefa());
+    atual = receberEvento(atual, 0, { tipo: 'verificacao', avisos: [], novos: 0, pranchetas: [m.feed?.id ?? ''] });
+    atual = receberEvento(atual, 1, { tipo: 'verificacao', avisos: [{ regra: 'contraste' } as never, { regra: 'margem' } as never], novos: 2, pranchetas: [m.feed?.id ?? '', m.story?.id ?? ''] });
+    atual = receberEvento(atual, 2, { tipo: 'verificacao', avisos: [{ regra: 'contraste' } as never], novos: 1 });
+    atual = receberEvento(atual, 3, { tipo: 'verificacao', avisos: [], novos: 0, pranchetas: ['prancheta-que-saiu'] });
+    act(() => m.otto.armazem.definir((e) => ({ ...e, atual })));
+    const linhas = [...document.querySelectorAll('[data-tipo="verificacao"]')].map((l) => l.textContent);
+    expect(linhas).toEqual([
+      textos.espera.linha.conferida([m.feed?.nome ?? ''], 0),
+      textos.espera.linha.conferida([m.feed?.nome ?? '', m.story?.nome ?? ''], 2),
+      textos.espera.linha.verificacao(1),
+      textos.espera.linha.verificacaoLimpa,
+    ]);
+    expect(linhas[0]).toContain('Feed');
+  });
+
+  it('tarefa que nasceu do formulário: aceita, oferece "nova peça com este briefing"; pedido livre não oferece', () => {
+    const doFormulario = {
+      tipo: 'briefing',
+      cuidado: 'cuidadoso',
+      briefing: { versao: 1, formatos: [{ nome: 'Feed', largura: 1080, altura: 1350 }], textos: { titulo: 'Abrimos às 7h' }, imagens: { fonte: 'nenhuma' } },
+    };
+    montar({ estado: { atual: novaTarefaNaTela(tarefa({ estado: 'aceita', lotes: 2, entrada: doFormulario as never })) } });
+    expect(screen.getByRole('link', { name: textos.resultado.comEsteBriefing }).getAttribute('href')).toBe('/editor/novo?peca=0199a000-0000-7000-8000-000000000001');
+    cleanup();
+    montar({ estado: { atual: novaTarefaNaTela(tarefa({ estado: 'aceita', lotes: 2 })) } });
+    expect(screen.queryByRole('link', { name: textos.resultado.comEsteBriefing })).toBeNull();
+  });
+
   it('interromper chama o cancelar; na fila, o botão diz cancelar e a tela diz que está na fila', () => {
     const { otto } = montar({ estado: rodando() });
     fireEvent.click(screen.getByRole('button', { name: textos.espera.interromper }));

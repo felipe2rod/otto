@@ -13,6 +13,8 @@ export interface PecaDaLista {
   alteradoEm: string;
   /** Estado da tarefa viva, com o nome do contrato. Ausente quando não há tarefa. */
   tarefa?: string;
+  /** A tarefa está em revisão, mas o trabalho parou antes de entregar (`fim` diferente de "entregue"). */
+  tarefaParou?: boolean;
 }
 
 export type ResultadoDaLista = { estado: 'ok'; pecas: PecaDaLista[]; proximoCursor: string | null } | { estado: 'erro' };
@@ -33,7 +35,8 @@ export type ResultadoDeAcao<T> = ({ ok: true } & T) | { ok: false; codigo: strin
 
 export interface ApiDePecas {
   listar(cursor?: string): Promise<ResultadoDaLista>;
-  criar(): Promise<ResultadoDeAcao<{ peca: PecaDaLista }>>;
+  /** Sem nome, o servidor dá um nome padrão. */
+  criar(nome?: string): Promise<ResultadoDeAcao<{ peca: PecaDaLista }>>;
   renomear(id: string, nome: string): Promise<ResultadoDeAcao<{ nome: string }>>;
   duplicar(id: string): Promise<ResultadoDeAcao<{ peca: PecaDaLista }>>;
   /** "Excluir" na tela. A API arquiva: não apaga. */
@@ -44,7 +47,14 @@ export interface ApiDePecas {
 const ITENS_POR_PAGINA = 100;
 const caminho = (id: string, resto = '') => `/api/documentos/${encodeURIComponent(id)}${resto}`;
 
-const daLista = (d: DocumentoDaLista): PecaDaLista => ({ id: d.id, nome: d.nome, formatos: d.pranchetas, alteradoEm: d.alteradoEm, ...(d.tarefa ? { tarefa: d.tarefa.estado } : {}) });
+const daLista = (d: DocumentoDaLista): PecaDaLista => ({
+  id: d.id,
+  nome: d.nome,
+  formatos: d.pranchetas,
+  alteradoEm: d.alteradoEm,
+  ...(d.tarefa ? { tarefa: d.tarefa.estado } : {}),
+  ...(d.tarefa?.estado === 'em_revisao' && d.tarefa.fim !== undefined && d.tarefa.fim !== 'entregue' ? { tarefaParou: true } : {}),
+});
 /** A peça recém-criada ou duplicada, como item de lista. A API não devolve a data: é agora. */
 const doAberto = (d: DocumentoAberto): PecaDaLista => ({ id: d.id, nome: d.nome, formatos: d.arvore.pranchetas.length, alteradoEm: new Date().toISOString() });
 
@@ -54,8 +64,8 @@ export function criarApiDePecas(cliente: Cliente): ApiDePecas {
       const r = await cliente.ler(ListaDeDocumentos, `/api/documentos?limite=${ITENS_POR_PAGINA}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
       return r.ok ? { estado: 'ok', pecas: r.dados.itens.map(daLista), proximoCursor: r.dados.proximoCursor } : { estado: 'erro' };
     },
-    async criar() {
-      const r = await cliente.escrever(DocumentoAberto, 'POST', '/api/documentos', {});
+    async criar(nome) {
+      const r = await cliente.escrever(DocumentoAberto, 'POST', '/api/documentos', nome?.trim() ? { nome: nome.trim() } : {});
       return r.ok ? { ok: true, peca: doAberto(r.dados) } : { ok: false, codigo: r.codigo };
     },
     async renomear(id, nome) {

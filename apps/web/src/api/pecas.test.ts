@@ -34,6 +34,16 @@ describe('listar as peças', () => {
     expect(r.estado === 'ok' && r.pecas[0]?.tarefa).toBe('em_revisao');
   });
 
+  it('tarefa em revisão que parou no meio vem marcada: não é "pronto para revisar"', async () => {
+    const lista = (tarefa: object) => montar(() => json(200, { itens: [{ ...item, tarefa: { id: ID, ...tarefa } }], proximoCursor: null })).api.listar();
+    const parou = await lista({ estado: 'em_revisao', fim: 'interrompida' });
+    expect(parou.estado === 'ok' && parou.pecas[0]?.tarefaParou).toBe(true);
+    const entregue = await lista({ estado: 'em_revisao', fim: 'entregue' });
+    expect(entregue.estado === 'ok' && entregue.pecas[0]?.tarefaParou).toBeUndefined();
+    const rodando = await lista({ estado: 'rodando' });
+    expect(rodando.estado === 'ok' && rodando.pecas[0]?.tarefaParou).toBeUndefined();
+  });
+
   it('lista vazia é ok; falha e resposta fora do contrato são erro, nunca lista vazia', async () => {
     expect(await montar(() => json(200, { itens: [], proximoCursor: null })).api.listar()).toEqual({ estado: 'ok', pecas: [], proximoCursor: null });
     expect(await montar(() => json(500)).api.listar()).toEqual({ estado: 'erro' });
@@ -42,6 +52,12 @@ describe('listar as peças', () => {
 });
 
 describe('criar, renomear, duplicar e arquivar', () => {
+  it('criar com nome manda o nome aparado (a peça do briefing nasce com o nome dele)', async () => {
+    const { api, fetch } = montar(() => json(201, aberto));
+    await api.criar('  Novo horário ');
+    expect(chamada(fetch).corpo).toBe('{"nome":"Novo horário"}');
+  });
+
   it('criar manda POST sem nome e devolve o id da peça nova', async () => {
     const { api, fetch } = montar(() => json(201, aberto));
     expect(await api.criar()).toEqual({ ok: true, peca: { id: ID, nome: 'Lançamento', formatos: 0, alteradoEm: expect.any(String) } });

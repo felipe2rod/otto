@@ -30,11 +30,26 @@
   font-style: italic;
 }
 
+.navegacao {
+  display: flex;
+  gap: 18px;
+}
+
 .secao {
   font-weight: 600;
   text-decoration: none;
   padding: 4px 0;
-  border-bottom: 2px solid var(--laranja);
+  color: var(--texto-2);
+  border-bottom: 2px solid transparent;
+}
+
+.secao:hover {
+  color: var(--papel);
+}
+
+.secao[aria-current="page"] {
+  color: var(--papel);
+  border-bottom-color: var(--laranja);
 }
 
 .conteudo {

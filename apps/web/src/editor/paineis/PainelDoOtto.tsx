@@ -7,7 +7,7 @@
 // O estado mora no controle (nucleo/controleDoOtto.ts), fora do React; aqui só se desenha e se chama
 // a ação. Nada de modelo, token ou custo na tela: o designer vê o tempo e o que foi feito.
 import type { No } from '@otto/documento';
-import type { EntradaDaTarefa, Pendencia, PendenciaDaPeca, Tarefa } from '@otto/shared';
+import { briefingDaTarefa, type PedidoDeTarefa, type Pendencia, type PendenciaDaPeca, type Tarefa } from '@otto/shared';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { erros } from '../../textos/erros';
 import { duracao, otto as textos } from '../../textos/otto';
@@ -116,7 +116,7 @@ function Pedido({ otto, limites, ocupado }: { otto: ControleDoOtto; limites: Ret
     if (!podeEnviar) return;
     const pedido = texto.trim();
     const comSelecao = selecionadas.length > 0 ? { selecao: selecionadas.map((n) => n.id) } : {};
-    const entrada: EntradaDaTarefa = vazia ? { tipo: 'criar', pedido } : { tipo, pedido, ...comSelecao };
+    const entrada: PedidoDeTarefa = vazia ? { tipo: 'criar', pedido } : { tipo, pedido, ...comSelecao };
     if (await otto.pedir(entrada)) setTexto('');
   };
 
@@ -273,11 +273,12 @@ function Espera({ otto, atual, ocupado, semAoVivo, aviso }: { otto: ControleDoOt
 
 /** O pedido como foi enviado: o designer que volta precisa lembrar o que pediu. */
 function PedidoFeito({ tarefa }: { tarefa: Tarefa }) {
-  const pedido = 'pedido' in tarefa.entrada ? tarefa.entrada.pedido : tarefa.entrada.briefing.nome;
+  // pelo formulário, o que identifica o pedido é o nome da peça ou, sem ele, o título
+  const pedido = 'pedido' in tarefa.entrada ? tarefa.entrada.pedido : (tarefa.entrada.briefing.nome ?? tarefa.entrada.briefing.textos?.titulo);
   return pedido ? <blockquote className={estilos.pedido}>{pedido}</blockquote> : null;
 }
 
-function textoDaLinha({ evento }: LinhaDoRegistro): { texto: string; fala?: boolean } | undefined {
+function textoDaLinha({ evento }: LinhaDoRegistro, nomeDaPrancheta: (id: string) => string | undefined): { texto: string; fala?: boolean } | undefined {
   const t = textos.espera.linha;
   switch (evento.tipo) {
     case 'mensagem':
@@ -290,8 +291,12 @@ function textoDaLinha({ evento }: LinhaDoRegistro): { texto: string; fala?: bool
       return { texto: t.recusado };
     case 'render':
       return { texto: evento.detalhe ? t.renderDeDetalhe : t.render };
-    case 'verificacao':
+    case 'verificacao': {
+      // com as pranchetas conferidas, a linha diz qual foi e com que resultado; prancheta que já saiu da peça não tem nome
+      const conferidas = (evento.pranchetas ?? []).flatMap((id) => nomeDaPrancheta(id) ?? []);
+      if (conferidas.length > 0) return { texto: t.conferida(conferidas, evento.avisos.length) };
       return { texto: evento.avisos.length === 0 ? t.verificacaoLimpa : t.verificacao(evento.avisos.length) };
+    }
     case 'imagem':
       return { texto: t.imagem[evento.acao] };
     case 'erro':
@@ -305,13 +310,16 @@ function textoDaLinha({ evento }: LinhaDoRegistro): { texto: string; fala?: bool
 
 /** O passo a passo, fechado: quem quer ver, abre. As etapas (acima) são o que se lê de relance. */
 function Registro({ linhas, emCurso = false }: { linhas: readonly LinhaDoRegistro[]; emCurso?: boolean }) {
+  const ambiente = useAmbiente();
+  const pranchetas = useArmazem(ambiente.documento, (d) => d?.pranchetas);
   if (linhas.length === 0) return null;
+  const nomeDaPrancheta = (id: string) => pranchetas?.find((p) => p.id === id)?.nome;
   return (
     <details className={estilos.registro}>
       <summary>{(emCurso ? textos.espera.registro : textos.espera.registroDepois)(linhas.length)}</summary>
       <ol>
         {linhas.map((linha) => {
-          const l = textoDaLinha(linha);
+          const l = textoDaLinha(linha, nomeDaPrancheta);
           return l ? (
             <li key={linha.sequencia} data-fala={l.fala ? 'sim' : undefined} data-tipo={linha.evento.tipo}>
               {l.texto}
@@ -682,6 +690,12 @@ function Resultado({ otto, atual, ocupado }: { otto: ControleDoOtto; atual: Tare
           <button type="button" className={estilos.botao} disabled={ocupado} onClick={() => void otto.desfazer()}>
             {t.voltarParaAntes}
           </button>
+        )}
+        {/* o briefing que gerou a peça está guardado na tarefa: o formulário abre preenchido com ele */}
+        {tarefa.estado === 'aceita' && briefingDaTarefa(tarefa) && (
+          <a className={estilos.botao} href={`/editor/novo?peca=${encodeURIComponent(tarefa.documentoId)}`}>
+            {t.comEsteBriefing}
+          </a>
         )}
         <button type="button" className={estilos.discretoBotao} onClick={otto.fecharResultado}>
           {t.fechar}

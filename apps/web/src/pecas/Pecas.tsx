@@ -2,7 +2,7 @@
 
 // Peças: a lista da conta, com criar, renomear, duplicar e excluir (docs/mvp/experiencia.md, 3.2).
 // A primeira página vem pronta do servidor; as ações falam com a API daqui, pelo mesmo cliente do
-// editor. Miniatura, filtro por marca e "nova peça com este briefing" entram com as fatias deles.
+// editor. "Nova peça" leva ao formulário de briefing. Miniatura e filtro por marca dependem da API.
 import { type FormEvent, useState } from 'react';
 import { criarCliente } from '../api/cliente';
 import { type ApiDePecas, criarApiDePecas, type PecaDaLista, type ResultadoDaLista } from '../api/pecas';
@@ -11,8 +11,11 @@ import { pecas as textos } from '../textos/pecas';
 import estilos from './Pecas.module.css';
 import { haQuantoTempo } from './tempo';
 
-const estadoNaTela = (estado: string | undefined): string | undefined =>
-  estado && Object.hasOwn(textos.estadoDaTarefa, estado) ? textos.estadoDaTarefa[estado as keyof typeof textos.estadoDaTarefa] : undefined;
+/** O estado da tarefa viva nas palavras da tela. Em revisão com o trabalho parado no meio não é "pronto para revisar". */
+const estadoNaTela = (peca: Pick<PecaDaLista, 'tarefa' | 'tarefaParou'>): string | undefined => {
+  if (peca.tarefaParou) return textos.estadoDaTarefa.naoTerminou;
+  return peca.tarefa && Object.hasOwn(textos.estadoDaTarefa, peca.tarefa) ? textos.estadoDaTarefa[peca.tarefa as keyof typeof textos.estadoDaTarefa] : undefined;
+};
 
 /** O que o cartão está fazendo além de ser um link. */
 type Modo = { tipo: 'renomeando'; id: string } | { tipo: 'excluindo'; id: string } | null;
@@ -77,10 +80,16 @@ export function Pecas({ inicial, agora, api: apiDeFora, irPara = (endereco) => w
     setCursor(r.proximoCursor);
   };
 
-  const botaoDeNova = (
-    <button type="button" className={estilos.principal} disabled={ocupado} onClick={() => void criar()}>
-      {ocupado ? textos.criando : textos.novaPeca}
-    </button>
+  // O caminho padrão para criar é o formulário de briefing (ADR 033); a peça em branco fica em segundo plano.
+  const botoesDeNova = (
+    <>
+      <button type="button" className={estilos.botao} disabled={ocupado} onClick={() => void criar()}>
+        {textos.pecaEmBranco}
+      </button>
+      <a className={estilos.principal} href="/editor/novo">
+        {textos.novaPeca}
+      </a>
+    </>
   );
 
   if (inicial.estado === 'erro') {
@@ -96,7 +105,7 @@ export function Pecas({ inicial, agora, api: apiDeFora, irPara = (endereco) => w
 
   return (
     <>
-      <div className={estilos.acoesDaLista}>{botaoDeNova}</div>
+      <div className={estilos.acoesDaLista}>{botoesDeNova}</div>
       {aviso && (
         <div className={estilos.aviso} role="alert">
           <p>{aviso}</p>
@@ -145,7 +154,7 @@ interface PropriedadesDoCartao {
 }
 
 function Cartao({ peca, quando, modo, ocupado, aoMudarModo, aoRenomear, aoDuplicar, aoExcluir }: PropriedadesDoCartao) {
-  const estado = estadoNaTela(peca.tarefa);
+  const estado = estadoNaTela(peca);
   const [nome, setNome] = useState(peca.nome);
   const enviar = (e: FormEvent) => {
     e.preventDefault();
@@ -188,6 +197,8 @@ function Cartao({ peca, quando, modo, ocupado, aoMudarModo, aoRenomear, aoDuplic
           <button type="button" disabled={ocupado} onClick={escolher(aoDuplicar)}>
             {textos.duplicar}
           </button>
+          {/* o briefing que gerou a peça está guardado na tarefa: o formulário abre preenchido com ele */}
+          <a href={`/editor/novo?peca=${encodeURIComponent(peca.id)}`}>{textos.comEsteBriefing}</a>
           <button type="button" disabled={ocupado} onClick={escolher(() => aoMudarModo('excluindo'))}>
             {textos.excluir}
           </button>

@@ -243,6 +243,8 @@ export interface ImagemEnviada {
   sha256: string;
   largura: number;
   altura: number;
+  /** De onde veio a imagem que não é do designer (banco de imagens): vai no nó, para o relatório de exportação (ADR 032). */
+  origem?: { banco: string; autor: string; licenca: string; url: string } | undefined;
 }
 
 /** Fração da prancheta que uma imagem solta ocupa no máximo, e a largura de um vetor importado. */
@@ -280,6 +282,7 @@ export function loteDeInserirImagem(doc: Documento, pranchetaId: string | undefi
     y: Math.round(centro.y - altura / 2),
     largura,
     altura,
+    ...(arquivo.origem ? { origem: arquivo.origem } : {}),
   };
   return { descricao: textos.historico.inserir(nome), operacoes: [...d.antes, { op: 'criarNo', prancheta: d.alvo, no: no as never }] };
 }

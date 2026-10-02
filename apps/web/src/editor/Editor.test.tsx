@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import { caixaDe } from '@otto/documento';
-import type { EventoDaTarefa, Exportacao, RelatorioDeExportacao, Tarefa } from '@otto/shared';
+import type { EventoDaTarefa, Exportacao, ImagemTrazida, RelatorioDeExportacao, ResultadoDaBuscaDeImagens, Tarefa } from '@otto/shared';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { EventoDoFluxo } from '../api/fluxo';
 import type { ResultadoDeAbrir } from '../api/pecas';
+import { imagens as textosDeImagens } from '../textos/briefing';
 import { editor as textos } from '../textos/editor';
 import { erros } from '../textos/erros';
 import { exportar as textosDeExportar } from '../textos/exportar';
@@ -50,6 +51,32 @@ function motorFalso(): MotorDeRender {
 
 type Lotes = NonNullable<FonteDaPeca['lotes']>;
 
+const ORIGEM = { banco: 'Banco de Teste', autor: 'Fulana', licenca: 'Licença livre' };
+const BUSCA: ResultadoDaBuscaDeImagens = {
+  banco: { id: 'banco-de-teste', nome: 'Banco de Teste', licenca: 'Licença livre', ladoMaximo: 1280 },
+  itens: [
+    {
+      banco: 'banco-de-teste',
+      id: '42',
+      descricao: 'pão quente, padaria',
+      largura: 853,
+      altura: 1280,
+      autor: 'Fulana',
+      pagina: 'https://exemplo.test/42',
+      previa: '/api/imagens/banco-de-teste/42/previa',
+    },
+  ],
+};
+const TRAZIDA: ImagemTrazida = {
+  sha256: 'c'.repeat(64),
+  tipo: 'image/jpeg',
+  largura: 853,
+  altura: 1280,
+  bytes: 1000,
+  origem: { ...ORIGEM, pagina: 'https://exemplo.test/42' },
+  no: { tipo: 'imagem', arquivo: 'c'.repeat(64), larguraOriginal: 853, alturaOriginal: 1280, origem: { ...ORIGEM, url: '' } },
+};
+
 function montar(
   opcoes: {
     abrir?: ResultadoDeAbrir | (() => Promise<ResultadoDeAbrir>);
@@ -60,6 +87,7 @@ function montar(
     renomear?: FonteDaPeca['renomear'];
     exportacoes?: Partial<NonNullable<FonteDaPeca['exportacoes']>>;
     tarefas?: Partial<NonNullable<FonteDaPeca['tarefas']>>;
+    imagens?: Partial<NonNullable<FonteDaPeca['imagens']>>;
   } = {},
 ) {
   const motor = { ...motorFalso(), ...opcoes.motor };
@@ -87,6 +115,15 @@ function montar(
         }
       : {}),
     ...(opcoes.renomear ? { renomear: opcoes.renomear } : {}),
+    ...(opcoes.imagens
+      ? {
+          imagens: {
+            buscar: vi.fn(async () => ({ ok: true as const, resultado: BUSCA })),
+            trazer: vi.fn(async () => ({ ok: true as const, imagem: TRAZIDA })),
+            ...opcoes.imagens,
+          },
+        }
+      : {}),
     ...(opcoes.tarefas ? { tarefas: tarefasDeMentira(opcoes.tarefas) } : {}),
     ...(opcoes.exportacoes
       ? {
@@ -679,6 +716,54 @@ describe('casca do editor: enviar imagem e SVG', () => {
     const m = montar({ abrir: aberta, arquivos: {} });
     await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
     expect((screen.getByLabelText(textos.ferramentas.inserir) as HTMLInputElement).disabled).toBe(true);
+  });
+});
+
+describe('casca do editor: banco de imagens', () => {
+  const abrir = async (opcoes: Parameters<typeof montar>[0] = {}) => {
+    const m = montar({ abrir: aberta, lotes: {}, arquivos: {}, imagens: {}, ...opcoes });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    return m;
+  };
+  const enviados = (lotes: Lotes | undefined) => vi.mocked(lotes?.enviar as Lotes['enviar']).mock.calls.map((c) => c[0]);
+  const botao = () => within(screen.getByRole('toolbar', { name: textos.ferramentas.rotulo })).getByRole('button', { name: textosDeImagens.abrir }) as HTMLButtonElement;
+
+  it('"buscar imagem" abre a busca; a imagem escolhida vira camada por `criarNo`, com banco, autor e licença no nó, e fica selecionada', async () => {
+    const { lotes, fonte } = await abrir();
+    fireEvent.click(botao());
+    const dialogo = screen.getByRole('dialog', { name: textosDeImagens.titulo });
+    fireEvent.change(within(dialogo).getByRole('searchbox', { name: textosDeImagens.campo }), { target: { value: 'padaria' } });
+    await act(async () => fireEvent.click(within(dialogo).getByRole('button', { name: textosDeImagens.buscar })));
+    // a origem está à vista nos resultados
+    expect(dialogo.querySelector('[data-origem-das-imagens]')?.textContent).toContain('Banco de Teste');
+    await act(async () => fireEvent.click(within(dialogo).getByRole('button', { name: textosDeImagens.trazerEsta('Fulana') })));
+
+    expect(fonte.imagens?.trazer).toHaveBeenCalledWith({ banco: 'banco-de-teste', id: '42' });
+    await waitFor(() => expect(enviados(lotes)).toHaveLength(1));
+    expect(enviados(lotes)[0]?.operacoes[0]).toMatchObject({
+      op: 'criarNo',
+      no: { tipo: 'imagem', nome: 'pão quente', arquivo: 'c'.repeat(64), larguraOriginal: 853, alturaOriginal: 1280, origem: { ...ORIGEM, url: '' } },
+    });
+    // nenhum endereço do banco entra no documento
+    expect(JSON.stringify(enviados(lotes)[0])).not.toContain('exemplo.test');
+    expect(screen.getByRole('treeitem', { name: /^pão quente/ }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('fechar a busca tira o diálogo da tela', async () => {
+    await abrir();
+    fireEvent.click(botao());
+    fireEvent.click(within(screen.getByRole('dialog', { name: textosDeImagens.titulo })).getByRole('button', { name: textosDeImagens.fechar }));
+    expect(screen.queryByRole('dialog', { name: textosDeImagens.titulo })).toBeNull();
+  });
+
+  it('peça só para leitura não busca imagem; sem banco de imagens (a bancada), o botão não existe', async () => {
+    const m = montar({ abrir: aberta, arquivos: {}, imagens: {} });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    expect(botao().disabled).toBe(true);
+    cleanup();
+    const semBanco = montar({ abrir: aberta, lotes: {}, arquivos: {} });
+    await waitFor(() => expect(semBanco.motor.definirDocumento).toHaveBeenCalled());
+    expect(within(screen.getByRole('toolbar', { name: textos.ferramentas.rotulo })).queryByRole('button', { name: textosDeImagens.abrir })).toBeNull();
   });
 });
 

@@ -1,0 +1,194 @@
+/* Campos, botões e etiquetas das telas de formulário do produto (nova peça, marcas, busca de imagens).
+   Mesma oficina escura do editor: denso, sem enfeite, o âmbar é do Otto e o laranja é a mão do designer. */
+
+.campo {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.rotulo {
+  font: 600 11px var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+}
+
+.rotulo em {
+  margin-left: 6px;
+  font: 400 11px var(--mono);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--laranja);
+}
+
+.entrada,
+.campo input[type="text"],
+.campo input[type="search"],
+.campo input[type="number"],
+.campo select,
+.campo textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  background: var(--grafite-0);
+  border: 1px solid var(--grafite-4);
+  border-radius: 4px;
+  color: var(--papel);
+  font: 14px / 1.4 var(--sans);
+}
+
+.campo textarea {
+  resize: vertical;
+}
+
+.campo input::placeholder,
+.campo textarea::placeholder {
+  color: var(--texto-3);
+}
+
+.campo input:focus-visible,
+.campo select:focus-visible,
+.campo textarea:focus-visible,
+.botao:focus-visible,
+.principal:focus-visible,
+.chip:focus-visible,
+.discreto:focus-visible {
+  outline: 2px solid var(--laranja);
+  outline-offset: 1px;
+}
+
+.nota {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--texto-2);
+}
+
+.aviso {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--papel);
+  background: var(--ambar-fundo);
+  border-left: 2px solid var(--ambar);
+  border-radius: 0 4px 4px 0;
+}
+
+.erro {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #ffd9d3;
+  background: var(--erro-fundo);
+  border: 1px solid var(--erro);
+  border-radius: 4px;
+}
+
+.botao,
+.principal,
+.discreto {
+  padding: 7px 13px;
+  border-radius: 4px;
+  font: 500 13px var(--sans);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.botao {
+  background: var(--grafite-3);
+  border: 1px solid var(--grafite-4);
+  color: var(--texto);
+}
+
+.botao:hover:not(:disabled) {
+  background: var(--grafite-4);
+}
+
+.principal {
+  background: var(--papel);
+  border: 1px solid var(--papel);
+  color: var(--grafite-0);
+  font-weight: 600;
+}
+
+.principal:hover:not(:disabled) {
+  background: #fff;
+}
+
+.discreto {
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  color: var(--texto-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.discreto:hover:not(:disabled) {
+  color: var(--papel);
+}
+
+.botao:disabled,
+.principal:disabled,
+.discreto:disabled,
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 6px 11px;
+  background: var(--grafite-2);
+  border: 1px solid var(--grafite-4);
+  border-radius: 99px;
+  color: var(--texto);
+  font: 500 13px var(--sans);
+  cursor: pointer;
+}
+
+.chip small {
+  font: 11px var(--mono);
+  color: var(--texto-3);
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--laranja-fundo);
+  border-color: var(--laranja);
+  color: var(--papel);
+}
+
+.chip[aria-pressed="true"] small {
+  color: var(--texto-2);
+}
+
+.linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.soParaLeitorDeTela {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

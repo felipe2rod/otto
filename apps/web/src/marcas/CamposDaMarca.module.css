@@ -1,0 +1,156 @@
+.campos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+  align-items: start;
+}
+
+.inteiro {
+  grid-column: 1 / -1;
+}
+
+.cores {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.cores legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.cor {
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+  background: var(--grafite-2);
+  border: 1px solid var(--linha);
+  border-radius: 5px;
+  min-width: 0;
+}
+
+.cor > span {
+  font: 600 11px var(--sans);
+  color: var(--texto-2);
+}
+
+.amostra {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.amostra input[type="color"] {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--grafite-4);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.amostra input[type="text"] {
+  padding: 5px 6px;
+  font: 12px var(--mono);
+}
+
+.amostra input[data-vazio="sim"] + input,
+.amostra input[data-vazio="sim"] {
+  opacity: 0.55;
+}
+
+.tirar {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--texto-3);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tirar:hover {
+  color: var(--papel);
+}
+
+.arquivos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.arquivo {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  width: 96px;
+}
+
+.arquivo img,
+.arquivo [data-carregando] {
+  display: block;
+  width: 96px;
+  height: 72px;
+  object-fit: contain;
+  /* xadrez discreto: logo branco ou preto aparece nos dois casos */
+  background: repeating-conic-gradient(var(--grafite-3) 0% 25%, var(--grafite-2) 0% 50%) 0 0 / 14px 14px;
+  border: 1px solid var(--grafite-4);
+  border-radius: 4px;
+}
+
+.arquivo small {
+  font: 11px var(--mono);
+  color: var(--texto-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arquivo .tirar {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  background: var(--grafite-0);
+  border-radius: 99px;
+}
+
+.escondido {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fonte {
+  display: grid;
+  gap: 5px;
+}
+
+.fonte [role="status"],
+.fonte [role="alert"] {
+  font: 11px var(--mono);
+  color: var(--ambar);
+}
+
+@media (max-width: 720px) {
+  .campos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cores {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

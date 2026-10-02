@@ -170,6 +170,44 @@ export class Api {
     }
   }
 
+  // ---------- marcas e briefings salvos ----------
+
+  async criarMarca(dados: Record<string, unknown>): Promise<{ id: string; nome: string }> {
+    const r = await this.http.post(`${this.base}/api/marcas`, { headers: await this.cabecalhos(), data: dados });
+    if (!r.ok()) throw new Error(`criar a marca: ${r.status()} ${await r.text()}`);
+    return (await r.json()) as { id: string; nome: string };
+  }
+
+  async marcas(): Promise<{ id: string; nome: string; [chave: string]: unknown }[]> {
+    const r = await this.http.get(`${this.base}/api/marcas`);
+    return ((await r.json()) as { itens: { id: string; nome: string }[] }).itens;
+  }
+
+  async apagarMarca(id: string): Promise<void> {
+    await this.http.delete(`${this.base}/api/marcas/${id}`, { headers: await this.cabecalhos() }).catch(() => undefined);
+  }
+
+  async briefings(): Promise<{ id: string; nome: string; usos: number }[]> {
+    const r = await this.http.get(`${this.base}/api/briefings`);
+    return ((await r.json()) as { itens: { id: string; nome: string; usos: number }[] }).itens;
+  }
+
+  async briefing(id: string): Promise<{ id: string; nome: string; usos: number; cuidado?: string; dados: Record<string, unknown> }> {
+    const r = await this.http.get(`${this.base}/api/briefings/${id}`);
+    return (await r.json()) as { id: string; nome: string; usos: number; dados: Record<string, unknown> };
+  }
+
+  async apagarBriefing(id: string): Promise<void> {
+    await this.http.delete(`${this.base}/api/briefings/${id}`, { headers: await this.cabecalhos() }).catch(() => undefined);
+  }
+
+  /** A tarefa inteira, com a entrada (o formulário de briefing, quando nasceu dele). */
+  async tarefa(id: string): Promise<TarefaDoServidor & { entrada: { tipo: string; briefing?: Record<string, unknown>; cuidado?: string }; briefingId?: string }> {
+    const r = await this.http.get(`${this.base}/api/tarefas/${id}`);
+    if (!r.ok()) throw new Error(`tarefa: ${r.status()} ${await r.text()}`);
+    return (await r.json()) as never;
+  }
+
   async arquivar(id: string): Promise<void> {
     await this.http.delete(`${this.base}/api/documentos/${id}`, { headers: await this.cabecalhos() }).catch(() => undefined);
   }

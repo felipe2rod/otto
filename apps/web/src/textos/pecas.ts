@@ -14,6 +14,8 @@ export const pecas = {
   carregando: 'Carregando suas peças…',
   novaPeca: 'Nova peça',
   criando: 'Criando…',
+  pecaEmBranco: 'Peça em branco',
+  comEsteBriefing: 'Nova peça com este briefing',
   carregarMais: 'Carregar mais peças',
   acoes: (nome: string): string => `Ações de ${nome}`,
   renomear: 'Renomear',
@@ -35,5 +37,7 @@ export const pecas = {
     aguardando_confirmacao: 'Aguardando seu "pode"',
     em_revisao: 'Pronto para revisar',
     falhou: 'Não terminou',
+    /** Em revisão, mas o trabalho parou antes de entregar. */
+    naoTerminou: 'Parou no meio: revise',
   },
 } as const;

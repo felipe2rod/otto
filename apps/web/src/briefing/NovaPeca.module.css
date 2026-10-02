@@ -1,0 +1,415 @@
+/* O formulário de briefing: três blocos numerados, na ordem do que varia, e um rodapé fixo com o que
+   falta e o botão. Tela inteira, não modal (experiencia.md, 3.4). */
+
+.formulario {
+  display: grid;
+  gap: 0;
+  max-width: 980px;
+  margin-top: -8px;
+  padding-bottom: 96px;
+}
+
+.partida {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 18px;
+  padding-bottom: 18px;
+}
+
+.partida .campo {
+  min-width: 260px;
+}
+
+.salvos {
+  position: relative;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.salvos summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.salvos ul {
+  position: absolute;
+  z-index: 3;
+  top: 100%;
+  left: 0;
+  min-width: 320px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--grafite-2);
+  border: 1px solid var(--grafite-4);
+  border-radius: 5px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.salvos li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 6px;
+}
+
+.notas {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.notaComAcao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.bloco {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 0 8px;
+  padding: 22px 0 26px;
+  border-top: 1px solid var(--linha);
+}
+
+.numero {
+  font: italic 400 44px / 0.9 var(--serif);
+  color: var(--ambar);
+}
+
+.corpo {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.tituloDoBloco {
+  margin: 0;
+  font: 600 12px var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--papel);
+}
+
+.tituloDoBloco small {
+  margin-left: 10px;
+  font: 400 12px var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--texto-3);
+}
+
+/* <details> não distribui os filhos numa grade: o resumo tem a própria, e o corpo é recuado pela largura da coluna do número */
+details.bloco {
+  display: block;
+}
+
+details.bloco > summary {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 0 8px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+details.bloco > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.bloco > summary .tituloDoBloco::after {
+  content: "▸";
+  margin-left: 10px;
+  color: var(--texto-3);
+}
+
+details.bloco[open] > summary .tituloDoBloco::after {
+  content: "▾";
+}
+
+details.bloco > .corpo {
+  margin: 18px 0 0 62px;
+}
+
+.duas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+}
+
+.marcaEscolhida {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+  gap: 14px 18px;
+  align-items: end;
+}
+
+.resumoDaMarca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.grupo {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.grupo legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.opcao {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.opcao input {
+  accent-color: var(--laranja);
+}
+
+.outroFormato {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  max-width: 560px;
+}
+
+.fotos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.foto {
+  position: relative;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px;
+  background: var(--grafite-1);
+  border: 1px solid var(--linha);
+  border-radius: 5px;
+}
+
+.foto[data-estado="falhou"] {
+  border-color: var(--erro);
+}
+
+.foto[data-perde-nitidez="sim"] {
+  border-color: rgba(244, 196, 48, 0.55);
+}
+
+.foto img,
+.semMiniatura {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--grafite-3);
+}
+
+.dadosDaFoto {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  padding-right: 18px;
+  font: 11px / 1.4 var(--mono);
+  color: var(--texto-2);
+}
+
+.dadosDaFoto strong {
+  font: 600 12px var(--sans);
+  color: var(--papel);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ampliacao {
+  grid-column: 1 / -1;
+  margin: 0;
+  font: 12px / 1.4 var(--sans);
+  color: var(--ambar);
+}
+
+.tirar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--texto-3);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tirar:hover {
+  color: var(--papel);
+}
+
+.painelDaBusca {
+  padding: 14px;
+  background: var(--grafite-1);
+  border: 1px solid var(--grafite-4);
+  border-radius: 6px;
+}
+
+.cuidado {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nivel {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--grafite-1);
+  border: 1px solid var(--linha);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.nivel:has(input:checked) {
+  border-color: var(--laranja);
+  background: var(--laranja-fundo);
+}
+
+.nivel span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  color: var(--papel);
+}
+
+.nivel input {
+  accent-color: var(--laranja);
+}
+
+.nivel small {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--texto-2);
+}
+
+.daMarca {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--texto-2);
+}
+
+.daMarca li:not(:first-child) {
+  padding: 3px 9px;
+  background: var(--grafite-2);
+  border: 1px solid var(--linha);
+  border-radius: 99px;
+}
+
+.rodape {
+  position: fixed;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px clamp(16px, 4vw, 48px);
+  background: rgba(22, 22, 20, 0.96);
+  border-top: 1px solid var(--grafite-4);
+  backdrop-filter: blur(6px);
+}
+
+.situacao {
+  flex: 1;
+  min-width: 220px;
+  display: grid;
+  gap: 2px;
+  font-size: 12.5px;
+  color: var(--texto-2);
+}
+
+.situacao strong {
+  font: 600 12px var(--mono);
+  color: var(--papel);
+}
+
+.situacao [data-falta] {
+  color: var(--ambar);
+}
+
+.salvarBriefing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.salvarBriefing input {
+  width: 200px;
+  padding: 6px 9px;
+  background: var(--grafite-0);
+  border: 1px solid var(--grafite-4);
+  border-radius: 4px;
+  color: var(--papel);
+}
+
+@media (max-width: 720px) {
+  .bloco,
+  details.bloco > summary {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .numero {
+    font-size: 30px;
+  }
+
+  details.bloco > .corpo {
+    margin-left: 42px;
+  }
+
+  .duas,
+  .marcaEscolhida,
+  .cuidado,
+  .outroFormato {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

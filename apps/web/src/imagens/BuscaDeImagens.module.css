@@ -1,0 +1,71 @@
+.busca {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.consulta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.origem {
+  margin: 0;
+  font: 11px / 1.5 var(--mono);
+  color: var(--texto-2);
+}
+
+.resultados {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.resultado {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 5px;
+  padding: 6px;
+  background: var(--grafite-2);
+  border: 1px solid var(--linha);
+  border-radius: 5px;
+}
+
+.resultado img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--grafite-3);
+}
+
+.dados {
+  display: grid;
+  gap: 1px;
+  font: 11px / 1.35 var(--mono);
+  color: var(--texto-2);
+  min-width: 0;
+}
+
+.dados span,
+.dados a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dados a {
+  color: var(--texto-3);
+}
+
+.dados a:hover {
+  color: var(--papel);
+}

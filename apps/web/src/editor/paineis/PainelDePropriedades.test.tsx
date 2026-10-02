@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fontes as textosDeFontes } from '../../textos/briefing';
 import { editor as textos } from '../../textos/editor';
 import { ambienteDeTeste, documentoDeTeste } from './apoioDeTeste';
 import { PainelDePropriedades } from './PainelDePropriedades';
@@ -22,7 +23,7 @@ const doc = () =>
     { op: 'criarNo', prancheta: 'Feed', no: { tipo: 'forma', nome: 'Travada', forma: 'elipse', x: 0, y: 0, largura: 50, altura: 50, preenchimento: '#000000', bloqueado: true } },
   ]);
 
-function montar(qual?: 'Selo' | 'Título' | 'Travada' | 'Foto' | 'prancheta' | 'varias', opcoes: { somenteLeitura?: boolean } = {}) {
+function montar(qual?: 'Selo' | 'Título' | 'Travada' | 'Foto' | 'prancheta' | 'varias', opcoes: Parameters<typeof ambienteDeTeste>[1] = {}) {
   const a = ambienteDeTeste(doc(), opcoes);
   const feed = a.documento.obter()?.pranchetas[0];
   const id = (nome: string) => feed?.filhos.find((n) => n.nome === nome)?.id ?? '';
@@ -80,6 +81,44 @@ describe('painel de propriedades: o que mostra', () => {
 
     act(() => void a.ambiente.aplicar({ descricao: 'fonte', operacoes: [{ op: 'alterar', alvo: a.id('Título'), props: { fonte: 'Didot' } }] }));
     expect(await screen.findByText(p.fonteForaDaBiblioteca)).toBeDefined();
+  });
+
+  it('fonte do catálogo que ainda não foi baixada: diz que está baixando e só troca a fonte da camada quando ela chega', async () => {
+    let chegar: ((ok: boolean) => void) | undefined;
+    const a = montar('Título', { trazerFonte: () => new Promise<boolean>((seguir) => (chegar = seguir)) });
+    await screen.findByRole('option', { name: 'Bitter' });
+    const fonte = screen.getByLabelText(p.fonte) as HTMLSelectElement;
+    expect(within(screen.getByRole('group', { name: textosDeFontes.doCatalogo })).getByRole('option', { name: 'Bitter' })).toBeDefined();
+
+    fireEvent.change(fonte, { target: { value: 'Bitter' } });
+    expect(a.ambiente.trazerFonte).toHaveBeenCalledWith('Bitter', 400);
+    expect(screen.getByText(textosDeFontes.baixando('Bitter'))).toBeDefined();
+    expect(a.lotes).toHaveLength(0);
+
+    await act(async () => chegar?.(true));
+    expect(a.lotes).toHaveLength(1);
+    expect(a.lotes[0]?.operacoes).toEqual([{ op: 'alterar', alvo: a.id('Título'), props: { fonte: 'Bitter' } }]);
+    expect(screen.queryByText(textosDeFontes.baixando('Bitter'))).toBeNull();
+    // chegou: não é "fora da biblioteca", e os pesos são os dela
+    expect(screen.queryByText(p.fonteForaDaBiblioteca)).toBeNull();
+    expect([...(screen.getByLabelText(p.peso) as HTMLSelectElement).options].map((o) => o.value)).toEqual(['400', '700']);
+  });
+
+  it('fonte do catálogo que não chegou: a camada fica com a fonte que tinha, e a tela diz', async () => {
+    const a = montar('Título', { trazerFonte: async () => false });
+    await screen.findByRole('option', { name: 'Bitter' });
+    await act(async () => fireEvent.change(screen.getByLabelText(p.fonte), { target: { value: 'Bitter' } }));
+    expect(a.lotes).toHaveLength(0);
+    expect(screen.getByRole('alert').textContent).toBe(textosDeFontes.naoBaixou('Bitter'));
+    expect((screen.getByLabelText(p.fonte) as HTMLSelectElement).value).toBe('Anton');
+  });
+
+  it('foto de banco de imagens diz de onde veio: banco, autor e licença; a foto do designer não tem essa linha', () => {
+    const a = montar('Foto');
+    expect(document.querySelector('[data-origem-da-imagem]')).toBeNull();
+    const origem = { banco: 'Banco de Teste', autor: 'Fulana', licenca: 'Licença livre', url: '' };
+    act(() => void a.ambiente.aplicar({ descricao: 'origem', operacoes: [{ op: 'alterar', alvo: a.id('Foto'), props: { origem } }] }));
+    expect(document.querySelector('[data-origem-da-imagem]')?.textContent).toBe(p.origemDaImagem('Banco de Teste', 'Fulana', 'Licença livre'));
   });
 
   it('com a prancheta, mostra nome e fundo', () => {

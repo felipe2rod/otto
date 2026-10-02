@@ -5,6 +5,7 @@
 // então pô-lo em contexto não faz ninguém renderizar de novo: quem renderiza é o seletor de cada
 // painel, quando o pedaço que ele lê muda.
 import type { Documento, No } from '@otto/documento';
+import type { ImagemTrazida } from '@otto/shared';
 import { createContext, type ReactNode, useContext } from 'react';
 import type { FaltasDoRender } from './casca/AvisosDoRender';
 import type { LoteParaAplicar } from './nucleo/acoes';
@@ -14,6 +15,8 @@ import type { Interface } from './nucleo/interface';
 export interface FamiliaDeFonte {
   familia: string;
   pesos: number[];
+  /** Falso: família do catálogo que ainda não foi baixada. Ausente: está na biblioteca. */
+  naBiblioteca?: boolean | undefined;
 }
 
 export interface AmbienteDoEditor {
@@ -34,8 +37,12 @@ export interface AmbienteDoEditor {
   trocarImagem(no: Pick<No, 'id' | 'nome'>, arquivo: File): Promise<void>;
   /** Envia imagens e SVGs e cria uma camada para cada um, por operação do catálogo. */
   inserirArquivos(arquivos: File[], onde?: { pranchetaId?: string; x: number; y: number }): Promise<void>;
-  /** As famílias da biblioteca de fontes. */
+  /** As famílias da biblioteca de fontes e as do catálogo que ainda não foram baixadas. */
   listarFontes(): Promise<FamiliaDeFonte[]>;
+  /** Traz uma família do catálogo para a biblioteca (segundos, na primeira vez). Verdadeiro se chegou. */
+  trazerFonte(familia: string, peso: number): Promise<boolean>;
+  /** A imagem do banco, que já é arquivo da conta, vira camada (com a origem), por operação do catálogo. */
+  inserirImagemTrazida(imagem: ImagemTrazida, nome: string): boolean;
 }
 
 const Contexto = createContext<AmbienteDoEditor | null>(null);

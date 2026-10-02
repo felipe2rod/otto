@@ -15,7 +15,10 @@ export function documentoDeTeste(operacoes: unknown[]): Documento {
   return r.doc;
 }
 
-export function ambienteDeTeste(doc: Documento | undefined, opcoes: { somenteLeitura?: boolean; faltas?: FaltasDoRender; tocadosPeloOtto?: readonly string[] } = {}) {
+export function ambienteDeTeste(
+  doc: Documento | undefined,
+  opcoes: { somenteLeitura?: boolean; faltas?: FaltasDoRender; tocadosPeloOtto?: readonly string[]; trazerFonte?: (familia: string, peso: number) => Promise<boolean> } = {},
+) {
   const documento = criarArmazem<Documento | undefined>(doc);
   const iface = criarInterface();
   const lotes: LoteParaAplicar[] = [];
@@ -41,7 +44,11 @@ export function ambienteDeTeste(doc: Documento | undefined, opcoes: { somenteLei
     listarFontes: async () => [
       { familia: 'Anton', pesos: [400] },
       { familia: 'IBM Plex Sans', pesos: [400, 700] },
+      // do catálogo, ainda não baixada
+      { familia: 'Bitter', pesos: [400, 700], naBiblioteca: false },
     ],
+    trazerFonte: vi.fn(opcoes.trazerFonte ?? (async () => true)),
+    inserirImagemTrazida: vi.fn(() => true),
   };
   const Moldura = ({ children }: { children: ReactNode }) => <ProvedorDoEditor ambiente={ambiente}>{children}</ProvedorDoEditor>;
   return { ambiente, iface, documento, lotes, Moldura };

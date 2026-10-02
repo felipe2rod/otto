@@ -110,10 +110,14 @@
 .acoesDaLista {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
   margin: -52px 0 22px;
 }
 
 .principal {
+  display: inline-block;
+  text-decoration: none;
   padding: 8px 16px;
   background: var(--papel);
   border: 1px solid var(--papel);
@@ -177,14 +181,18 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
-.itensDoMenu button {
+.itensDoMenu button,
+.itensDoMenu a {
   padding: 6px 10px;
   background: none;
   border: 0;
   border-radius: 3px;
   text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
+.itensDoMenu a:hover,
 .itensDoMenu button:hover:not(:disabled) {
   background: var(--grafite-4);
 }

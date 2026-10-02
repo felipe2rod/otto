@@ -38,7 +38,7 @@ describe('peças: estados da lista', () => {
     montar({ estado: 'ok', pecas: [], proximoCursor: null });
     expect(screen.getByText(textos.vazio)).toBeDefined();
     expect(screen.queryByRole('list')).toBeNull();
-    expect(screen.getByRole('button', { name: textos.novaPeca })).toBeDefined();
+    expect(screen.getByRole('link', { name: textos.novaPeca }).getAttribute('href')).toBe('/editor/novo');
   });
 
   it('quando não carregou, avisa o erro e oferece tentar de novo: nunca a frase de lista vazia', () => {
@@ -62,6 +62,13 @@ describe('peças: estados da lista', () => {
     expect(screen.queryByText('em_revisao')).toBeNull();
   });
 
+  it('tarefa que parou no meio não aparece como "pronto para revisar": diz que não terminou', () => {
+    montar({ estado: 'ok', pecas: [peca('c3', 'Deploy no meio', { tarefa: 'em_revisao', tarefaParou: true })], proximoCursor: null });
+    const cartao = screen.getByRole('link', { name: /Deploy/ });
+    expect(cartao.textContent).toContain(textos.estadoDaTarefa.naoTerminou);
+    expect(cartao.textContent).not.toContain(textos.estadoDaTarefa.em_revisao);
+  });
+
   it('havendo mais páginas, "carregar mais" busca a seguinte e acrescenta', async () => {
     const listar = vi.fn(async () => ({ estado: 'ok', pecas: [peca('c3', 'Terceira')], proximoCursor: null }) as ResultadoDaLista);
     montar({ ...comDuas, proximoCursor: 'cursor-2' } as ResultadoDaLista, { listar });
@@ -74,11 +81,23 @@ describe('peças: estados da lista', () => {
 });
 
 describe('peças: criar, renomear, duplicar e excluir', () => {
-  it('"Nova peça" cria e abre o editor da peça criada', async () => {
+  it('"Nova peça" leva ao formulário de briefing, que é o caminho padrão; nada é criado ao clicar', () => {
+    const { api } = montar(comDuas);
+    expect(screen.getByRole('link', { name: textos.novaPeca }).getAttribute('href')).toBe('/editor/novo');
+    expect(api.criar).not.toHaveBeenCalled();
+  });
+
+  it('a peça em branco fica em segundo plano: cria e abre o editor da peça criada', async () => {
     const { api, irPara } = montar(comDuas);
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: textos.novaPeca })));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: textos.pecaEmBranco })));
     expect(api.criar).toHaveBeenCalledTimes(1);
     expect(irPara).toHaveBeenCalledWith('/editor/p/nova');
+  });
+
+  it('"nova peça com este briefing" abre o formulário com o briefing que gerou a peça', () => {
+    const { cartao } = montar(comDuas);
+    fireEvent.click(screen.getByText(textos.acoes('Crové')));
+    expect(within(cartao('Crové')).getByRole('link', { name: textos.comEsteBriefing }).getAttribute('href')).toBe('/editor/novo?peca=a1');
   });
 
   it('renomear abre o campo com o nome atual; salvar manda o nome novo e o cartão muda', async () => {
@@ -106,8 +125,10 @@ describe('peças: criar, renomear, duplicar e excluir', () => {
     const { api, acao } = montar(comDuas);
     await acao('Crové', textos.duplicar);
     expect(api.duplicar).toHaveBeenCalledWith('a1');
-    expect(screen.getAllByRole('link')[0]?.textContent).toContain('Crové (cópia)');
-    expect(screen.getAllByRole('link')).toHaveLength(3);
+    // os cartões da lista (a tela tem outros links: "Nova peça" e o de cada menu)
+    const cartoes = within(screen.getByRole('list', { name: textos.lista })).getAllByRole('listitem');
+    expect(cartoes[0]?.textContent).toContain('Crové (cópia)');
+    expect(cartoes).toHaveLength(3);
   });
 
   it('excluir pede confirmação dizendo o nome da peça, e só então tira da lista', async () => {

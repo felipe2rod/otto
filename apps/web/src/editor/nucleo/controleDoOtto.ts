@@ -6,7 +6,7 @@
 // eventos e o que o painel precisa para desenhar; toda ação é uma chamada, e o estado novo é a resposta.
 
 import type { Documento } from '@otto/documento';
-import { type EntradaDaTarefa, type EventoDaTarefa, type LimitesDeTarefa, type PendenciaDaPeca, Tarefa } from '@otto/shared';
+import { type EventoDaTarefa, type LimitesDeTarefa, type PedidoDeTarefa, type PendenciaDaPeca, Tarefa } from '@otto/shared';
 import type { EventoDoFluxo } from '../../api/fluxo';
 import type { ApiDeTarefas, ResultadoDaTarefa, ResultadoDeDesfazer } from '../../api/tarefas';
 import { type Armazem, criarArmazem } from './armazem';
@@ -31,7 +31,7 @@ export interface ControleDoOtto {
   armazem: Pick<Armazem<EstadoDoOtto>, 'obter' | 'assinar'>;
   /** Ao abrir a peça: acha a tarefa viva (se houver) e volta a acompanhá-la; lê limites e pendências. */
   iniciar(): Promise<void>;
-  pedir(entrada: EntradaDaTarefa): Promise<boolean>;
+  pedir(entrada: PedidoDeTarefa): Promise<boolean>;
   /** O "pode". */
   aprovar(): Promise<void>;
   /** Pede outra direção ou outro plano, com o que muda. */

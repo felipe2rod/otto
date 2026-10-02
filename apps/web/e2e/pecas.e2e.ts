@@ -1,6 +1,7 @@
 // A lista de peças: listar, criar, renomear, duplicar e excluir. Cada teste usa uma peça com nome
 // próprio (com um código que não se repete) e a encontra por esse nome, sem depender das outras.
 import type { Page } from '@playwright/test';
+import { briefing as textosDoBriefing } from '../src/textos/briefing';
 import { pecas as textos } from '../src/textos/pecas';
 import { expect, test } from './apoio/teste';
 
@@ -20,9 +21,17 @@ test.describe('peças', () => {
     await expect(cartao).toContainText(textos.formatos(2));
   });
 
-  test('"Nova peça" cria a peça e abre o editor nela', async ({ page, api }) => {
+  test('"Nova peça" leva ao formulário de briefing', async ({ page }) => {
     await page.goto('/editor');
-    await page.getByRole('button', { name: textos.novaPeca }).click();
+    // exato: uma peça da conta pode ter "nova peça" no nome
+    await page.getByRole('link', { name: textos.novaPeca, exact: true }).click();
+    await page.waitForURL(/\/editor\/novo$/);
+    await expect(page.getByRole('form', { name: textosDoBriefing.titulo })).toBeVisible();
+  });
+
+  test('"Peça em branco" cria a peça e abre o editor nela', async ({ page, api }) => {
+    await page.goto('/editor');
+    await page.getByRole('button', { name: textos.pecaEmBranco }).click();
     await page.waitForURL(/\/editor\/p\/[0-9a-f-]{36}$/);
     const id = page.url().split('/').pop() as string;
     try {

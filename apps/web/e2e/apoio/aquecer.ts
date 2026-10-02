@@ -30,7 +30,20 @@ async function arquivarSobras(): Promise<void> {
   const catalogo = r.headers.get('x-otto-catalogo') ?? '2';
   const { itens } = (await r.json()) as { itens: { id: string; nome: string; alteradoEm: string }[] };
   const velhas = itens.filter((p) => p.nome.startsWith('e2e') && Date.now() - Date.parse(p.alteradoEm) > 30 * 60_000);
-  for (const p of velhas) await fetch(`${api}/api/documentos/${p.id}`, { method: 'DELETE', headers: { 'X-Otto-Cliente': 'editor', 'X-Otto-Catalogo': catalogo } }).catch(() => undefined);
+  const cabecalhos = { 'X-Otto-Cliente': 'editor', 'X-Otto-Catalogo': catalogo };
+  for (const p of velhas) await fetch(`${api}/api/documentos/${p.id}`, { method: 'DELETE', headers: cabecalhos }).catch(() => undefined);
+  // marcas e briefings salvos de teste que ficaram para trás (os nomes começam por "e2e")
+  for (const [rota, data] of [
+    ['marcas', 'alteradaEm'],
+    ['briefings', 'alteradoEm'],
+  ] as const) {
+    const lista = await fetch(`${api}/api/${rota}`).catch(() => undefined);
+    if (!lista?.ok) continue;
+    const sobras = ((await lista.json()) as { itens: ({ id: string; nome: string } & Record<string, string>)[] }).itens;
+    for (const item of sobras)
+      if (item.nome.startsWith('e2e') && Date.now() - Date.parse(item[data] ?? '') > 30 * 60_000)
+        await fetch(`${api}/api/${rota}/${item.id}`, { method: 'DELETE', headers: cabecalhos }).catch(() => undefined);
+  }
 }
 
 export default async function aquecer(): Promise<void> {
@@ -40,4 +53,6 @@ export default async function aquecer(): Promise<void> {
   await esperar('/editor', (s) => s === 200);
   // a rota do editor compila mesmo para uma peça que não existe
   await esperar('/editor/p/00000000-0000-7000-8000-000000000000', (s) => s < 500);
+  await esperar('/editor/novo', (s) => s === 200);
+  await esperar('/editor/marcas', (s) => s === 200);
 }

@@ -10,6 +10,7 @@
 import { type Documento, MODOS_DE_MESCLAGEM, type No, type Prancheta } from '@otto/documento';
 import { pesoMaisProximo } from '@otto/shared';
 import { useEffect, useId, useState } from 'react';
+import { EscolhaDeFamilia } from '../../fontes/EscolhaDeFamilia';
 import { editor as textos } from '../../textos/editor';
 import { type FamiliaDeFonte, useAmbiente } from '../ambiente';
 import { acharNoPorId, loteDeAlterar } from '../nucleo/acoes';
@@ -147,6 +148,7 @@ function DoNo({ no, doc, travado }: { no: No; doc: Documento; travado: boolean }
         <Grupo titulo={p.grupos.imagem}>
           <div className={estilos.campo} data-largo="sim">
             <span>{p.medidasDaImagem(no.larguraOriginal, no.alturaOriginal)}</span>
+            {no.origem && <span data-origem-da-imagem>{p.origemDaImagem(no.origem.banco, no.origem.autor, no.origem.licenca)}</span>}
             {/* o campo de arquivo é o controle: o rótulo dá a ele a cara de botão */}
             <label className={estilos.botaoDeArquivo} data-desligado={desativado ? 'sim' : undefined}>
               {p.trocarImagem}
@@ -217,9 +219,11 @@ function EscolhaDeFonte({
   aoEscolherFamilia: (f: string) => void;
   aoEscolherPeso: (p: number) => void;
 }) {
-  const { listarFontes } = useAmbiente();
+  const { listarFontes, trazerFonte } = useAmbiente();
   // nulo até a biblioteca responder: sem ela não dá para dizer que a fonte falta
   const [familias, setFamilias] = useState<FamiliaDeFonte[] | null>(null);
+  /** O que chegou do catálogo nesta sessão: a lista lida ao abrir ainda diz que não está na biblioteca. */
+  const [trazidas, setTrazidas] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
     let desmontado = false;
     void listarFontes().then((lista) => !desmontado && setFamilias(lista));
@@ -227,26 +231,26 @@ function EscolhaDeFonte({
       desmontado = true;
     };
   }, [listarFontes]);
-  const daFamilia = familias?.find((f) => f.familia === familia)?.pesos;
+  const naBiblioteca = (f: FamiliaDeFonte) => f.naBiblioteca !== false || trazidas.has(f.familia);
+  const daFamilia = familias?.find((f) => f.familia === familia && naBiblioteca(f))?.pesos;
   // os pesos que a família tem; sem saber, os de costume. O peso do documento aparece sempre
   const pesos = [...new Set([...(daFamilia?.length ? daFamilia : PESOS), peso])].sort((a, b) => a - b);
   // A mesma regra do servidor e da exportação (@otto/shared): o texto é desenhado com o peso mais
   // próximo que a biblioteca tem. O campo continua mostrando o pedido, que é o que está no documento.
   const usado = daFamilia && !daFamilia.includes(peso) ? pesoMaisProximo(daFamilia, peso) : undefined;
   const foraDaBiblioteca = familias !== null && familias.length > 0 && (daFamilia === undefined || daFamilia.length === 0);
+  const trazer = async (qual: string, comPeso: number) => {
+    const chegou = await trazerFonte(qual, comPeso);
+    if (chegou) setTrazidas((antes) => new Set(antes).add(qual));
+    return chegou;
+  };
   return (
     <>
-      <label className={estilos.campo} data-largo="sim">
+      {/* não é <label>: o campo tem o aviso de "baixando" junto, e o nome dele não pode levar esse texto */}
+      <div className={estilos.campo} data-largo="sim">
         <span>{p.fonte}</span>
-        <select value={familia} disabled={desativado} onChange={(e) => aoEscolherFamilia(e.target.value)}>
-          {!familias?.some((f) => f.familia === familia) && <option value={familia}>{familia}</option>}
-          {familias?.map((f) => (
-            <option key={f.familia} value={f.familia}>
-              {f.familia}
-            </option>
-          ))}
-        </select>
-      </label>
+        <EscolhaDeFamilia rotulo={p.fonte} valor={familia} catalogo={familias} trazer={trazer} peso={peso} desativado={desativado} aoEscolher={aoEscolherFamilia} />
+      </div>
       <label className={estilos.campo}>
         <span>{p.peso}</span>
         <select value={peso} disabled={desativado} onChange={(e) => aoEscolherPeso(Number(e.target.value))}>

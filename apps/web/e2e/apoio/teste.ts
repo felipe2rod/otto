@@ -295,6 +295,11 @@ interface Ferramentas {
   /** Cria uma peça para o teste (a padrão, ou com as operações dadas) e a arquiva no fim. */
   criarPeca: (opcoes?: { nome?: string; operacoes?: unknown[] | 'vazia' }) => Promise<PecaDoServidor>;
   editor: Editor;
+  /**
+   * O que o teste criou PELA TELA (peça do formulário, marca, briefing salvo) e precisa sair no fim:
+   * a peça é arquivada (com a tarefa viva encerrada antes), a marca e o briefing são apagados.
+   */
+  descartar: { peca(id: string): void; marca(id: string): void; briefing(id: string): void };
 }
 
 export const test = base.extend<Ferramentas>({
@@ -315,6 +320,18 @@ export const test = base.extend<Ferramentas>({
       await api.encerrarTarefas(id).catch(() => undefined);
       await api.arquivar(id);
     }
+  },
+  descartar: async ({ api }, usar) => {
+    const pecas: string[] = [];
+    const marcas: string[] = [];
+    const briefings: string[] = [];
+    await usar({ peca: (id) => void pecas.push(id), marca: (id) => void marcas.push(id), briefing: (id) => void briefings.push(id) });
+    for (const id of pecas) {
+      await api.encerrarTarefas(id).catch(() => undefined);
+      await api.arquivar(id);
+    }
+    for (const id of briefings) await api.apagarBriefing(id);
+    for (const id of marcas) await api.apagarMarca(id);
   },
   editor: async ({ page, api }, usar) => {
     const erros: string[] = [];

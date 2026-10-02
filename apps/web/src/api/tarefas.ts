@@ -3,13 +3,13 @@
 import type { Documento } from '@otto/documento';
 import {
   AntesDaTarefa,
-  type EntradaDaTarefa,
   LimitesDeTarefa as EsquemaDeLimites,
   type EventoGravado,
   EventosDaTarefa,
   type LimitesDeTarefa,
   ListaDePendencias,
   ListaDeTarefas,
+  type PedidoDeTarefa,
   PendenciaDaPeca,
   RespostaDeDesfazerTarefa,
   Tarefa,
@@ -23,7 +23,8 @@ export type ResultadoDeDesfazer = { ok: true; tarefa: Tarefa; versao: number; ar
 export interface ApiDeTarefas {
   /** O que dizer antes de o designer enviar. Indefinido se a consulta falhou: não impede de tentar. */
   limites(): Promise<LimitesDeTarefa | undefined>;
-  pedir(entrada: EntradaDaTarefa): Promise<ResultadoDaTarefa>;
+  /** O que a rota aceita: pedido livre, ajuste, ou o formulário de briefing (com o cuidado e o briefing salvo de origem). */
+  pedir(entrada: PedidoDeTarefa): Promise<ResultadoDaTarefa>;
   /** As tarefas recentes da peça e qual está viva. */
   daPeca(): Promise<{ itens: Tarefa[]; viva?: string } | undefined>;
   obter(id: string): Promise<ResultadoDaTarefa>;

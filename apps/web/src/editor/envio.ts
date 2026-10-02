@@ -2,8 +2,8 @@
 // /api/vetores) e a camada nasce por operação do catálogo: `criarNo`, ou `alterar` quando é troca
 // da imagem de uma camada de foto. Estados e recusas: docs/mvp/experiencia.md, seções 3.3 e 3.4.
 import type { Documento, No } from '@otto/documento';
-import { TIPOS_DE_IMAGEM } from '@otto/shared';
-import type { ApiDeArquivos } from '../api/arquivos';
+import { type ImagemTrazida, TIPOS_DE_IMAGEM } from '@otto/shared';
+import type { EnvioDeArquivos } from '../api/arquivos';
 import { editor as textos } from '../textos/editor';
 import type { OndeSoltou } from './canvas/AreaDoCanvas';
 import { type LoteParaAplicar, loteDeInserirImagem, loteDeInserirVetor, loteDeTrocarImagem } from './nucleo/acoes';
@@ -42,7 +42,7 @@ export function fraseDoEnvio(arquivo: string, codigo: string, detalhe: Record<st
 }
 
 export interface DependenciasDoEnvio {
-  arquivos(): ApiDeArquivos | undefined;
+  arquivos(): EnvioDeArquivos | undefined;
   documento(): Documento | undefined;
   /** A prancheta que recebe o arquivo quando ele não foi solto sobre nenhuma. */
   pranchetaPadrao(): string | undefined;
@@ -107,6 +107,20 @@ export function criarEnvio(deps: DependenciasDoEnvio) {
       }
       if (criadas.length > 0) deps.selecionarPorNome(criadas);
       avisar(erros, notas);
+    },
+
+    /**
+     * A imagem trazida do banco já é arquivo da conta: vira camada com a origem (banco, autor e licença)
+     * no nó, que é o que o relatório de exportação lista (ADR 032). O endereço do banco nunca entra.
+     */
+    inserirDoBanco(imagem: ImagemTrazida, nome: string): boolean {
+      const doc = deps.documento();
+      if (!doc) return false;
+      const lote = loteDeInserirImagem(doc, deps.pranchetaPadrao(), { sha256: imagem.sha256, largura: imagem.largura, altura: imagem.altura, origem: imagem.no.origem }, nome);
+      if (!deps.aplicar(lote)) return false;
+      const criado = lote.operacoes.at(-1);
+      if (criado?.op === 'criarNo') deps.selecionarPorNome([(criado.no as { nome: string }).nome]);
+      return true;
     },
 
     /** Envia a imagem e troca o arquivo da camada de foto. A caixa e o enquadramento ficam. */

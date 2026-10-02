@@ -369,6 +369,16 @@ describe('inserir imagem e vetor', () => {
     expect(aplica(lote)).toBe(true);
   });
 
+  it('imagem trazida do banco entra com a origem (banco, autor, licença) no nó, e a operação é aceita pelo catálogo', () => {
+    const origem = { banco: 'Banco de Teste', autor: 'Fulana', licenca: 'Licença livre', url: '' as const };
+    const lote = loteDeInserirImagem(doc, feed.id, { ...arquivo, origem }, 'padaria');
+    const no = (lote.operacoes[0] as { no: Record<string, unknown> }).no;
+    expect(no).toMatchObject({ tipo: 'imagem', arquivo: arquivo.sha256, nome: 'padaria', origem });
+    expect(aplica(lote)).toBe(true);
+    // foto do designer não ganha origem
+    expect((loteDeInserirImagem(doc, feed.id, arquivo, 'foto.jpg').operacoes[0] as { no: Record<string, unknown> }).no).not.toHaveProperty('origem');
+  });
+
   it('imagem pequena entra no tamanho dela, sem ampliar; sem ponto, vai para o centro da prancheta', () => {
     const lote = loteDeInserirImagem(doc, feed.id, { sha256: 'b'.repeat(64), largura: 200, altura: 100 }, 'A.png');
     const no = (lote.operacoes[0] as { no: Record<string, unknown> }).no;

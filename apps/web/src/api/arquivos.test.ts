@@ -1,7 +1,7 @@
 // Envio de imagem e importação de SVG (docs/mvp/backend.md, seções 7.4 e 17.3).
 import { CABECALHOS } from '@otto/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { criarApiDeArquivos } from './arquivos';
+import { criarApiDeArquivos, enderecoDaMiniatura } from './arquivos';
 import { criarCliente } from './cliente';
 
 const json = (status: number, corpo?: unknown) => new Response(corpo === undefined ? null : JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } });
@@ -55,5 +55,36 @@ describe('importar SVG', () => {
   it('SVG inválido devolve o código', async () => {
     const { api } = montar(() => json(422, { codigo: 'svg_invalido', detalhe: { motivo: 'sem_formas' } }));
     expect(await api.importarSvg(arquivo('x.svg', 'image/svg+xml'))).toMatchObject({ ok: false, codigo: 'svg_invalido' });
+  });
+});
+
+describe('o que já foi enviado', () => {
+  it('a miniatura do vetor vem junto da importação, e vira endereço de <img> sem ir à rede', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><path d="M0 0Z" fill="#000"/></svg>';
+    const { api } = montar(() => json(201, { ...vetor, miniatura: svg }));
+    const r = await api.importarSvg(arquivo('logo.svg', 'image/svg+xml'));
+    expect(r.ok && r.miniatura).toBe(svg);
+    expect(enderecoDaMiniatura(svg)).toBe(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+  });
+
+  it('lê as medidas, o nome e a origem de um arquivo da conta; relê um vetor pelo hash', async () => {
+    const dados = {
+      sha256: SHA,
+      especie: 'imagem',
+      tipo: 'image/jpeg',
+      bytes: 1000,
+      largura: 853,
+      altura: 1280,
+      origem: { banco: 'Banco de Teste', autor: 'Fulana', licenca: 'Licença livre', pagina: 'https://exemplo.test/42' },
+    };
+    const ler = montar(() => json(200, dados));
+    expect(await ler.api.dados(SHA)).toEqual(dados);
+    expect(ler.fetch.mock.calls[0]?.[0]).toBe(`/api/arquivos/${SHA}/dados`);
+    expect(await montar(() => json(404, { codigo: 'nao_encontrado' })).api.dados(SHA)).toBeUndefined();
+
+    const reler = montar(() => json(200, { ...vetor, miniatura: '<svg/>' }));
+    expect(await reler.api.vetor(SHA)).toMatchObject({ miniatura: '<svg/>', avisos: vetor.avisos });
+    expect(reler.fetch.mock.calls[0]?.[0]).toBe(`/api/vetores/${SHA}`);
+    expect(await montar(() => json(404, { codigo: 'nao_encontrado' })).api.vetor(SHA)).toBeUndefined();
   });
 });

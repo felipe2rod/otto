@@ -4,16 +4,12 @@
 //
 // O roteiro é escolhido pelo TIPO do pedido, não pelo texto. O de BRIEFING (dois formatos, a partir de
 // uma peça vazia) define a direção, pede o "pode" e monta Feed e Story; o de AJUSTE altera o Título do
-// Feed. O pedido livre do painel não chega ao "pode" com o roteirizado (ele planeja um formato só e os
-// lotes do roteiro são recusados): por isso a tarefa de briefing começa pela API, com a entrada gravada
-// no roteiro (é o que o formulário de briefing vai mandar, na fatia 4), e o painel é conferido dali em
-// diante. O campo de pedir é conferido no ajuste rápido e nas recusas.
+// Feed. Aqui a tarefa de briefing começa pela API, com o MESMO corpo que o formulário manda (versão 1,
+// fechado), para estes testes cuidarem só do painel; o caminho inteiro pela tela (marca, formulário,
+// "pode", revisão) está em briefing.e2e.ts. O campo de pedir é conferido no ajuste rápido e nas recusas.
 //
-// A conta roda UMA tarefa por vez e tem limite de tarefas por dia: os testes daqui rodam em ordem,
-// cada um pede uma tarefa só (o arquivo inteiro pede 5), e a peça de cada teste é limpa no fim
-// (a tarefa viva é cancelada ou desfeita antes de arquivar).
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
+// A conta roda UMA tarefa por vez: os testes daqui rodam em ordem, e a peça de cada teste é limpa no
+// fim (a tarefa viva é cancelada ou desfeita antes de arquivar).
 import type { Locator, Page } from '@playwright/test';
 import { erros } from '../src/textos/erros';
 import { otto as textos } from '../src/textos/otto';
@@ -31,17 +27,6 @@ const ATE_O_PODE = { timeout: 90_000 };
 
 /** O botão que leva à camada de uma pendência: o rótulo começa igual e termina com a frase dela. */
 const VER_PENDENCIA = new RegExp(`^${textos.revisao.verPendencia('').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`);
-const PECA_DO_AJUSTE = [
-  { op: 'definirToken', nome: 'destaque', valor: '#f4c430' },
-  { op: 'criarPrancheta', nome: 'Feed', largura: 1080, altura: 1350, fundo: '#f4efe3' },
-  { op: 'criarNo', prancheta: 'Feed', no: { tipo: 'forma', nome: 'Bloco', forma: 'retangulo', x: 100, y: 800, largura: 400, altura: 300, preenchimento: '#c0392b' } },
-  {
-    op: 'criarNo',
-    prancheta: 'Feed',
-    no: { tipo: 'texto', nome: 'Título', conteudo: 'Promoção da semana', fonte: 'IBM Plex Sans', peso: 700, tamanho: 120, x: 80, y: 120, largura: 900, altura: 300, cor: '#17171c' },
-  },
-];
-
 const codigo = () => `e2e-otto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 const painel = (page: Page): Locator => page.getByRole('region', { name: textos.titulo, exact: true });
 const estado = (page: Page, qual: string): Locator => painel(page).locator(`[data-estado-da-tarefa="${qual}"]`);
@@ -55,8 +40,21 @@ async function pedir(page: Page, texto: string, tipo?: 'ajuste' | 'pedido'): Pro
   await botao(page, textos.pedir.enviar).click();
 }
 
-/** A entrada do roteiro de briefing, como foi gravada (os testes rodam de apps/web). */
-const BRIEFING: unknown = JSON.parse(readFileSync(path.resolve(process.cwd(), '../../packages/agente/roteiros/briefing-dois-formatos.json'), 'utf8')).entrada;
+/** O formulário de briefing, como o editor o manda: dois formatos, sem imagem. É o que o roteiro de briefing responde. */
+const BRIEFING = {
+  tipo: 'briefing',
+  cuidado: 'cuidadoso',
+  briefing: {
+    versao: 1,
+    nome: 'Novo horário',
+    formatos: [
+      { nome: 'Feed', largura: 1080, altura: 1350 },
+      { nome: 'Story', largura: 1080, altura: 1920 },
+    ],
+    textos: { titulo: 'Abrimos às 7h', subtitulo: 'Café coado na hora, de segunda a sábado', chamada: 'Venha tomar o seu', rodape: '@cafeaurora · Rua das Flores, 120' },
+    imagens: { fonte: 'nenhuma' },
+  },
+};
 
 /** Pede o briefing de dois formatos numa peça vazia, espera o Otto pedir o "pode" e abre o editor nela. */
 async function abrirNoPode(editor: Editor, api: Api, peca: PecaDoServidor): Promise<void> {
@@ -166,9 +164,9 @@ test.describe('Otto', () => {
 
   test('ajuste rápido: sem "pode", direto para a revisão; a pendência leva à camada, e desfazer tudo volta a peça', async ({ editor, criarPeca, api }) => {
     // O roteiro do ajuste pede a prancheta "Feed", a camada "Título" e a cor "destaque" na identidade da peça.
-    // Uma prancheta só: com duas, o ciclo confere a prancheta errada depois do lote e a entrega não sai
-    // (defeito do servidor, relatado; quando for corrigido, este teste pode usar a peça padrão).
-    const peca = await criarPeca({ nome: codigo(), operacoes: PECA_DO_AJUSTE });
+    // A peça padrão tem DUAS pranchetas: o ciclo confere a que mudou (o defeito de conferir a última foi corrigido).
+    const peca = await criarPeca({ nome: codigo() });
+    await api.lote(peca.id, [{ op: 'definirToken', nome: 'destaque', valor: '#f4c430' }]);
     await editor.abrir(peca);
     const { page } = editor;
     const titulo = camada(await api.abrir(peca.id), 'Título');
@@ -229,6 +227,15 @@ test.describe('Otto', () => {
     await expect(editor.arvore.locator('[data-otto]').first()).toBeVisible();
     await expect(botao(page, textos.revisao.tentarDeNovo)).toBeVisible();
 
+    // na lista de peças ela não aparece como "pronto para revisar": parou no meio
+    await page.goto('/editor');
+    const cartao = page.getByRole('list', { name: textosDePecas.lista }).getByRole('listitem').filter({ hasText: nome });
+    await expect(cartao).toContainText(textosDePecas.estadoDaTarefa.naoTerminou);
+    await expect(cartao).not.toContainText(textosDePecas.estadoDaTarefa.em_revisao);
+    await cartao.getByRole('link').first().click();
+    await page.waitForURL(`**/editor/p/${peca.id}`);
+    await editor.pronto();
+
     await botao(page, textos.revisao.desfazer).click();
     await expect(resultado(page, 'desfeita')).toBeVisible();
     expect((await api.abrir(peca.id)).arvore.pranchetas).toEqual([]);
@@ -247,7 +254,7 @@ test.describe('Otto', () => {
     await expect(cartao).toContainText(textosDePecas.estadoDaTarefa.aguardando_confirmacao);
 
     // volta pela lista: o cartão do "pode" está lá, com a peça travada
-    await cartao.getByRole('link').click();
+    await cartao.getByRole('link').first().click();
     await page.waitForURL(`**/editor/p/${peca.id}`);
     editor.pecaId = peca.id;
     await editor.pronto();
@@ -272,7 +279,7 @@ test.describe('Otto', () => {
     await expect(editor.arvore.locator('[data-otto]').first()).toBeVisible();
     await page.goto('/editor');
     await expect(cartao).toContainText(textosDePecas.estadoDaTarefa.em_revisao);
-    await cartao.getByRole('link').click();
+    await cartao.getByRole('link').first().click();
     await editor.pronto();
 
     // aceita, e depois volta para antes da tarefa: a peça fica vazia de novo

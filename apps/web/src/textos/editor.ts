@@ -208,6 +208,8 @@ export const editor = {
     zoomDaFoto: 'Zoom %',
     trocarImagem: 'Trocar imagem',
     medidasDaImagem: (largura: number, altura: number): string => `Original: ${largura}×${altura}`,
+    /** A foto que veio de banco de imagens: os nomes são os que o servidor guardou com ela (ADR 032). */
+    origemDaImagem: (banco: string, autor: string, licenca: string): string => `${banco} · por ${autor} · ${licenca}`,
     fundo: 'Fundo',
     corSolta: (valor: string): string => `${valor} (solta)`,
     token: (nome: string, valor: string): string => `token ${nome} · ${valor}`,
