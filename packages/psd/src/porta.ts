@@ -271,7 +271,129 @@ export const MODOS_DO_PDF: readonly ModoDeMesclagem[] = [
 /** Maior lado que o PSD comum aceita. Acima disso o arquivo é PSB. */
 export const MAIOR_LADO_DO_PSD = 30_000;
 
+// ---------- leitura (importação, ADR 028 item 4) ----------
+
+/**
+ * O que a camada tem no arquivo e o modelo desta porta não guarda. O adaptador só diz o que viu; quem importa decide o
+ * que fazer com cada um (docs/tecnico/psd.md, "Só na importação"). `recurso` é a linha do mapeamento, sem o prefixo "psd:".
+ */
+export type RecursoForaDoModelo =
+  /** conteúdo que só o pixel gravado mostra: vídeo, 3D, o que não se reconhece */
+  | 'conteudo-desconhecido'
+  | 'texto-em-caminho'
+  | 'texto-deformado'
+  | 'texto-vertical'
+  /** estilo de caractere que o Otto não tem: negrito ou itálico falsos, sublinhado, riscado, escala, deslocamento da linha de base, contorno */
+  | 'estilo-de-texto'
+  /** parágrafo que o Otto não tem: justificado, recuo, espaço antes e depois, alinhamento diferente por parágrafo */
+  | 'paragrafo-de-texto'
+  /** preenchimento de padrão, ou degradê que não cabe no do Otto */
+  | 'preenchimento'
+  /** degradê com a interpolação perceptual ou linear do Photoshop: vem com paradas a mais, perto da curva */
+  | 'degrade-aproximado'
+  /** caminho com operações de subtrair, intersectar ou excluir */
+  | 'caminho-composto'
+  /** traçado tracejado, com degradê, ou com opacidade e modo próprios */
+  | 'traco-vetorial'
+  /** objeto inteligente que não é uma foto PNG ou JPEG embutida: outro PSD, vetor, arquivo vinculado */
+  | 'objeto-inteligente'
+  /** objeto inteligente com deformação ou perspectiva */
+  | 'objeto-inteligente-deformado'
+  | 'filtro-inteligente'
+  | 'ajuste-desconhecido'
+  /** camada de ajuste que o Otto tem, com parâmetro que ele não tem (níveis por canal, matiz por faixa de cor) */
+  | 'ajuste-parcial'
+  /** chanfro, acetinado, sobreposição de padrão, traço por fora ou pelo centro, traço em degradê */
+  | 'efeito-desconhecido'
+  | 'efeito-repetido'
+  /** efeito que o Otto tem, com parâmetro que ele não tem (expansão, contorno, ruído) */
+  | 'efeito-parcial'
+  | 'modo-dissolver'
+  | 'faixas-de-mesclagem'
+  /** máscara com densidade ou difusão próprias */
+  | 'mascara-parcial';
+
+export interface ForaDoModelo {
+  recurso: RecursoForaDoModelo;
+  /** o que é, em português, para o relatório: "chanfro e entalhe", "níveis por canal" */
+  detalhe: string;
+}
+
+/** Máscara de camada lida do arquivo. A cobertura só é decodificada por `CamadaLida.decodificar`. */
+export interface MascaraLida {
+  x: number;
+  y: number;
+  largura: number;
+  altura: number;
+  fora: 0 | 255;
+  desativada: boolean;
+}
+
+export interface TextoLido extends TextoDoArquivo {
+  /** texto de ponto (uma linha por parágrafo, sem caixa) ou texto em caixa */
+  forma: 'ponto' | 'caixa';
+}
+
+/**
+ * Uma camada como está no arquivo. `tipo` é o que o arquivo diz que ela é; os campos de conteúdo (texto, preenchimento,
+ * objeto inteligente, ajuste) só vêm preenchidos com o que coube no modelo, e `foraDoModelo` lista o que não coube.
+ */
+export interface CamadaLida {
+  tipo: 'grupo' | 'ajuste' | 'texto' | 'forma' | 'objeto-inteligente' | 'pixels';
+  nome: string;
+  opacidade: number;
+  /** opacidade do preenchimento, que não atinge os efeitos de camada. 1 quando o arquivo não diz. */
+  opacidadeDoPreenchimento: number;
+  modo: ModoDoGrupo;
+  oculta: boolean;
+  recortadaNaDeBaixo: boolean;
+  bloqueada: boolean;
+  /** a área do pixel gravado da camada, em coordenadas do arquivo. Zero de largura ou de altura: camada sem pixel. */
+  area: { x: number; y: number; largura: number; altura: number };
+  /**
+   * Decodifica o pixel da camada e a cobertura da máscara. Uma vez só por camada: depois de chamada, a memória da
+   * camada é solta, e uma segunda chamada devolve vazio. É o que mantém o pico de memória em uma camada de cada vez.
+   */
+  decodificar(): { pixels?: PixelsDoArquivo; mascara?: MascaraDoArquivo };
+  mascara?: MascaraLida;
+  mascaraVetorial?: { caminhos: CaminhoDoArquivo[]; invertida: boolean; desativada: boolean };
+  efeitos?: EfeitosDoArquivo;
+  /** de baixo para cima */
+  filhos?: CamadaLida[];
+  /** prancheta do Photoshop. `transparente`: o fundo dela não tem cor (`fundo` vem branco). */
+  prancheta?: PranchetaDoArquivo & { transparente: boolean };
+  ajuste?: Ajuste;
+  misturaDeCanais?: NonNullable<CamadaDoArquivo['misturaDeCanais']>;
+  preenchimento?: PreenchimentoDoArquivo;
+  tracoVetorial?: TracoVetorialDoArquivo & { alinhamento: 'dentro' | 'centro' | 'fora' };
+  formaViva?: NonNullable<CamadaDoArquivo['formaViva']>;
+  texto?: TextoLido;
+  objetoInteligente?: ObjetoInteligenteDoArquivo;
+  foraDoModelo: ForaDoModelo[];
+}
+
+export interface ArquivoLido {
+  largura: number;
+  altura: number;
+  /** de baixo para cima */
+  camadas: CamadaLida[];
+  /** os arquivos PNG e JPEG embutidos (as fotos dos objetos inteligentes) */
+  embutidos: ArquivoEmbutido[];
+  /** a imagem composta gravada no arquivo, RGBA de 8 bits, se houver. Decodifica a cada chamada. */
+  composta(): Uint8Array | undefined;
+}
+
+export interface OpcoesDeLeitura {
+  /** teto de memória para decodificar pixel, em bytes */
+  memoria?: number;
+}
+
 export interface FormatoDeArquivoEmCamadas {
+  /**
+   * Lê o arquivo. Só os formatos que têm leitura a oferecem. Quem chama já conferiu os tetos e o modo de cor
+   * (inspecionar.ts): aqui o arquivo é RGB de 8 bits e cabe na memória. Erro de leitura sai como exceção comum.
+   */
+  ler?(bytes: Uint8Array, opcoes?: OpcoesDeLeitura): ArquivoLido;
   /** Grava o arquivo. Mesma entrada, mesmos bytes: sem data, sem id aleatório. Pode ser assíncrono (a biblioteca de PDF é). */
   escrever(arquivo: ArquivoEmCamadas): ArquivoGravado | Promise<ArquivoGravado>;
   /** O que o formato vetorial sabe guardar. Quem monta o arquivo pergunta antes de decidir o que vira imagem. */

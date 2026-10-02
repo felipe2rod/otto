@@ -88,6 +88,8 @@ export type CodigoDeAvisoVetorial =
   | 'modo-em-imagem'
   /** há imagem do tamanho da prancheta por cima de texto: no Illustrator, trave-a para clicar no texto */
   | 'imagem-sobre-texto'
+  /** as camadas que viraram imagem saíram abaixo do dobro da resolução (prancheta grande demais para o dobro caber) */
+  | 'imagem-em-resolucao-menor'
   /** não são mais emitidos (desde 2026-10-02 a camada de ajuste é achatada, e o modo que o arquivo não guarda vira imagem). Ficam no tipo para quem já tem texto para eles. */
   | 'ficou-de-fora'
   | 'modo-de-mesclagem-trocado';
@@ -111,12 +113,17 @@ const TEXTO_DO_AVISO_VETORIAL: Record<CodigoDeAvisoVetorial, string> = {
     'Há camada com modo de mesclagem que o arquivo não guarda (no SVG, todos; no PDF, só alguns). Ela saiu como uma imagem em modo normal que dá a mesma cor sobre o que estava abaixo dela. O que está abaixo continua editável; se você mudar o que está abaixo, essa imagem não acompanha.',
   'imagem-sobre-texto':
     'Há imagem do tamanho da prancheta por cima do texto. No Illustrator, trave essa imagem (Objeto > Bloquear) para o clique da ferramenta Texto entrar no texto, e não criar um texto novo.',
+  'imagem-em-resolucao-menor':
+    'As camadas que viraram imagem saíram na resolução do documento, e não no dobro dela como de costume: a prancheta é grande demais para o dobro caber. Ao ampliar no Illustrator, essas imagens perdem nitidez antes do resto.',
   'ficou-de-fora': 'As camadas de ajuste não vão para o arquivo vetorial. As cores podem ficar diferentes do que o Otto mostra.',
   'modo-de-mesclagem-trocado': 'Há camada com modo de mesclagem que o formato não tem. Ela saiu em modo normal.',
 };
 
 /** Fecha o relatório da saída vetorial: os avisos gerais saem do que de fato entrou no arquivo. */
-export function fecharRelatorioVetorial(rel: RelatorioDeExportacaoVetorial, oQueHouve: { achatadas: number; modosEmImagem?: number; imagemSobreTexto: boolean }): RelatorioDeExportacaoVetorial {
+export function fecharRelatorioVetorial(
+  rel: RelatorioDeExportacaoVetorial,
+  oQueHouve: { achatadas: number; modosEmImagem?: number; imagemSobreTexto: boolean; escalaDaImagem?: number },
+): RelatorioDeExportacaoVetorial {
   const avisos: CodigoDeAvisoVetorial[] = [];
   const tem = (f: (l: LinhaDoRelatorioVetorial) => boolean): boolean => rel.camadas.some(f);
   if (tem((l) => l.tipo === 'texto' && l.destino === 'nativo-editavel')) avisos.push('texto-em-linhas', 'instalar-fontes');
@@ -127,6 +134,7 @@ export function fecharRelatorioVetorial(rel: RelatorioDeExportacaoVetorial, oQue
   if (oQueHouve.achatadas > 0) avisos.push('camadas-achatadas');
   if ((oQueHouve.modosEmImagem ?? 0) > 0) avisos.push('modo-em-imagem');
   if (oQueHouve.imagemSobreTexto) avisos.push('imagem-sobre-texto');
+  if ((oQueHouve.escalaDaImagem ?? 2) < 2 && tem((l) => l.destino === 'raster-com-aviso')) avisos.push('imagem-em-resolucao-menor');
   if (rel.tokens.length > 0) avisos.push('tokens-viram-valor');
   return { ...rel, avisos: avisos.map((codigo) => ({ codigo, texto: TEXTO_DO_AVISO_VETORIAL[codigo] })) };
 }

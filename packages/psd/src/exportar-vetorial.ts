@@ -218,7 +218,10 @@ export async function exportarVetorial(
           fontes: fontesDe(m.fontesUsadas),
         });
     }
-    return { arquivos, relatorio: fecharRelatorioVetorial(rel, { achatadas, modosEmImagem, imagemSobreTexto }) };
+    return {
+      arquivos,
+      relatorio: fecharRelatorioVetorial(rel, { achatadas, modosEmImagem, imagemSobreTexto, ...(opcoes.escalaDaImagem !== undefined ? { escalaDaImagem: opcoes.escalaDaImagem } : {}) }),
+    };
   } finally {
     sessao.destruir();
   }
@@ -228,7 +231,7 @@ export async function exportarVetorial(
 export function relatorioDeExportacaoVetorial(
   doc: Documento,
   recursos: RecursosConhecidos,
-  opcoes: Pick<OpcoesDeExportacao, 'pranchetas'> & { formato?: 'svg' | 'pdf' } = {},
+  opcoes: Pick<OpcoesDeExportacao, 'pranchetas'> & { formato?: 'svg' | 'pdf'; escalaDaImagem?: number } = {},
 ): RelatorioDeExportacaoVetorial {
   const pranchetas = pranchetasPedidas(doc, opcoes.pranchetas);
   const rel = relatorioVazio(doc, pranchetas) as unknown as RelatorioDeExportacaoVetorial;
@@ -249,5 +252,5 @@ export function relatorioDeExportacaoVetorial(
     modosEmImagem += m.modosEmImagem;
     imagemSobreTexto ||= m.imagemSobreTexto;
   }
-  return fecharRelatorioVetorial(rel, { achatadas, modosEmImagem, imagemSobreTexto });
+  return fecharRelatorioVetorial(rel, { achatadas, modosEmImagem, imagemSobreTexto, ...(opcoes.escalaDaImagem !== undefined ? { escalaDaImagem: opcoes.escalaDaImagem } : {}) });
 }

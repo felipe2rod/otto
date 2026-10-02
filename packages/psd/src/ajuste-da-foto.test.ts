@@ -2,6 +2,7 @@
 // Aqui a conta que o Photoshop faz com esses dois ajustes é refeita e comparada com a do motor do Otto.
 import { referenciaDeAjusteDeCor } from '@otto/render';
 import { describe, expect, it } from 'vitest';
+import { brilhoEContrasteDe, saturacaoDe } from './desmontar';
 import { misturaDaSaturacao, niveisDoBrilhoEContraste } from './montar';
 
 /** Níveis do Photoshop com gama 1: a entrada é esticada entre o preto e o branco de entrada, e levada à faixa de saída. */
@@ -84,5 +85,57 @@ describe('ajuste de cor da foto, como o Photoshop o refaz', () => {
       });
     }
     expect(maior).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('de volta: do Níveis e do Misturador de canais para o ajuste de cor da foto (importação)', () => {
+  it('toda saturação inteira volta num valor que dá o mesmo Misturador', () => {
+    for (let s = -100; s <= 100; s++) {
+      if (s === 0) continue;
+      const m = misturaDaSaturacao(s);
+      const voltou = saturacaoDe(m);
+      expect(voltou, `saturação ${s}`).toBeDefined();
+      expect(misturaDaSaturacao(voltou as number), `saturação ${s}`).toEqual(m);
+      // e, fora o arredondamento dos pesos, é a mesma saturação
+      expect(Math.abs((voltou as number) - s), `saturação ${s}`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('um Misturador que não é de saturação (canais trocados, constante, monocromático) não é reconhecido', () => {
+    const base = misturaDaSaturacao(-40);
+    expect(saturacaoDe({ ...base, vermelho: { ...base.vermelho, constante: 10 } })).toBeUndefined();
+    expect(saturacaoDe({ ...base, vermelho: base.verde })).toBeUndefined();
+    expect(
+      saturacaoDe({
+        vermelho: { vermelho: 100, verde: 0, azul: 0, constante: 0 },
+        verde: { vermelho: 0, verde: 100, azul: 0, constante: 0 },
+        azul: { vermelho: 0, verde: 0, azul: 100, constante: 0 },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('todo par de brilho e contraste inteiros volta num par que dá o mesmo Níveis (quando a reta não é plana)', () => {
+    let iguais = 0;
+    let total = 0;
+    for (let b = -100; b <= 100; b += 7) {
+      for (let c = -100; c <= 100; c += 3) {
+        if (b === 0 && c === 0) continue;
+        const n = niveisDoBrilhoEContraste(b, c);
+        // reta plana (uma cor só): não há par a recuperar, e a camada fica como Níveis
+        if (n.pretoDeEntrada === 0 && n.brancoDeEntrada === 255 && n.pretoDeSaida === n.brancoDeSaida) continue;
+        total++;
+        const voltou = brilhoEContrasteDe(n);
+        if (!voltou) continue;
+        expect(niveisDoBrilhoEContraste(voltou.brilho, voltou.contraste), `brilho ${b}, contraste ${c}`).toEqual(n);
+        iguais++;
+      }
+    }
+    // os poucos que não voltam ficam como camada de Níveis presa à foto: a aparência é a mesma, a árvore não
+    expect(iguais / total).toBeGreaterThan(0.97);
+  });
+
+  it('Níveis com gama, ou que não é a reta de brilho e contraste, não é reconhecido', () => {
+    expect(brilhoEContrasteDe({ tipo: 'niveis', pretoDeEntrada: 10, brancoDeEntrada: 240, gama: 1.2, pretoDeSaida: 0, brancoDeSaida: 255 })).toBeUndefined();
+    expect(brilhoEContrasteDe({ tipo: 'niveis', pretoDeEntrada: 0, brancoDeEntrada: 255, gama: 1, pretoDeSaida: 200, brancoDeSaida: 20 })).toBeUndefined();
   });
 });

@@ -16,6 +16,7 @@ import {
   type PreenchimentoDoArquivo,
   type Rgb,
 } from '../porta';
+import { lerPsd } from './leitura-de-psd';
 
 const MESCLAGEM: Record<ModoDoGrupo, BlendMode> = {
   atravessar: 'pass through',
@@ -352,6 +353,7 @@ const RECURSO_DO_PERFIL_ICC = 1039;
 
 export function criarFormatoPsd(): FormatoDeArquivoEmCamadas {
   return {
+    ler: lerPsd,
     escrever(arquivo: ArquivoEmCamadas): ArquivoGravado {
       if (!arquivo.composta) throw new Error('O PSD precisa da imagem composta');
       const psd: Psd = {

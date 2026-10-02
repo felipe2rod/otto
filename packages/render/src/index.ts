@@ -35,6 +35,7 @@ export {
   type RecursosEmFalta,
   type RenderEmPixels,
   recursosEmFalta,
+  reduzirFoto,
   renderizarMascara,
   renderizarPrancheta,
 } from './compositor';

@@ -10,6 +10,9 @@ docker compose run --rm teste pnpm --filter @otto/psd typecheck
 # o mapeamento mudou de propósito? regenere os goldens e confira o diff da estrutura e do relatório antes de versionar
 docker compose run --rm -e ATUALIZAR_GOLDENS=1 teste pnpm --filter @otto/psd test
 docker compose run --rm teste pnpm exec biome check --write packages/psd/goldens   # o Biome formata o JSON dos goldens
+# importar um PSD: copie o arquivo para packages/psd/entrada/ e as fontes dele para packages/psd/entrada/fontes/ (fora do git)
+docker compose run --rm teste pnpm --filter @otto/psd importar:psd -- "entrada/arquivo.psd"   # sai em packages/psd/saida/importado/
+
 # PSD, SVG e PDF de peças reais (as da POC) para abrir no Photoshop e no Illustrator; saem em packages/psd/saida/, fora do git
 docker compose run --rm teste pnpm --filter @otto/psd exportar:pecas
 ```
@@ -30,7 +33,17 @@ docker compose run --rm teste pnpm --filter @otto/psd exportar:pecas
 | `exportar-vetorial.ts` | `exportarVetorial`, `relatorioDeExportacaoVetorial`: junta o mapeamento vetorial, o motor (quebra de linha do texto, imagens) e a porta |
 | `adaptadores/svg.ts` | O SVG, escrito aqui, sem biblioteca |
 | `adaptadores/biblioteca-de-pdf.ts` | O único arquivo que conhece a biblioteca de PDF. As camadas do PDF são montadas com os objetos de baixo nível dela |
+| `inspecionar.ts` | A inspeção do PSD antes de decodificar: tetos, modo de cor, arquivo truncado. Direto dos bytes, sem biblioteca |
+| `adaptadores/leitura-de-psd.ts` | A leitura do PSD pela biblioteca, traduzida para o modelo da porta, com o que não coube nele listado por camada |
+| `desmontar.ts` | O mapeamento de volta: das camadas lidas para as operações que criam a árvore do Otto, e o relatório de importação |
+| `reconhecer.ts` | Do caminho para "retângulo de raio 12", dos quatro cantos para "foto com foco em 0,6", da máscara de pixels para "degradê a 90°": propõe e confere |
+| `importar.ts` | `importarPsd`, `fontesDoPsd`: junta a inspeção, a leitura, o mapeamento de volta e o motor |
+| `mapeamento-de-importacao.ts` | A tabela do que o PSD pode trazer e o Otto não tem. Espelhada em `docs/tecnico/psd.md` |
+| `relatorio-de-importacao.ts` | O relatório de importação: tipos, avisos e a versão em texto |
+| `perfil-de-cor.ts` | Conversão do perfil ICC do arquivo (Adobe RGB, ProPhoto) para sRGB |
+| `sha256.ts` | SHA-256 síncrono, sem depender do Node: é a chave das imagens que a importação cria |
 | `comandos/exportar-pecas.ts` | Exporta peças da POC para a conferência no Photoshop e no Illustrator |
+| `comandos/importar-psd.ts` | Importa um PSD e grava a árvore, o relatório, o render e o roteiro de conferência |
 
 Nada entra no documento sem linha em `mapeamento.ts`: cada parte da tabela é um `Record` sobre o tipo do esquema, e um recurso novo em `@otto/documento` quebra o `typecheck` daqui até ser mapeado.
 
@@ -86,6 +99,51 @@ const previsto = relatorioDeExportacaoVetorial(doc, { fontes, imagens }, { pranc
 
 Medido nas cinco peças de `exportar:pecas` (1080 px, uma ou duas pranchetas), com a variante completa do motor, em 2026-10-02: SVG de 4 a 20 s, e 38 s na peça com desfoque de movimento; PDF de 2 a 21 s, e 40 s na mesma peça. Arquivos de 1,3 a 6,7 MB (o SVG da padaria caiu de 12 para 4,6 MB). Pico de memória do processo ao exportar PSD, PNG, SVG e PDF das cinco peças em seguida: 880 MB.
 
+### Importação de PSD
+
+```ts
+import { criarFormatoPsd, ErroDeImportacao, fontesDoPsd, importarPsd, inspecionarPsd } from '@otto/psd';
+
+// 1. na requisição: a inspeção (menos de 3 ms) recusa o que não dá para importar, antes de enfileirar
+try {
+  inspecionarPsd(bytes, limites);              // Partial<LimitesDeImportacao>; os padrões estão em LIMITES_DE_IMPORTACAO
+} catch (erro) {
+  if (erro instanceof ErroDeImportacao) return recusar(erro.codigo, erro.message);   // codigo para a interface, message em português
+  throw erro;
+}
+// 2. que fontes o arquivo pede (nomes PostScript; não decodifica pixel: até 30 ms)
+const pedidas = fontesDoPsd(criarFormatoPsd(), bytes);
+// 3. na fila, na thread de render: com as fontes que a conta tem dentre as pedidas (e as outras da mesma família)
+const { doc, imagens, relatorio } = await importarPsd(ck, criarFormatoPsd(), bytes, {
+  fontes,                                      // { familia, peso, bytes, postScript?, arquivo? }[], como na exportação
+  nomeDaPrancheta,                             // para arquivo sem pranchetas do Photoshop
+  substituir: (postScript) => undefined,       // opcional: troca de fonte, que vai para relatorio.substituicoes
+  limites,
+  idDoLote,                                    // de onde saem os ids dos nós; padrão: o sha256 do arquivo
+});
+// doc: Documento, já validado (nasceu por criarPrancheta e criarNo)
+// imagens: { arquivo (sha256), bytes, tipo, largura, altura, origem: 'foto-embutida' | 'camada' | 'mascara' }[]: guardar todas
+// relatorio: RelatorioDeImportacao; relatorioDeImportacaoEmTexto(nome, relatorio) dá o markdown
+```
+
+- **Erros.** `ErroDeImportacao` é o arquivo que não pode ser importado, com `codigo` (`nao-e-psd`, `arquivo-grande-demais`, `dimensoes-grandes-demais`, `modo-de-cor`, `profundidade`, `camadas-demais`, `grupos-fundos-demais`, `pixels-demais`, `arquivo-truncado`, `arquivo-malformado`) e `message` pronta para o designer. Qualquer outro erro é defeito nosso.
+- **O que é seguro na requisição:** `inspecionarPsd` (só lê cabeçalho e registros de camada, sem alocar pixel) e `fontesDoPsd` (lê a estrutura pela biblioteca, sem decodificar pixel). **`importarPsd` vai para a fila**: é CPU síncrona, de 0,1 a 4,4 s nos arquivos medidos, e segura o arquivo inteiro e uma camada decodificada de cada vez.
+- **Memória.** O arquivo (os bytes ficam vivos até o fim), mais a maior camada em RGBA (4 bytes por pixel), mais a cópia dela dentro do motor para codificar o PNG, mais os PNGs prontos. O teto `pixelsDaMaiorCamada` (64 milhões de pixels) limita o bloco a 256 MB.
+- **Medido** em 2026-10-02, com a variante completa do motor, no contêiner de desenvolvimento, um arquivo depois do outro no mesmo processo:
+
+| Arquivo | Tamanho | Documento | Camadas | Importar | Memória do processo |
+|---|---|---|---|---|---|
+| Peça de 1080 × 1350 com 9 camadas (foto com sujeito) | 15 MB | 1080 × 1350 | 9 | 2,4 s | 172 → 231 MB |
+| Peça de duas pranchetas, 28 camadas | 18 MB | 2320 × 1350 | 34 registros | 2,1 s | 249 → 269 MB |
+| Peça de duas pranchetas com ajuste e grão | 23 MB | 2320 × 1920 | 33 registros | 1,8 s | 277 → 305 MB |
+| Peça de duas pranchetas com desfoque de movimento | 9 MB | 2320 × 1920 | 36 registros | 4,4 s | 306 → 307 MB |
+| A3 a 300 dpi, duas camadas do tamanho do documento | 3 MB | 3508 × 4960 | 2 | 1,7 s | 305 → 421 MB (pico 429) |
+| Oito camadas de pixels de 1600 × 900 | 1 MB | 1600 × 900 | 8 | 1,1 s | sem crescer |
+
+  O que mais pesa é conferir máscara (cada proposta é desenhada pelo motor no tamanho da prancheta) e codificar PNG.
+- **Texto do relatório.** `relatorio.avisos[].texto`, `camadas[].observacao` e a `message` do erro são texto que o designer lê, escrito aqui em português. **Não passaram pelo guardião da marca.** Todos têm código.
+- **Nome e texto de camada vêm como estão no arquivo.** Nada aqui os limpa nem interpreta: são dado de terceiro, e chegam ao agente pela árvore. Nome com "/" só é alcançado pelo id (o alvo "Prancheta/Camada" usa a barra).
+
 ### Tempo e memória do PSD, medidos
 
 Nas 48 peças da POC que o esquema aceita (1 a 5 pranchetas de 1080 px, 2 a 41 camadas), numa instância do motor, no contêiner de desenvolvimento, em 2026-10-01:
@@ -108,12 +166,14 @@ A pior peça tem desfoque de movimento de 100 px numa foto de 900 × 600: o laç
 - **O perfil sRGB**: a segunda biblioteca o lê inteiro de cada PSD. O perfil em si foi conferido uma vez, à mão, contra o sRGB do LittleCMS (pelo Pillow): converter 6088 cores de um para o outro dá diferença máxima de 1 nível.
 - **SVG** (`vetorial.test.ts`): relido por um analisador de XML independente (ids, `<text>` com as linhas e os pedaços, imagem embutida, recortes, degradês) e **desenhado por um renderizador de SVG independente** (`@resvg/resvg-js`), comparado com o render do Otto: menos de 1% a 5% dos pixels a mais de 24 níveis, conforme a cena (a borda suavizada e o texto, que cada renderizador faz do seu jeito). Goldens: os `.svg` de cada cena.
 - **PDF** (`pdf.test.ts`): aberto por um leitor de PDF independente (`pdfjs-dist`), que dá as páginas, as camadas com os nomes, o texto extraído, e **desenha a página** (com `@napi-rs/canvas`), comparada com o render do Otto pelo mesmo critério. A fonte embutida, descomprimida, é o arquivo original byte a byte. Goldens: os `.pdf` de cada cena. O leitor não monta a árvore de camada dentro de camada; a árvore é conferida nos bytes do arquivo.
+- **Importação** (`ida-e-volta.test.ts`, `importar.test.ts`, `importar-de-fora.test.ts`, `inspecionar.test.ts`): cada cena de golden é exportada e importada de novo, e a árvore tem de voltar igual fora as sete diferenças declaradas, com o mesmo render; as decisões do mapeamento de volta são testadas uma a uma; 30 PSDs de fora do Otto (a maior parte gravada pelo Photoshop) são importados, e o render do Otto é comparado com a imagem composta que o próprio arquivo traz; arquivos hostis (cortados, com bytes trocados, mentindo sobre o tamanho) dão sempre `ErroDeImportacao`.
 - **O que nenhum teste prova: que o Photoshop e o Illustrator abrem e editam.** Não há Photoshop nem Illustrator no CI. A cada release que mexe neste pacote, uma pessoa abre os arquivos de `goldens/` e os de `exportar:pecas` e segue `saida/CONFERIR-NO-PHOTOSHOP.txt` e `saida/CONFERIR-NO-ILLUSTRATOR.txt`. O que falhar muda de linha em `docs/tecnico/psd.md`. **A primeira conferência foi feita em 2026-10-02** (respostas em `docs/tecnico/conferencias/2026-10-02/`); o que ela mudou, e o que ficou para confirmar numa segunda, está em `docs/tecnico/psd.md`.
 
 ## O que falta
 
 - Miniatura do PSD.
-- Leitura (`ler`) na porta: entra com a importação de PSD.
+- Na importação: máscara de pixels em grupo e em camada de ajuste não vem (o Otto só tem máscara de forma, de degradê e de recorte de foto); texto com fonte que a conta não tem vem como imagem; a quebra de linha do texto importado é a do motor, não a do Photoshop; perfil de cor de tabela não é convertido. E falta o teste de verdade: um PSD do Felipe.
+- No motor, achado pela importação: sobreposição de cor com modo, em camada com modo, não sai como no Photoshop (ver `docs/tecnico/psd.md`).
 - Objeto inteligente e filtro inteligente estão em uso para foto, como na POC, e o ADR 028 os lista como fora da v1: **pede ADR**.
 - No PSD: o Photoshop pede para atualizar as camadas de texto ao abrir (a biblioteca não grava o texto já diagramado); a suavidade do degradê vai sempre em 100%; forma girada não é forma viva.
 - Na saída vetorial: os nomes das camadas só chegam ao Illustrator pelo SVG (ele não lê as camadas do PDF); um objeto de texto por linha e por mudança de estilo, e o versalete conta como mudança de estilo; camada de ajuste solta no topo da pilha transforma a prancheta inteira numa imagem (é a decisão de achatar); recorte com base em texto vira imagem; a mesma foto em várias camadas é embutida uma vez no PDF e uma vez por camada no SVG; o texto do PDF vai sem ligadura e sem desenho alternativo de letra (o Illustrator converte em contorno o que não corresponde a um caractere).

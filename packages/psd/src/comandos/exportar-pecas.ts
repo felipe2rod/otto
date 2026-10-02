@@ -19,6 +19,7 @@ import { criarFormatoSvg } from '../adaptadores/svg';
 import { exportarPng, exportarPsd, type FonteDaExportacao, type ImagemDaExportacao, nomeDeArquivo } from '../exportar';
 import { exportarVetorial } from '../exportar-vetorial';
 import { relatorioEmTexto } from '../relatorio';
+import { identidadeDaFonte } from './fontes-de-pasta';
 
 const RAIZ = path.resolve(import.meta.dirname, '../../../..');
 const POC = path.resolve(process.env.POC_PASTA ?? path.join(RAIZ, 'poc'));
@@ -42,41 +43,6 @@ const PADRAO: { id: string; nome?: string }[] = [
   // nitidez
   { id: 'mun0q9fw4uortna2' },
 ];
-
-/** Família e peso de um arquivo de fonte, lidos dele: tabela "name" (registro 16, ou 1) e OS/2 (usWeightClass). */
-function identidadeDaFonte(bytes: Uint8Array): { familia: string; peso: number } | undefined {
-  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  try {
-    let familia: string | undefined;
-    let preferida: string | undefined;
-    let peso: number | undefined;
-    for (let i = 0; i < v.getUint16(4); i++) {
-      const p = 12 + i * 16;
-      const tabela = String.fromCharCode(v.getUint8(p), v.getUint8(p + 1), v.getUint8(p + 2), v.getUint8(p + 3));
-      const inicio = v.getUint32(p + 8);
-      if (tabela === 'OS/2') peso = v.getUint16(inicio + 4);
-      if (tabela !== 'name') continue;
-      const textos = inicio + v.getUint16(inicio + 4);
-      for (let j = 0; j < v.getUint16(inicio + 2); j++) {
-        const r = inicio + 6 + j * 12;
-        const id = v.getUint16(r + 6);
-        if (id !== 1 && id !== 16) continue;
-        const plataforma = v.getUint16(r);
-        const tamanho = v.getUint16(r + 8);
-        const onde = textos + v.getUint16(r + 10);
-        let nome = '';
-        if (plataforma === 0 || plataforma === 3) for (let k = 0; k + 1 < tamanho; k += 2) nome += String.fromCharCode(v.getUint16(onde + k));
-        else for (let k = 0; k < tamanho; k++) nome += String.fromCharCode(v.getUint8(onde + k));
-        if (id === 16) preferida ??= nome;
-        else familia ??= nome;
-      }
-    }
-    const nome = preferida ?? familia;
-    return nome && peso ? { familia: nome, peso } : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /** As fontes da POC: as da biblioteca base (poc/fontes) e as que ela baixou (poc/fontes/google). */
 async function fontesDaPoc(familias: ReadonlySet<string>): Promise<FonteDaExportacao[]> {

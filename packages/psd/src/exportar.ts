@@ -107,24 +107,30 @@ function imagensDisponiveis(sessao: Sessao, imagens: readonly ImagemDaExportacao
   });
 }
 
+/**
+ * Onde o motor pôs a primeira linha do texto: a linha de base (y na prancheta, antes da rotação), a altura que o texto
+ * ocupa, a largura da linha mais larga e a altura da maiúscula da primeira linha, em pixels. Texto sem fonte: undefined.
+ * A exportação usa para pôr a caixa onde o Photoshop assenta a primeira linha; a importação, para o caminho de volta.
+ */
+export function primeiraLinhaDoTexto(sessao: Sessao, fontes: readonly FonteDaExportacao[], no: NoTexto): { base: number; alturaUsada: number; larguraMaxima: number; maiuscula: number } | undefined {
+  const d = sessao.texto.diagramar(no);
+  const linha = d.linhas[0];
+  const [inicio, fim] = d.intervalos[0] ?? [0, 0];
+  if (!d.fonteEncontrada || !linha) return undefined;
+  // altura da maiúscula de cada arquivo de fonte, em fração do corpo. Fonte sem o campo: 0,7, que é o comum
+  let maiuscula = 0;
+  for (let i = inicio; i < Math.max(fim, inicio + 1); i++) {
+    const t = [...(no.trechos ?? [])].reverse().find((x) => i >= x.inicio && i < x.fim);
+    const fonte = escolherFonte(fontes, t?.fonte ?? no.fonte, t?.peso ?? no.peso);
+    maiuscula = Math.max(maiuscula, ((fonte ? alturaDaMaiuscula(fonte.bytes) : undefined) ?? 0.7) * (t?.tamanho ?? no.tamanho));
+  }
+  return { base: linha.base, alturaUsada: d.alturaUsada, larguraMaxima: d.larguraMaxima, maiuscula };
+}
+
 /** Os pixels vindos do render de referência em CPU: o mesmo que o agente vê e o lint confere. */
 function pixelsDoRender(sessao: Sessao, doc: Documento, fontes: readonly FonteDaExportacao[]): FonteDePixels {
-  /** altura da maiúscula de cada arquivo de fonte, em fração do corpo. Fonte sem o campo: 0,7, que é o comum. */
-  const maiusculas = new Map(fontes.map((f) => [`${f.familia}#${f.peso}`, alturaDaMaiuscula(f.bytes) ?? 0.7]));
   return {
-    primeiraLinha(no: NoTexto) {
-      const d = sessao.texto.diagramar(no);
-      const linha = d.linhas[0];
-      const [inicio, fim] = d.intervalos[0] ?? [0, 0];
-      if (!d.fonteEncontrada || !linha) return undefined;
-      let maiuscula = 0;
-      for (let i = inicio; i < Math.max(fim, inicio + 1); i++) {
-        const t = [...(no.trechos ?? [])].reverse().find((x) => i >= x.inicio && i < x.fim);
-        const fonte = escolherFonte(fontes, t?.fonte ?? no.fonte, t?.peso ?? no.peso);
-        maiuscula = Math.max(maiuscula, (maiusculas.get(`${fonte?.familia}#${fonte?.peso}`) ?? 0.7) * (t?.tamanho ?? no.tamanho));
-      }
-      return { base: linha.base, alturaUsada: d.alturaUsada, maiuscula };
-    },
+    primeiraLinha: (no: NoTexto) => primeiraLinhaDoTexto(sessao, fontes, no),
     camada(p: Prancheta, no: NoVisual): PixelsDoArquivo | undefined {
       // só a área que a camada ocupa dentro da prancheta, em pixel inteiro
       const limites = limitesDoNo(sessao, no);

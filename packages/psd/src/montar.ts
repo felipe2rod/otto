@@ -141,12 +141,18 @@ export function soOPixel(no: NoVisual, manterAjusteDeCor = false): NoVisual {
   return base;
 }
 
-function degrade(doc: Documento, d: Degrade): DegradeDoArquivo {
-  return { estilo: d.tipo, angulo: d.angulo, paradas: [...d.paradas].sort((a, b) => a.posicao - b.posicao).map((q) => ({ cor: cor(doc, q.cor), posicao: q.posicao, opacidade: q.opacidade })) };
+/**
+ * No Otto o degradê gira com a camada; no PSD o ângulo é sempre o do documento. Em camada girada vai o ângulo menos a
+ * rotação (o ângulo do degradê é anti-horário, e a rotação da camada, horária), entre −180° e 180°.
+ */
+function degrade(doc: Documento, d: Degrade, rotacao = 0): DegradeDoArquivo {
+  const girado = d.angulo - rotacao;
+  const angulo = rotacao ? Math.round((girado - 360 * Math.round(girado / 360)) * 100) / 100 : d.angulo;
+  return { estilo: d.tipo, angulo, paradas: [...d.paradas].sort((a, b) => a.posicao - b.posicao).map((q) => ({ cor: cor(doc, q.cor), posicao: q.posicao, opacidade: q.opacidade })) };
 }
 
-function preenchimento(doc: Documento, p: Preenchimento): PreenchimentoDoArquivo {
-  return typeof p === 'string' ? { tipo: 'cor', cor: cor(doc, p) } : { tipo: 'degrade', ...degrade(doc, p) };
+function preenchimento(doc: Documento, p: Preenchimento, rotacao = 0): PreenchimentoDoArquivo {
+  return typeof p === 'string' ? { tipo: 'cor', cor: cor(doc, p) } : { tipo: 'degrade', ...degrade(doc, p, rotacao) };
 }
 
 /** A camada de ajuste com as cores de token resolvidas. */
@@ -179,7 +185,7 @@ function efeitosDoNo(doc: Documento, no: NoVisual): EfeitosDoArquivo | undefined
   if (e?.brilhoInterno) fx.brilhoInterno = { cor: cor(doc, e.brilhoInterno.cor), opacidade: e.brilhoInterno.opacidade, tamanho: e.brilhoInterno.tamanho, modo: 'tela' };
   if (e?.sobreposicaoDeCor) fx.sobreposicaoDeCor = { cor: cor(doc, e.sobreposicaoDeCor.cor), opacidade: e.sobreposicaoDeCor.opacidade, modo: e.sobreposicaoDeCor.modoDeMesclagem };
   if (e?.sobreposicaoDeDegrade)
-    fx.sobreposicaoDeDegrade = { degrade: degrade(doc, e.sobreposicaoDeDegrade.degrade), opacidade: e.sobreposicaoDeDegrade.opacidade, modo: e.sobreposicaoDeDegrade.modoDeMesclagem };
+    fx.sobreposicaoDeDegrade = { degrade: degrade(doc, e.sobreposicaoDeDegrade.degrade, no.rotacao), opacidade: e.sobreposicaoDeDegrade.opacidade, modo: e.sobreposicaoDeDegrade.modoDeMesclagem };
   return Object.keys(fx).length > 0 ? fx : undefined;
 }
 
@@ -364,7 +370,7 @@ function camadasDoNo(no: No, cx: Contexto): CamadaDoArquivo[] {
       return [
         {
           ...soPixel(),
-          preenchimento: preenchimento(doc, no.preenchimento),
+          preenchimento: preenchimento(doc, no.preenchimento, no.rotacao),
           mascaraVetorial: [{ aberto: false, regra: 'nao-zero', nos: mapearNos(nosDaForma(no.forma, no.x, no.y, no.largura, no.altura, no.raio), f) }],
           // forma viva só sem rotação: girada, vai como caminho comum
           ...(no.rotacao ? {} : { formaViva: { forma: no.forma, x: no.x + cx.dx, y: no.y + cx.dy, largura: no.largura, altura: no.altura, raio: Math.min(no.raio, no.largura / 2, no.altura / 2) } }),

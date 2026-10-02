@@ -20,7 +20,15 @@ export interface LinhaDoMapeamento {
   observacao?: string;
   /** a saída vetorial (SVG e PDF, ADR 034). Ausente no que o Otto bloqueia. */
   vetorial?: { destino: DestinoVetorialDoMapeamento; como: string };
+  /** a importação de PSD (ADR 028, item 4): como o recurso volta de um arquivo. Ausente no que o Otto bloqueia. */
+  importacao?: { destino: DestinoDaVolta; como: string };
 }
+
+/**
+ * Como um recurso do Otto volta de um PSD: Editável (o mesmo recurso), Imagem (a exportação o gravou como pixel, e é
+ * pixel que volta) ou "—" (não existe no arquivo: é da identidade ou só da saída vetorial).
+ */
+export type DestinoDaVolta = 'Editável' | 'Imagem' | '—';
 
 const nativo = (otto: string, psd: string, observacao?: string): LinhaDoMapeamento => ({ otto, psd, destino: 'Nativo', ...(observacao ? { observacao } : {}) });
 const raster = (otto: string, psd: string, observacao?: string): LinhaDoMapeamento => ({ otto, psd, destino: 'Raster', ...(observacao ? { observacao } : {}) });
@@ -280,11 +288,104 @@ const VETORIAL: Record<Exclude<ChaveDoMapeamento, ChaveBloqueada>, Vetorial> = {
   'vetor-fora-do-padrao': RASTER(),
 };
 
+type Volta = [DestinoDaVolta, string];
+const VOLTA = (como: string): Volta => ['Editável', como];
+const PIXEL: Volta = ['Imagem', 'A exportação gravou como pixel: volta como imagem'];
+const MESMO_MODO = VOLTA('O mesmo modo');
+const FILTRO_INTELIGENTE = VOLTA('Filtro inteligente em foto embutida, com opacidade de 100% e modo normal');
+
+/**
+ * A importação de cada linha (ADR 028, item 4): como o recurso do Otto volta de um PSD. O que o PSD pode trazer e o
+ * Otto não tem está em mapeamento-de-importacao.ts.
+ */
+const IMPORTACAO: Record<Exclude<ChaveDoMapeamento, ChaveBloqueada>, Volta> = {
+  documento: VOLTA('Só RGB de 8 bits. Outro perfil RGB de matriz e curva (Adobe RGB, ProPhoto) é convertido para sRGB'),
+  prancheta: VOLTA('Prancheta do Photoshop vira prancheta. Arquivo sem pranchetas vira uma prancheta do tamanho dele'),
+  'fundo-da-prancheta': VOLTA('A camada de cor sólida embaixo de tudo, ou a cor da prancheta do Photoshop'),
+  'no:grupo': VOLTA('Com modo, opacidade e as camadas dentro. Efeito de camada em grupo não vem'),
+  'no:forma': VOLTA('Retângulo (com o mesmo raio nos quatro cantos) e elipse, girados ou não. Caminho livre de cor sólida vira vetor'),
+  'no:texto': VOLTA('Texto em caixa e texto de ponto, com a fonte entregue pelo nome PostScript. Sem a fonte, vira imagem'),
+  'no:imagem': VOLTA('Objeto inteligente com foto PNG ou JPEG embutida: a foto original, com caixa, foco e aproximação'),
+  'no:vetor': VOLTA('O grupo de formas que a exportação grava volta a ser um vetor só, com a caixa justa no desenho'),
+  'no:ajuste': VOLTA('Com modo, opacidade, máscara de recorte e a máscara que o Otto tenha'),
+  'preenchimento-em-degrade': VOLTA('Linear e radial, até 6 paradas, escala de 100%. Interpolação perceptual ou linear vem aproximada, com paradas a mais'),
+  'traco-de-vetor': VOLTA('Traçado pelo centro, de cor sólida, sem tracejado'),
+  'trechos-de-texto': VOLTA('Até 40 trechos. O estilo que cobre mais texto é o da camada'),
+  'caixa-alta-e-versalete': VOLTA('Quando vale para o texto inteiro'),
+  opacidade: VOLTA('Opacidade; a do preenchimento entra nela quando não há efeito'),
+  'visivel-e-bloqueado': VOLTA('Oculta e bloqueada (posição ou tudo)'),
+  rotacao: VOLTA('Lida da geometria: do caminho, da transformação do texto e dos cantos da foto'),
+  'recorte-da-foto': VOLTA('Máscara vetorial em retângulo ou elipse sobre a foto embutida'),
+  'recortada-na-de-baixo': VOLTA('Máscara de recorte'),
+  'ajuste-de-cor-da-foto': VOLTA('Níveis, Misturador de canais e Mapa de degradê presos à foto voltam a ser o ajuste de cor dela, quando são exatamente os que a exportação grava'),
+  token: ['—', 'O PSD não tem variável de cor: vem o valor'],
+  'mascara:degrade': VOLTA('Reconhecida pelos pixels da máscara e conferida com o desenho do motor. O que não bate não é adivinhado'),
+  'mascara:forma': VOLTA('Idem; e a máscara vetorial em retângulo ou elipse, sem rotação'),
+  'mascara:sujeito': VOLTA('Máscara de pixels em foto embutida, reamostrada na resolução em que a foto aparece'),
+  'mascara-suave-ou-invertida': VOLTA('É a máscara de forma'),
+  'recorte-em-texto': VOLTA('É a máscara de recorte'),
+  'degrade-transparente-no-pdf': ['—', 'É só da saída vetorial'],
+  'modo-no-svg': ['—', 'É só da saída vetorial'],
+  'modo:atravessar': MESMO_MODO,
+  'modo:normal': MESMO_MODO,
+  'modo:escurecer': MESMO_MODO,
+  'modo:multiplicacao': MESMO_MODO,
+  'modo:subexposicao-de-cores': MESMO_MODO,
+  'modo:subexposicao-linear': MESMO_MODO,
+  'modo:cor-mais-escura': MESMO_MODO,
+  'modo:clarear': MESMO_MODO,
+  'modo:tela': MESMO_MODO,
+  'modo:superexposicao-de-cores': MESMO_MODO,
+  'modo:superexposicao-linear': MESMO_MODO,
+  'modo:cor-mais-clara': MESMO_MODO,
+  'modo:sobrepor': MESMO_MODO,
+  'modo:luz-suave': MESMO_MODO,
+  'modo:luz-direta': MESMO_MODO,
+  'modo:luz-intensa': MESMO_MODO,
+  'modo:luz-linear': MESMO_MODO,
+  'modo:luz-do-ponto': MESMO_MODO,
+  'modo:mistura-solida': MESMO_MODO,
+  'modo:diferenca': MESMO_MODO,
+  'modo:exclusao': MESMO_MODO,
+  'modo:subtrair': MESMO_MODO,
+  'modo:dividir': MESMO_MODO,
+  'modo:matiz': MESMO_MODO,
+  'modo:saturacao': MESMO_MODO,
+  'modo:cor': MESMO_MODO,
+  'modo:luminosidade': MESMO_MODO,
+  'efeito:sombra': VOLTA('Cor, opacidade, ângulo, distância e tamanho. Expansão, contorno e ruído não vêm; modo que não é o do motor vira nota'),
+  'efeito:traco': VOLTA('Só em forma, por dentro, de cor sólida'),
+  'efeito:sombraInterna': VOLTA('Como a sombra projetada'),
+  'efeito:brilhoExterno': VOLTA('Cor, opacidade e tamanho. Brilho em degradê não vem'),
+  'efeito:brilhoInterno': VOLTA('Como o brilho externo'),
+  'efeito:sobreposicaoDeCor': VOLTA('Cor, opacidade e modo'),
+  'efeito:sobreposicaoDeDegrade': VOLTA('Com o degradê que o Otto tenha, opacidade e modo'),
+  'ajuste:curvas': VOLTA('Os três canais juntos e cada canal, até 16 pontos'),
+  'ajuste:niveis': VOLTA('Só os três canais juntos'),
+  'ajuste:matiz-saturacao': VOLTA('Só o ajuste geral, sem colorir'),
+  'ajuste:brilho-contraste': VOLTA('O comum (não o legado)'),
+  'ajuste:vibracao': VOLTA('Vibração e saturação'),
+  'ajuste:equilibrio-de-cor': VOLTA('Sombras, meios-tons e realces, preservando a luminosidade'),
+  'ajuste:filtro-de-foto': VOLTA('Cor em RGB e densidade'),
+  'ajuste:preto-e-branco': VOLTA('Com os pesos padrão; pesos próprios e tonalidade não vêm'),
+  'ajuste:mapa-de-degrade': VOLTA('Até 6 paradas, opaco'),
+  'filtro:desfoque': FILTRO_INTELIGENTE,
+  'filtro:desfoque-de-movimento': FILTRO_INTELIGENTE,
+  'filtro:ruido': VOLTA('Idem, com distribuição uniforme. O desenho do grão muda (a semente sai do id da camada)'),
+  'filtro:nitidez': VOLTA('Idem, com limiar zero'),
+  'filtro-fora-de-foto': PIXEL,
+  'foto-recortada-com-ajuste-de-cor': PIXEL,
+  'foto-em-webp': PIXEL,
+  'texto-sem-fonte': PIXEL,
+  'vetor-fora-do-padrao': PIXEL,
+};
+
 const comPrefixo = (prefixo: string, parte: Record<string, LinhaDoMapeamento>): [string, LinhaDoMapeamento][] =>
   Object.entries(parte).map(([chave, linha]) => {
     const inteira = prefixo ? `${prefixo}:${chave}` : chave;
     const vetorial = (VETORIAL as Record<string, Vetorial | undefined>)[inteira];
-    return [inteira, vetorial ? { ...linha, vetorial: { destino: vetorial[0], como: vetorial[1] } } : linha];
+    const volta = (IMPORTACAO as Record<string, Volta | undefined>)[inteira];
+    return [inteira, { ...linha, ...(vetorial ? { vetorial: { destino: vetorial[0], como: vetorial[1] } } : {}), ...(volta ? { importacao: { destino: volta[0], como: volta[1] } } : {}) }];
   });
 
 /** A tabela inteira, na ordem em que o documento técnico a mostra. */
@@ -301,4 +402,4 @@ export const MAPEAMENTO = Object.fromEntries([
 
 /** A linha da tabela em markdown, como está em docs/tecnico/psd.md. */
 export const linhaEmMarkdown = (chave: string, l: LinhaDoMapeamento): string =>
-  `| \`${chave}\` | ${l.otto} | ${l.psd} | ${l.destino} | ${l.vetorial?.destino ?? '—'} | ${l.vetorial?.como ?? '—'} | ${l.observacao ?? ''} |`;
+  `| \`${chave}\` | ${l.otto} | ${l.psd} | ${l.destino} | ${l.vetorial?.destino ?? '—'} | ${l.vetorial?.como ?? '—'} | ${l.importacao?.destino ?? '—'} | ${l.importacao?.como ?? '—'} | ${l.observacao ?? ''} |`;

@@ -6,9 +6,10 @@ import type { No } from '@otto/documento';
 import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ajuste, FOTO, forma, grupo, idDe, imagem, novaSessao, peca, SUJEITO_DA_FOTO } from './apoio-de-teste';
-import { codificarPng, renderizarMascara, renderizarPrancheta } from './compositor';
+import { codificarJpeg, codificarPng, reduzirFoto, renderizarMascara, renderizarPrancheta } from './compositor';
+import { carregarCanvasKit } from './node';
 import { alturaDaMaiuscula, nomePostScript } from './opentype';
-import type { Sessao } from './sessao';
+import { criarSessao, type Sessao } from './sessao';
 import { escolherFonte } from './texto';
 
 let ck: CanvasKit;
@@ -118,6 +119,36 @@ describe('PNG', () => {
     const lido = img?.readPixels(0, 0, { width: 80, height: 80, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: ck.ColorSpace.SRGB }) as Uint8Array;
     img?.delete();
     expect(Buffer.compare(Buffer.from(lido), Buffer.from(r.rgba))).toBe(0);
+  });
+});
+
+describe('JPEG e redução de foto (a prévia que o agente vê, a miniatura)', () => {
+  const foto = (): Uint8Array => new Uint8Array(readFileSync(path.resolve(import.meta.dirname, '../recursos-de-teste/imagens/foto-paisagem.jpg')));
+
+  it('na variante completa do motor: o render sai em JPEG, e a foto é reduzida para caber no lado pedido, sem ampliar', async () => {
+    const completa = criarSessao(await carregarCanvasKit('completa'), { fontes: [], imagens: [] });
+    try {
+      const rgba = new Uint8Array(40 * 30 * 4).fill(200);
+      const jpeg = codificarJpeg(completa, { largura: 40, altura: 30, rgba });
+      expect([...(jpeg?.subarray(0, 2) ?? [])]).toEqual([0xff, 0xd8]);
+      // a foto de teste tem 1280 × 853
+      const reduzida = reduzirFoto(completa, foto(), 320);
+      expect(reduzida).toMatchObject({ largura: 320, altura: 213 });
+      expect([...(reduzida?.jpeg.subarray(0, 2) ?? [])]).toEqual([0xff, 0xd8]);
+      expect(reduzida?.jpeg.length).toBeLessThan(foto().length / 4);
+      expect(reduzirFoto(completa, foto(), 5000)).toMatchObject({ largura: 1280, altura: 853 });
+      // o mesmo pedido dá os mesmos bytes
+      expect(Buffer.compare(Buffer.from(reduzirFoto(completa, foto(), 320)?.jpeg as Uint8Array), Buffer.from(reduzida?.jpeg as Uint8Array))).toBe(0);
+      // arquivo que não é imagem
+      expect(reduzirFoto(completa, new Uint8Array([1, 2, 3, 4]), 320)).toBeUndefined();
+    } finally {
+      completa.destruir();
+    }
+  });
+
+  it('na variante padrão, que não codifica JPEG, as duas devolvem undefined (quem chama fica com o PNG)', () => {
+    expect(codificarJpeg(sessao, { largura: 4, altura: 4, rgba: new Uint8Array(64).fill(255) })).toBeUndefined();
+    expect(reduzirFoto(sessao, foto(), 320)).toBeUndefined();
   });
 });
 

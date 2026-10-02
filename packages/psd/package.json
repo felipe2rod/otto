@@ -10,7 +10,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "exportar:pecas": "tsx src/comandos/exportar-pecas.ts"
+    "exportar:pecas": "tsx src/comandos/exportar-pecas.ts",
+    "importar:psd": "tsx src/comandos/importar-psd.ts"
   },
   "dependencies": {
     "@cantoo/fontkit": "^2.0.12",

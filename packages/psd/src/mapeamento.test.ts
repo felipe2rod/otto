@@ -4,6 +4,7 @@ import path from 'node:path';
 import { MODOS_DE_MESCLAGEM } from '@otto/documento';
 import { describe, expect, it } from 'vitest';
 import { linhaEmMarkdown, MAPEAMENTO } from './mapeamento';
+import { IMPORTACAO_DO_PSD, linhaDeImportacaoEmMarkdown } from './mapeamento-de-importacao';
 
 const DOCUMENTO = path.resolve(import.meta.dirname, '../../../docs/tecnico/psd.md');
 const texto = readFileSync(DOCUMENTO, 'utf8');
@@ -24,7 +25,24 @@ describe('mapeamento Otto → PSD', () => {
   });
 
   it('toda linha com chave em docs/tecnico/psd.md existe no código', () => {
-    expect([...linhasDoDocumento.keys()].filter((chave) => !(chave in MAPEAMENTO))).toEqual([]);
+    expect([...linhasDoDocumento.keys()].filter((chave) => !(chave in MAPEAMENTO) && !(chave in IMPORTACAO_DO_PSD))).toEqual([]);
+  });
+
+  it('importação: toda linha do que só existe no PSD está em docs/tecnico/psd.md, igual', () => {
+    const divergentes = Object.entries(IMPORTACAO_DO_PSD)
+      .filter(([chave, linha]) => linhasDoDocumento.get(chave) !== linhaDeImportacaoEmMarkdown(chave, linha))
+      .map(([chave, linha]) => `esperado em psd.md:\n${linhaDeImportacaoEmMarkdown(chave, linha)}\nestá:\n${linhasDoDocumento.get(chave) ?? '(sem linha)'}`);
+    expect(divergentes).toEqual([]);
+  });
+
+  it('importação: todo recurso que não é bloqueado diz como volta de um PSD, e o bloqueado não diz', () => {
+    for (const [chave, linha] of Object.entries(MAPEAMENTO)) {
+      if (linha.destino === 'Bloqueado') expect(linha.importacao, chave).toBeUndefined();
+      else expect(['Editável', 'Imagem', '—'], chave).toContain(linha.importacao?.destino);
+    }
+    // o que a exportação grava como pixel volta como imagem; o que grava editável volta editável
+    for (const [chave, linha] of Object.entries(MAPEAMENTO)) if (linha.destino === 'Raster') expect(linha.importacao?.destino, chave).toBe('Imagem');
+    for (const linha of Object.values(IMPORTACAO_DO_PSD)) expect(['Editável', 'Imagem', 'Aproximado', 'Ignorado', 'Recusado']).toContain(linha.destino);
   });
 
   it('não há chave repetida no documento', () => {

@@ -1,3 +1,5 @@
 # PSDs de peças reais para conferir no Photoshop (pnpm --filter @otto/psd exportar:pecas): trabalho de cliente não entra no git
 saida/
 goldens/_recusado/
+# PSDs que o designer traz para importar (pnpm --filter @otto/psd importar:psd): trabalho de cliente não entra no git
+entrada/

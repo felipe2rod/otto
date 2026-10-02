@@ -1230,6 +1230,42 @@ export function codificarJpeg(sessao: Sessao, render: RenderEmPixels, qualidade 
   }
 }
 
+/**
+ * Reduz uma foto (PNG, JPEG ou WebP) para caber num quadrado de `ladoMaximo`, em JPEG: é a prévia que o agente vê e a
+ * miniatura de uma lista. Nunca amplia. Foto com transparência sai sobre branco (o JPEG não tem alfa).
+ * undefined quando o motor não abre o arquivo, ou não codifica JPEG (só a variante "completa" codifica).
+ */
+export function reduzirFoto(sessao: Sessao, bytes: Uint8Array, ladoMaximo: number, qualidade = 82): { jpeg: Uint8Array; largura: number; altura: number } | undefined {
+  const { ck } = sessao;
+  const original = ck.MakeImageFromEncoded(bytes);
+  if (!original) return undefined;
+  const escala = Math.min(1, ladoMaximo / Math.max(original.width(), original.height()));
+  const largura = Math.max(1, Math.round(original.width() * escala));
+  const altura = Math.max(1, Math.round(original.height() * escala));
+  const superficie = ck.MakeSurface(largura, altura);
+  if (!superficie) {
+    original.delete();
+    return undefined;
+  }
+  const tinta = new ck.Paint();
+  try {
+    const canvas = superficie.getCanvas();
+    canvas.clear(ck.WHITE);
+    canvas.drawImageRectOptions(original, ck.XYWHRect(0, 0, original.width(), original.height()), ck.XYWHRect(0, 0, largura, altura), ck.FilterMode.Linear, ck.MipmapMode.Linear, tinta);
+    const reduzida = superficie.makeImageSnapshot();
+    try {
+      const jpeg = reduzida.encodeToBytes(ck.ImageFormat.JPEG, qualidade);
+      return jpeg && jpeg[0] === 0xff && jpeg[1] === 0xd8 ? { jpeg, largura, altura } : undefined;
+    } finally {
+      reduzida.delete();
+    }
+  } finally {
+    tinta.delete();
+    superficie.delete();
+    original.delete();
+  }
+}
+
 // ---------- o que falta ao motor, dito pelo próprio motor ----------
 
 export interface RecursosEmFalta {

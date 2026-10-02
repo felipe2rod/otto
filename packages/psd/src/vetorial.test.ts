@@ -555,6 +555,22 @@ describe('tamanho do arquivo: o SVG da padaria tinha 12 MB e levava 36 s para ab
   });
 });
 
+describe('resolução das camadas que viram imagem', () => {
+  it('quem exporta abaixo do dobro (prancheta grande demais para o dobro caber) recebe o aviso, igual no relatório prévio; no dobro, não', async () => {
+    const doc = cena('forma');
+    const reduzida = await exportarVetorial(ck, criarFormatoSvg(), doc, recursos, { nome: 'cena', escalaDaImagem: 1 });
+    expect(reduzida.relatorio.avisos.map((a) => a.codigo)).toContain('imagem-em-resolucao-menor');
+    expect(relatorioDeExportacaoVetorial(doc, conhecidos, { escalaDaImagem: 1 }).avisos).toEqual(reduzida.relatorio.avisos);
+    // a imagem sai mesmo na resolução do documento: a camada com filtro ocupa 178 px, e são 178 px de imagem
+    expect(porId(ler(texto(reduzida.arquivos[0]?.bytes as Uint8Array)), 'Com_filtro').atributos.width).toBe('178');
+    expect((await exportar(doc)).relatorio.avisos.map((a) => a.codigo)).not.toContain('imagem-em-resolucao-menor');
+    // sem camada que vire imagem, não há o que avisar
+    expect(relatorioDeExportacaoVetorial(cena('vetor'), conhecidos, { escalaDaImagem: 1 }).avisos.map((a) => a.codigo)).toContain('virou-imagem');
+    const semImagem = mudar(cena('vetor'), [{ op: 'alterar', alvo: 'Peça/Logo', props: { sombra: null } }]);
+    expect(relatorioDeExportacaoVetorial(semImagem, conhecidos, { escalaDaImagem: 1 }).avisos.map((a) => a.codigo)).not.toContain('imagem-em-resolucao-menor');
+  });
+});
+
 describe('aparência do SVG, desenhado por um renderizador independente', () => {
   // cenas em que nada fica de fora: o SVG tem de parecer o render do Otto
   for (const [nome, limite] of [

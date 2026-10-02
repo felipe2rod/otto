@@ -11,6 +11,7 @@ export const NOME_DO_PACOTE = '@otto/psd' as const;
 export { criarFormatoPdf } from './adaptadores/biblioteca-de-pdf';
 export { criarFormatoPsd } from './adaptadores/biblioteca-de-psd';
 export { criarFormatoSvg } from './adaptadores/svg';
+export type { ImagemImportada } from './desmontar';
 export {
   type ArquivoExportado,
   exportarPng,
@@ -27,7 +28,10 @@ export {
   tipoDaImagem,
 } from './exportar';
 export { exportarVetorial, type OpcoesDoVetorial, type ResultadoDaExportacaoVetorial, relatorioDeExportacaoVetorial } from './exportar-vetorial';
+export { fontesDoPsd, importarPsd, type OpcoesDeImportacao, type ResultadoDaImportacao } from './importar';
+export { type CodigoDeErroDeImportacao, ErroDeImportacao, inspecionarPsd, LIMITES_DE_IMPORTACAO, type LimitesDeImportacao, type PsdInspecionado } from './inspecionar';
 export { type ChaveDoMapeamento, type DestinoDoMapeamento, type DestinoVetorialDoMapeamento, type LinhaDoMapeamento, linhaEmMarkdown, MAPEAMENTO } from './mapeamento';
+export { type ChaveDeImportacao, type DestinoDeImportacaoDoMapeamento, IMPORTACAO_DO_PSD, type LinhaDeImportacao, linhaDeImportacaoEmMarkdown } from './mapeamento-de-importacao';
 export type { FonteDisponivel, ImagemDisponivel, TipoDeImagem } from './montar';
 export { perfilSrgb } from './perfil-srgb';
 export * from './porta';
@@ -44,3 +48,10 @@ export {
   type RelatorioDeExportacaoVetorial,
   relatorioEmTexto,
 } from './relatorio';
+export {
+  type CodigoDeAvisoDeImportacao,
+  type DestinoDeImportacao,
+  type LinhaDoRelatorioDeImportacao,
+  type RelatorioDeImportacao,
+  relatorioDeImportacaoEmTexto,
+} from './relatorio-de-importacao';
