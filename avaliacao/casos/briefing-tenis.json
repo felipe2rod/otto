@@ -1,0 +1,60 @@
+{
+  "id": "briefing-tenis",
+  "tipo": "criar-de-briefing",
+  "origem": "POC, rodadas 1 a 8 (briefing inventado para a POC; não é de cliente)",
+  "entrada": {
+    "tipo": "briefing",
+    "briefing": {
+      "nome": "Lançamento de tênis de corrida",
+      "objetivo": "vender",
+      "publico": "corredores amadores, 25 a 40 anos",
+      "formatos": [
+        {
+          "nome": "Feed",
+          "largura": 1080,
+          "altura": 1350
+        },
+        {
+          "nome": "Story",
+          "largura": 1080,
+          "altura": 1920
+        }
+      ],
+      "textos": {
+        "titulo": "Corra mais leve",
+        "subtitulo": "Nova linha Vento 2, com 20% menos peso",
+        "chamada": "Compre agora",
+        "rodape": "ventoesportes.com.br"
+      },
+      "identidade": {
+        "cores": {
+          "primaria": "#FF5B1F",
+          "destaque": "#F4EFE3",
+          "fundo": "#17171C",
+          "texto": "#F4EFE3"
+        },
+        "fonteDeTitulo": "Anton",
+        "fonteDeTexto": "IBM Plex Sans"
+      },
+      "imagens": {
+        "fonte": "banco de imagens",
+        "termos": "running shoes"
+      },
+      "estilo": "ousado",
+      "restricoes": ["Sem pessoas de rosto visível"],
+      "observacoes": ""
+    },
+    "esforco": "REFINED"
+  },
+  "criterios": {
+    "automaticos": ["tarefa-concluida", "estrutura", "lint-sem-erro", "texto-literal", "sem-camada-invisivel", "conferencia-honesta", "trabalho-do-designer-intacto"],
+    "pode": true,
+    "porRender": [
+      "A hierarquia se lê em thumbnail: herói, título, chamada?",
+      "Há marca de terceiros visível na foto?",
+      "A assinatura visual da direção aparece em todos os formatos?",
+      "Há texto cortado, partido ou sobreposto?"
+    ],
+    "rubrica": "qualidade visual (a definir pelo diretor-de-arte, ADR 033 item 2.1)"
+  }
+}

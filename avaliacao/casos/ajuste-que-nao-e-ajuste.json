@@ -1,0 +1,358 @@
+{
+  "id": "ajuste-que-nao-e-ajuste",
+  "tipo": "limite",
+  "origem": "caminho rápido: pedido que passa do ajuste pontual; peça de avaliação montada por operações (texto e forma, fontes da biblioteca base); o briefing é o do café, da POC",
+  "entrada": {
+    "tipo": "ajuste",
+    "pedido": "adapta essa peça para banner 1200×628 e tira o selo das duas pranchetas"
+  },
+  "documento": [
+    {
+      "op": "definirToken",
+      "nome": "primaria",
+      "valor": "#0F3B2C"
+    },
+    {
+      "op": "definirToken",
+      "nome": "destaque",
+      "valor": "#F4C430"
+    },
+    {
+      "op": "definirToken",
+      "nome": "fundo",
+      "valor": "#F4EFE3"
+    },
+    {
+      "op": "definirToken",
+      "nome": "texto",
+      "valor": "#17171C"
+    },
+    {
+      "op": "criarPrancheta",
+      "nome": "Feed",
+      "largura": 1080,
+      "altura": 1350,
+      "fundo": "token:fundo"
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Feed",
+      "no": {
+        "tipo": "forma",
+        "forma": "retangulo",
+        "nome": "Faixa",
+        "x": 0,
+        "y": 0,
+        "largura": 1080,
+        "altura": 121,
+        "preenchimento": "token:primaria"
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Feed",
+      "no": {
+        "tipo": "texto",
+        "nome": "Sobretítulo",
+        "conteudo": "PROMOÇÃO DA SEMANA",
+        "x": 72,
+        "y": 216,
+        "largura": 936,
+        "altura": 44,
+        "fonte": "IBM Plex Sans",
+        "peso": 600,
+        "tamanho": 28,
+        "cor": "token:primaria",
+        "entrelinha": 1.3,
+        "espacamento": 120
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Feed",
+      "no": {
+        "tipo": "texto",
+        "nome": "Título",
+        "conteudo": "Cappuccino em dobro",
+        "x": 72,
+        "y": 296,
+        "largura": 936,
+        "altura": 280,
+        "fonte": "DM Serif Display",
+        "peso": 400,
+        "tamanho": 128,
+        "cor": "token:primaria",
+        "entrelinha": 0.95
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Feed",
+      "no": {
+        "tipo": "texto",
+        "nome": "Subtítulo",
+        "conteudo": "Na compra de um, o segundo sai por R$ 1",
+        "x": 72,
+        "y": 616,
+        "largura": 936,
+        "altura": 130,
+        "fonte": "IBM Plex Sans",
+        "peso": 500,
+        "tamanho": 44,
+        "cor": "token:texto",
+        "entrelinha": 1.3
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Feed",
+      "no": {
+        "tipo": "forma",
+        "forma": "elipse",
+        "nome": "Selo",
+        "x": 818,
+        "y": 776,
+        "largura": 190,
+        "altura": 190,
+        "preenchimento": "token:destaque"
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Feed",
+      "no": {
+        "tipo": "forma",
+        "forma": "retangulo",
+        "nome": "Botão",
+        "x": 72,
+        "y": 816,
+        "largura": 420,
+        "altura": 96,
+        "raio": 48,
+        "preenchimento": "token:primaria"
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Feed",
+      "no": {
+        "tipo": "texto",
+        "nome": "Texto do botão",
+        "conteudo": "Válido até domingo",
+        "x": 72,
+        "y": 840,
+        "largura": 420,
+        "altura": 48,
+        "fonte": "IBM Plex Sans",
+        "peso": 700,
+        "tamanho": 32,
+        "cor": "token:fundo",
+        "entrelinha": 1.3,
+        "alinhamento": "centro"
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Feed",
+      "no": {
+        "tipo": "texto",
+        "nome": "Rodapé",
+        "conteudo": "@cafeaurora · Rua das Flores, 120",
+        "x": 72,
+        "y": 1200,
+        "largura": 936,
+        "altura": 44,
+        "fonte": "IBM Plex Sans",
+        "peso": 400,
+        "tamanho": 28,
+        "cor": "token:texto",
+        "entrelinha": 1.3
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Feed",
+      "no": {
+        "tipo": "texto",
+        "nome": "Logo",
+        "conteudo": "Café Aurora",
+        "x": 72,
+        "y": 33,
+        "largura": 936,
+        "altura": 60,
+        "fonte": "DM Serif Display",
+        "peso": 400,
+        "tamanho": 44,
+        "cor": "token:fundo",
+        "entrelinha": 1.3,
+        "bloqueado": true
+      }
+    },
+    {
+      "op": "criarPrancheta",
+      "nome": "Story",
+      "largura": 1080,
+      "altura": 1920,
+      "fundo": "token:fundo"
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Story",
+      "no": {
+        "tipo": "forma",
+        "forma": "retangulo",
+        "nome": "Faixa",
+        "x": 0,
+        "y": 0,
+        "largura": 1080,
+        "altura": 172,
+        "preenchimento": "token:primaria"
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Story",
+      "no": {
+        "tipo": "texto",
+        "nome": "Sobretítulo",
+        "conteudo": "PROMOÇÃO DA SEMANA",
+        "x": 72,
+        "y": 307,
+        "largura": 936,
+        "altura": 44,
+        "fonte": "IBM Plex Sans",
+        "peso": 600,
+        "tamanho": 28,
+        "cor": "token:primaria",
+        "entrelinha": 1.3,
+        "espacamento": 120
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Story",
+      "no": {
+        "tipo": "texto",
+        "nome": "Título",
+        "conteudo": "Cappuccino em dobro",
+        "x": 72,
+        "y": 387,
+        "largura": 936,
+        "altura": 280,
+        "fonte": "DM Serif Display",
+        "peso": 400,
+        "tamanho": 128,
+        "cor": "token:primaria",
+        "entrelinha": 0.95
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Story",
+      "no": {
+        "tipo": "texto",
+        "nome": "Subtítulo",
+        "conteudo": "Na compra de um, o segundo sai por R$ 1",
+        "x": 72,
+        "y": 707,
+        "largura": 936,
+        "altura": 130,
+        "fonte": "IBM Plex Sans",
+        "peso": 500,
+        "tamanho": 44,
+        "cor": "token:texto",
+        "entrelinha": 1.3
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Story",
+      "no": {
+        "tipo": "forma",
+        "forma": "elipse",
+        "nome": "Selo",
+        "x": 818,
+        "y": 867,
+        "largura": 190,
+        "altura": 190,
+        "preenchimento": "token:destaque"
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Story",
+      "no": {
+        "tipo": "forma",
+        "forma": "retangulo",
+        "nome": "Botão",
+        "x": 72,
+        "y": 907,
+        "largura": 420,
+        "altura": 96,
+        "raio": 48,
+        "preenchimento": "token:primaria"
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Story",
+      "no": {
+        "tipo": "texto",
+        "nome": "Texto do botão",
+        "conteudo": "Válido até domingo",
+        "x": 72,
+        "y": 931,
+        "largura": 420,
+        "altura": 48,
+        "fonte": "IBM Plex Sans",
+        "peso": 700,
+        "tamanho": 32,
+        "cor": "token:fundo",
+        "entrelinha": 1.3,
+        "alinhamento": "centro"
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Story",
+      "no": {
+        "tipo": "texto",
+        "nome": "Rodapé",
+        "conteudo": "@cafeaurora · Rua das Flores, 120",
+        "x": 72,
+        "y": 1500,
+        "largura": 936,
+        "altura": 44,
+        "fonte": "IBM Plex Sans",
+        "peso": 400,
+        "tamanho": 28,
+        "cor": "token:texto",
+        "entrelinha": 1.3
+      }
+    },
+    {
+      "op": "criarNo",
+      "prancheta": "Story",
+      "no": {
+        "tipo": "texto",
+        "nome": "Logo",
+        "conteudo": "Café Aurora",
+        "x": 72,
+        "y": 48,
+        "largura": 936,
+        "altura": 60,
+        "fonte": "DM Serif Display",
+        "peso": 400,
+        "tamanho": 44,
+        "cor": "token:fundo",
+        "entrelinha": 1.3,
+        "bloqueado": true
+      }
+    }
+  ],
+  "criterios": {
+    "automaticos": ["admitiu-sem-alterar", "documento-intacto"],
+    "pode": false,
+    "pendenciasEsperadas": ["fora_do_ajuste"]
+  }
+}

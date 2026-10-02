@@ -1,0 +1,60 @@
+{
+  "id": "briefing-imobiliario",
+  "tipo": "criar-de-briefing",
+  "origem": "POC, rodadas 1 a 8 (briefing inventado para a POC; não é de cliente)",
+  "entrada": {
+    "tipo": "briefing",
+    "briefing": {
+      "nome": "Lançamento Residencial Alto da Serra",
+      "objetivo": "lançar produto",
+      "publico": "famílias de alta renda, 35 a 55 anos, que buscam casa de campo perto da capital",
+      "formatos": [
+        {
+          "nome": "Feed",
+          "largura": 1080,
+          "altura": 1350
+        },
+        {
+          "nome": "Story",
+          "largura": 1080,
+          "altura": 1920
+        }
+      ],
+      "textos": {
+        "titulo": "Viver perto do que importa",
+        "subtitulo": "Casas de 280 a 420 m² em meio à Mata Atlântica, a 50 minutos de São Paulo",
+        "chamada": "Agende sua visita",
+        "rodape": "altodaserra.com.br · Incorporação Serra Viva · CRECI 12345-J"
+      },
+      "identidade": {
+        "cores": {
+          "primaria": "#1F2A24",
+          "destaque": "#C8A46A",
+          "fundo": "#F2EEE6",
+          "texto": "#1F2A24"
+        },
+        "fonteDeTitulo": "Instrument Serif",
+        "fonteDeTexto": "IBM Plex Sans"
+      },
+      "imagens": {
+        "fonte": "banco de imagens",
+        "termos": "modern house forest"
+      },
+      "estilo": "editorial, sóbrio, premium",
+      "restricoes": ["nada de estética de panfleto", "sem selos de desconto"],
+      "observacoes": "Lançamento de alto padrão: o anúncio precisa parecer de revista de arquitetura, não de imobiliária popular."
+    },
+    "esforco": "REFINED"
+  },
+  "criterios": {
+    "automaticos": ["tarefa-concluida", "estrutura", "lint-sem-erro", "texto-literal", "sem-camada-invisivel", "conferencia-honesta", "trabalho-do-designer-intacto"],
+    "pode": true,
+    "porRender": [
+      "A hierarquia se lê em thumbnail: herói, título, chamada?",
+      "Há marca de terceiros visível na foto?",
+      "A assinatura visual da direção aparece em todos os formatos?",
+      "Há texto cortado, partido ou sobreposto?"
+    ],
+    "rubrica": "qualidade visual (a definir pelo diretor-de-arte, ADR 033 item 2.1)"
+  }
+}

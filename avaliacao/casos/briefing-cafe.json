@@ -1,0 +1,60 @@
+{
+  "id": "briefing-cafe",
+  "tipo": "criar-de-briefing",
+  "origem": "POC, rodadas 1 a 8 (briefing inventado para a POC; não é de cliente)",
+  "entrada": {
+    "tipo": "briefing",
+    "briefing": {
+      "nome": "Promoção da semana",
+      "objetivo": "vender",
+      "publico": "clientes atuais, 25 a 45 anos",
+      "formatos": [
+        {
+          "nome": "Feed",
+          "largura": 1080,
+          "altura": 1350
+        },
+        {
+          "nome": "Story",
+          "largura": 1080,
+          "altura": 1920
+        }
+      ],
+      "textos": {
+        "titulo": "Cappuccino em dobro",
+        "subtitulo": "Na compra de um, o segundo sai por R$ 1",
+        "chamada": "Válido até domingo",
+        "rodape": "@cafeaurora · Rua das Flores, 120"
+      },
+      "identidade": {
+        "cores": {
+          "primaria": "#0F3B2C",
+          "destaque": "#F4C430",
+          "fundo": "#F4EFE3",
+          "texto": "#17171C"
+        },
+        "fonteDeTitulo": "DM Serif Display",
+        "fonteDeTexto": "IBM Plex Sans"
+      },
+      "imagens": {
+        "fonte": "banco de imagens",
+        "termos": "cappuccino"
+      },
+      "estilo": "acolhedor, editorial",
+      "restricoes": ["nunca foto de pessoa"],
+      "observacoes": ""
+    },
+    "esforco": "REFINED"
+  },
+  "criterios": {
+    "automaticos": ["tarefa-concluida", "estrutura", "lint-sem-erro", "texto-literal", "sem-camada-invisivel", "conferencia-honesta", "trabalho-do-designer-intacto"],
+    "pode": true,
+    "porRender": [
+      "A hierarquia se lê em thumbnail: herói, título, chamada?",
+      "Há marca de terceiros visível na foto?",
+      "A assinatura visual da direção aparece em todos os formatos?",
+      "Há texto cortado, partido ou sobreposto?"
+    ],
+    "rubrica": "qualidade visual (a definir pelo diretor-de-arte, ADR 033 item 2.1)"
+  }
+}

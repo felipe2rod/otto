@@ -1,0 +1,28 @@
+{
+  "name": "@otto/agente",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Núcleo: ciclo do agente do Otto (ADR 029). Prompt, ferramentas, direção de arte, revisor, esforço e portas. Dono: treinador-do-otto",
+  "exports": {
+    ".": "./src/index.ts",
+    "./adaptadores/claude": "./src/adaptadores/claude.ts",
+    "./roteiros/*": "./roteiros/*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p ../../avaliacao",
+    "tarefa": "tsx ../../avaliacao/comandos/rodar-tarefa.ts",
+    "avaliar": "tsx ../../avaliacao/comandos/avaliar.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
+    "@otto/documento": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

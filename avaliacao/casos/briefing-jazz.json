@@ -1,0 +1,60 @@
+{
+  "id": "briefing-jazz",
+  "tipo": "criar-de-briefing",
+  "origem": "POC, rodadas 1 a 8 (briefing inventado para a POC; não é de cliente)",
+  "entrada": {
+    "tipo": "briefing",
+    "briefing": {
+      "nome": "Festival Jazz na Praça 2026",
+      "objetivo": "divulgar um evento",
+      "publico": "adultos de 25 a 60 anos, público de música instrumental e programação cultural gratuita",
+      "formatos": [
+        {
+          "nome": "Feed",
+          "largura": 1080,
+          "altura": 1350
+        },
+        {
+          "nome": "Story",
+          "largura": 1080,
+          "altura": 1920
+        }
+      ],
+      "textos": {
+        "titulo": "Jazz na Praça",
+        "subtitulo": "3 noites, 9 shows, entrada gratuita · 14, 15 e 16 de novembro · Praça da Liberdade, BH",
+        "chamada": "Veja a programação",
+        "rodape": "jazznapraca.com.br · Realização: Secretaria de Cultura"
+      },
+      "identidade": {
+        "cores": {
+          "primaria": "#1B1F4B",
+          "destaque": "#E9B44C",
+          "fundo": "#F3ECDD",
+          "texto": "#1B1F4B"
+        },
+        "fonteDeTitulo": "Abril Fatface",
+        "fonteDeTexto": "IBM Plex Sans"
+      },
+      "imagens": {
+        "fonte": "banco de imagens",
+        "termos": "saxophone"
+      },
+      "estilo": "editorial, ousado",
+      "restricoes": ["não usar foto de multidão"],
+      "observacoes": "Cartaz de festival com cara de cartaz: a tipografia é a protagonista."
+    },
+    "esforco": "REFINED"
+  },
+  "criterios": {
+    "automaticos": ["tarefa-concluida", "estrutura", "lint-sem-erro", "texto-literal", "sem-camada-invisivel", "conferencia-honesta", "trabalho-do-designer-intacto"],
+    "pode": true,
+    "porRender": [
+      "A hierarquia se lê em thumbnail: herói, título, chamada?",
+      "Há marca de terceiros visível na foto?",
+      "A assinatura visual da direção aparece em todos os formatos?",
+      "Há texto cortado, partido ou sobreposto?"
+    ],
+    "rubrica": "qualidade visual (a definir pelo diretor-de-arte, ADR 033 item 2.1)"
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "nome": "ajuste-titulo",
+  "descricao": "Ajuste pontual gravado com Claude em 2026-10-02 (13 s, 2 chamadas): \"deixa o título do Feed na cor de destaque e um pouco maior\". Serve em qualquer peça que tenha a prancheta \"Feed\" com a camada \"Título\" e o token de cor \"destaque\" (a \"Promoção da semana (v7)\", importada da POC, tem). A entrega sai com uma pendência de contraste.",
+  "entrada": {
+    "tipo": "ajuste",
+    "pedido": "deixa o título do Feed na cor de destaque e um pouco maior"
+  },
+  "ids": ["09ede64b-fc95-4247-b371-cacd757bbc0c", "dbe23c2f-3173-4dc6-a4ef-d0471db47da0", "a28f5715-29ba-45dc-9ebb-0d24327a5963"],
+  "passos": [
+    {
+      "papel": "ajuste",
+      "chamadas": [
+        {
+          "id": "toolu_01VM5wYBGcWfvdwxrpbxgYD8",
+          "nome": "aplicarOperacoes",
+          "argumentos": {
+            "descricao": "Título do Feed em cor de destaque e levemente maior",
+            "operacoes": [
+              {
+                "op": "alterar",
+                "alvo": "Feed/Título",
+                "props": {
+                  "cor": "token:destaque",
+                  "tamanho": 138,
+                  "altura": 340
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 8329,
+        "cacheCriado": 3630,
+        "saida": 284
+      },
+      "duracaoMs": 4033
+    },
+    {
+      "papel": "ajuste",
+      "texto": "Confirma o erro: amarelo em display sobre o fundo creme não bate contraste mínimo. Vou corrigir pra um tom de destaque mais escurecido só no título, mantendo a família de cor — mas isso já seria recolorir fora do que o token define. Melhor caminho dentro do ajuste: voltar a cor do título pra combinação que tenha contraste, mas o pedido foi explicitamente \"cor de destaque\". Vou entregar com a pendência, sem forçar solução que fuja do token da identidade.",
+      "chamadas": [
+        {
+          "id": "toolu_01JSy3Gs5UibpXRkfxKzkyCX",
+          "nome": "entregar",
+          "argumentos": {
+            "resumo": "Deixei o título do Feed na cor de destaque (token:destaque) e aumentei de 126 para 138px, com a caixa reajustada para não cortar linha.",
+            "pendencias": [
+              {
+                "tipo": "aviso_da_verificacao",
+                "texto": "O amarelo de destaque no título grande ficou com contraste baixo (1.4:1) contra o fundo creme — abaixo do mínimo de 3:1 para esse tamanho. É o resultado direto do pedido (cor de destaque + maior); não troquei a cor porque não era isso que foi pedido. Vale o designer decidir entre escurecer o token de destaque ou aceitar o contraste.",
+                "camadas": ["Feed/Título"]
+              }
+            ]
+          }
+        }
+      ],
+      "uso": {
+        "entrada": 2,
+        "cacheLido": 11959,
+        "cacheCriado": 1313,
+        "saida": 482
+      },
+      "duracaoMs": 6961
+    }
+  ]
+}

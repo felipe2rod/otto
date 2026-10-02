@@ -1,0 +1,22 @@
+{
+  "id": "criar-padaria",
+  "tipo": "criar-de-pedido",
+  "origem": "POC, rodada 7 (pedido livre inventado para a POC)",
+  "entrada": {
+    "tipo": "criar",
+    "pedido": "Post para a padaria artesanal Fermento Vivo divulgando o pão de fermentação natural. Título \"Pão que tem tempo\". Tom acolhedor, cores terrosas.",
+    "esforco": "REFINED"
+  },
+  "criterios": {
+    "automaticos": ["tarefa-concluida", "lint-sem-erro", "sem-camada-invisivel", "conferencia-honesta"],
+    "pode": false,
+    "porRender": [
+      "A hierarquia se lê em thumbnail: herói, título, chamada?",
+      "Há marca de terceiros visível na foto?",
+      "A assinatura visual da direção aparece em todos os formatos?",
+      "Há texto cortado, partido ou sobreposto?",
+      "O título \"Pão que tem tempo\" aparece inteiro?"
+    ],
+    "rubrica": "qualidade visual (a definir pelo diretor-de-arte)"
+  }
+}
