@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 
 import { caixaDe } from '@otto/documento';
-import type { Exportacao, RelatorioDeExportacao } from '@otto/shared';
+import type { EventoDaTarefa, Exportacao, RelatorioDeExportacao, Tarefa } from '@otto/shared';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { EventoDoFluxo } from '../api/fluxo';
 import type { ResultadoDeAbrir } from '../api/pecas';
 import { editor as textos } from '../textos/editor';
 import { erros } from '../textos/erros';
 import { exportar as textosDeExportar } from '../textos/exportar';
+import { otto as textosDoOtto } from '../textos/otto';
 import { montarDocumentoDeExemplo } from './bancada/documentoDeExemplo';
 import type { MotorDeRender, RecursosEmFalta } from './canvas/motor';
 import { Editor } from './Editor';
@@ -57,6 +59,7 @@ function montar(
     arquivos?: Partial<NonNullable<FonteDaPeca['arquivos']>>;
     renomear?: FonteDaPeca['renomear'];
     exportacoes?: Partial<NonNullable<FonteDaPeca['exportacoes']>>;
+    tarefas?: Partial<NonNullable<FonteDaPeca['tarefas']>>;
   } = {},
 ) {
   const motor = { ...motorFalso(), ...opcoes.motor };
@@ -84,6 +87,7 @@ function montar(
         }
       : {}),
     ...(opcoes.renomear ? { renomear: opcoes.renomear } : {}),
+    ...(opcoes.tarefas ? { tarefas: tarefasDeMentira(opcoes.tarefas) } : {}),
     ...(opcoes.exportacoes
       ? {
           exportacoes: {
@@ -112,6 +116,46 @@ const EXPORTACAO: Exportacao = {
   falhas: [],
   criadaEm: '2026-10-01T12:00:00.000Z',
 };
+
+const TAREFA: Tarefa = {
+  id: '0199a000-0000-7000-8000-0000000000a1',
+  documentoId: '0199a000-0000-7000-8000-000000000001',
+  tipo: 'pedido',
+  estado: 'rodando',
+  entrada: { tipo: 'pedido', pedido: 'adapta para banner' },
+  etapas: [{ etapa: 'leitura' }, { etapa: 'producao' }],
+  etapa: { etapa: 'producao' },
+  versaoInicial: 3,
+  lotes: 0,
+  tocados: [],
+  pendencias: [],
+  ultimoEvento: -1,
+  criadaEm: '2026-10-02T12:00:00.000Z',
+};
+
+/** A API de tarefas de mentira: sem tarefa viva e com o fluxo parado, a menos que o teste diga outra coisa. */
+function tarefasDeMentira(extra: Partial<NonNullable<FonteDaPeca['tarefas']>>): NonNullable<FonteDaPeca['tarefas']> {
+  const ok = (t: Tarefa) => ({ ok: true as const, tarefa: t });
+  return {
+    limites: vi.fn(async () => ({ podeEnviar: true, tarefasHoje: 0, tarefasPorDia: 30, naFila: 0, naFilaNoMaximo: 3 })),
+    pedir: vi.fn(async () => ok(TAREFA)),
+    daPeca: vi.fn(async () => ({ itens: [] as Tarefa[] })),
+    obter: vi.fn(async () => ok(TAREFA)),
+    fluxo: vi.fn(() => new Promise<'fim' | 'caiu'>(() => undefined)),
+    eventosDesde: vi.fn(async () => undefined),
+    aprovar: vi.fn(async () => ok(TAREFA)),
+    ajustar: vi.fn(async () => ok(TAREFA)),
+    cancelar: vi.fn(async () => ok({ ...TAREFA, estado: 'cancelada' })),
+    aceitar: vi.fn(async () => ok({ ...TAREFA, estado: 'aceita', fim: 'entregue' })),
+    desfazer: vi.fn(async () => ({ ok: true as const, tarefa: { ...TAREFA, estado: 'desfeita' as const }, versao: 9, arvore: EXEMPLO })),
+    descartar: vi.fn(async () => ({ ok: true as const, tarefa: TAREFA, versao: 9, arvore: EXEMPLO })),
+    tentarDeNovo: vi.fn(async () => ok(TAREFA)),
+    antes: vi.fn(async () => undefined),
+    pendencias: vi.fn(async () => []),
+    dispensar: vi.fn(async () => true),
+    ...extra,
+  };
+}
 
 const aberta: ResultadoDeAbrir = {
   estado: 'aberta',
@@ -755,5 +799,133 @@ describe('casca do editor: exportar', () => {
     await act(async () => liberar?.());
     fireEvent.click(await screen.findByRole('button', { name: textosDeExportar.topo.pronto }));
     expect(screen.getByRole('link', { name: textosDeExportar.resultado.baixarArquivo('Peça - Feed.psd') }).getAttribute('href')).toBe('/api/exportacoes/e1/arquivos/0');
+  });
+});
+
+describe('casca do editor: a tarefa do Otto', () => {
+  const camada = EXEMPLO.pranchetas[0]?.filhos.at(-1);
+  if (!camada) throw new Error('falta a camada');
+  const viva = (tarefa: Tarefa) => vi.fn(async () => ({ itens: [tarefa], viva: tarefa.id }));
+  const emRevisao: Tarefa = { ...TAREFA, estado: 'em_revisao', fim: 'entregue', lotes: 2, tocados: [camada.id], resumo: 'Banner pronto.', conferida: true };
+  const enviados = (lotes: Lotes | undefined) => vi.mocked(lotes?.enviar as Lotes['enviar']).mock.calls.map((c) => c[0]);
+
+  async function abrir(tarefas: Parameters<typeof tarefasDeMentira>[0] = {}, opcoes: Parameters<typeof montar>[0] = {}) {
+    const m = montar({ abrir: aberta, lotes: {}, tarefas, ...opcoes });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    return m;
+  }
+  const painel = () => screen.getByRole('region', { name: textosDoOtto.titulo });
+
+  it('sem ter por onde pedir (a bancada), o painel do Otto diz o que vai aparecer ali', async () => {
+    const m = montar({ abrir: aberta, lotes: {} });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    expect(screen.getByText(textos.paineis.otto.vazio)).toBeDefined();
+  });
+
+  it('peça sem tarefa: o painel mostra o campo de pedir, e a edição continua livre', async () => {
+    const { lotes } = await abrir();
+    expect(await within(painel()).findByRole('textbox', { name: textosDoOtto.pedir.campo })).toBeDefined();
+    fireEvent.click(screen.getByRole('treeitem', { name: new RegExp(`^${camada.nome}`) }));
+    await act(async () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+    expect(enviados(lotes)).toHaveLength(1);
+  });
+
+  it('abrir a peça com o Otto trabalhando: mostra as etapas, a peça fica só para leitura e o motivo aparece', async () => {
+    const { lotes } = await abrir({ daPeca: viva(TAREFA) });
+    expect(await within(painel()).findByRole('list', { name: textosDoOtto.espera.etapas })).toBeDefined();
+    expect(screen.getByText(textosDoOtto.trava.trabalhando)).toBeDefined();
+    expect(screen.getByText(textos.topo.salvamento.leitura)).toBeDefined();
+
+    fireEvent.click(screen.getByRole('treeitem', { name: new RegExp(`^${camada.nome}`) }));
+    await act(async () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+    expect(enviados(lotes)).toHaveLength(0);
+    // o aviso da edição recusada diz o motivo de verdade, não "aberta só para leitura"
+    expect(screen.getByRole('alert').textContent).toContain(textosDoOtto.trava.trabalhando);
+  });
+
+  it('a cada lote do Otto o editor relê a peça e o canvas a mostra; ao terminar, vira revisão', async () => {
+    let entregar: ((e: EventoDoFluxo) => void) | undefined;
+    let terminar: ((fim: 'fim') => void) | undefined;
+    const fluxo = vi.fn((_id: string, _de: number, aoReceber: (e: EventoDoFluxo) => void) => {
+      entregar = aoReceber;
+      return new Promise<'fim' | 'caiu'>((seguir) => (terminar = seguir));
+    });
+    // a segunda leitura traz a peça como o Otto a deixou
+    const depoisDoLote: typeof EXEMPLO = { ...EXEMPLO, pranchetas: EXEMPLO.pranchetas.map((p, i) => (i === 0 ? { ...p, nome: 'Banner do Otto' } : p)) };
+    let leituras = 0;
+    const releitura = async () => (++leituras === 1 ? aberta : { ...aberta, peca: { ...aberta.peca, versao: aberta.peca.versao + 1, arvore: depoisDoLote } });
+    const { abrirPeca, motor } = await abrir({ daPeca: viva(TAREFA), fluxo }, { abrir: releitura });
+    await waitFor(() => expect(entregar).toBeDefined());
+    const aberturas = abrirPeca.mock.calls.length;
+
+    const lote: EventoDaTarefa = { tipo: 'lote', loteId: 'l1', descricao: 'Banner', tocados: [camada.id], operacoes: [] };
+    await act(async () => entregar?.({ id: 0, evento: 'lote', dados: lote }));
+    await waitFor(() => expect(abrirPeca.mock.calls.length).toBe(aberturas + 1));
+    await waitFor(() => expect(vi.mocked(motor.definirDocumento).mock.lastCall?.[0]).toBe(depoisDoLote));
+
+    await act(async () => {
+      entregar?.({ evento: 'tarefa', dados: emRevisao });
+      terminar?.('fim');
+    });
+    expect(await within(painel()).findByRole('button', { name: textosDoOtto.revisao.aceitar })).toBeDefined();
+    expect(screen.getByText(textosDoOtto.trava.emRevisao)).toBeDefined();
+  });
+
+  it('em revisão: as camadas do Otto ganham a marca no painel de Camadas, Ctrl+Z não desmonta o conjunto, e "aceitar e editar" libera a edição', async () => {
+    const aceitar = vi.fn(async () => ({ ok: true as const, tarefa: { ...emRevisao, estado: 'aceita' as const } }));
+    const { lotes } = await abrir({ daPeca: viva(emRevisao), aceitar });
+    const linha = await screen.findByRole('treeitem', { name: new RegExp(`^${camada.nome}`) });
+    await waitFor(() => expect(within(linha).getByRole('img', { name: textosDoOtto.revisao.legenda })).toBeDefined());
+
+    await act(async () => fireEvent.keyDown(window, { key: 'z', ctrlKey: true }));
+    expect(lotes?.desfazer).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain(textosDoOtto.trava.desfazerEmRevisao);
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: textosDoOtto.trava.aceitarEEditar })));
+    expect(aceitar).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText(textosDoOtto.trava.emRevisao)).toBeNull());
+    fireEvent.click(linha);
+    await act(async () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+    expect(enviados(lotes)).toHaveLength(1);
+    expect(within(linha).queryByRole('img', { name: textosDoOtto.revisao.legenda })).toBeNull();
+  });
+
+  it('desfazer tudo: o editor adota a peça que a API devolveu', async () => {
+    const semUma = { ...EXEMPLO, pranchetas: EXEMPLO.pranchetas.slice(0, 1) };
+    const desfazer = vi.fn(async () => ({ ok: true as const, tarefa: { ...emRevisao, estado: 'desfeita' as const }, versao: 9, arvore: semUma }));
+    const { motor } = await abrir({ daPeca: viva(emRevisao), desfazer });
+    await act(async () => fireEvent.click(await within(painel()).findByRole('button', { name: textosDoOtto.revisao.desfazer })));
+    await waitFor(() => expect(vi.mocked(motor.definirDocumento).mock.lastCall?.[0].pranchetas).toHaveLength(1));
+  });
+
+  it('segurar "ver o antes" mostra no canvas a peça de antes da tarefa, com o selo; soltar volta', async () => {
+    const semUma = { ...EXEMPLO, pranchetas: EXEMPLO.pranchetas.slice(0, 1) };
+    const { motor } = await abrir({ daPeca: viva(emRevisao), antes: vi.fn(async () => ({ versao: 3, arvore: semUma })) });
+    const botao = await within(painel()).findByRole('button', { name: textosDoOtto.revisao.verOAntes });
+
+    await act(async () => fireEvent.pointerDown(botao));
+    await waitFor(() => expect(vi.mocked(motor.definirDocumento).mock.lastCall?.[0]).toBe(semUma));
+    expect(screen.getByText(textosDoOtto.revisao.seloDoAntes)).toBeDefined();
+
+    await act(async () => fireEvent.pointerUp(botao));
+    expect(vi.mocked(motor.definirDocumento).mock.lastCall?.[0]).toBe(EXEMPLO);
+    expect(screen.queryByText(textosDoOtto.revisao.seloDoAntes)).toBeNull();
+  });
+
+  it('o título da aba diz o estado da tarefa para quem saiu', async () => {
+    await abrir({
+      daPeca: viva({ ...TAREFA, estado: 'aguardando_confirmacao', confirmacao: { cartao: null, plano: { resumo: '', criar: [], alterar: [], remover: [], pontual: false }, motivos: [] } }),
+    });
+    await waitFor(() => expect(document.title).toBe(textosDoOtto.aba.aguardando('Lançamento Crové')));
+    cleanup();
+
+    await abrir({ daPeca: viva(emRevisao) });
+    await waitFor(() => expect(document.title).toBe(textosDoOtto.aba.pronto('Lançamento Crové')));
+  });
+
+  it('nada no painel fala de modelo, token ou custo', async () => {
+    await abrir({ daPeca: viva(emRevisao) });
+    await within(painel()).findByRole('button', { name: textosDoOtto.revisao.aceitar });
+    expect(painel().textContent).not.toMatch(/token|modelo|custo|US\$|R\$|\bIA\b/i);
   });
 });

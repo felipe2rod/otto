@@ -51,6 +51,13 @@ export interface PropriedadesDaArea {
   aoTerMotor?: (motor: MotorDeRender | null) => void;
   /** O motor avisa quando muda a lista de fonte e imagem que não chegou. */
   aoMudarEmFalta?: (emFalta: RecursosEmFalta) => void;
+  /** Camadas e pranchetas tocadas pela tarefa viva do Otto: ganham contorno e rótulo em âmbar. */
+  tocados?: Pick<Armazem<ReadonlySet<string>>, 'obter' | 'assinar'>;
+  /**
+   * Verdadeiro enquanto o canvas mostra outra peça só para comparar (segurar "ver o antes"): a câmera
+   * fica onde o designer a deixou, na ida e na volta.
+   */
+  semEnquadrar?: () => boolean;
   /** Arquivos soltos sobre o canvas. `onde` ausente: fora de toda prancheta, quem recebe decide. */
   aoSoltarArquivos?: (arquivos: File[], onde: OndeSoltou | undefined) => void;
 }
@@ -70,7 +77,7 @@ function camadaDeTexto(doc: Documento | undefined, id: string, travado: boolean)
 const assinaturaDasPranchetas = (doc: Documento | undefined): string => doc?.pranchetas.map((p) => `${p.id}:${p.largura}x${p.altura}`).join('|') ?? '';
 
 export function AreaDoCanvas(props: PropriedadesDaArea) {
-  const { visao, interface: iface, documento, sessao = SEM_SESSAO, criarMotor = criarMotorPadrao, recursos, aoTerMotor, aoMudarEmFalta, aoSoltarArquivos } = props;
+  const { visao, interface: iface, documento, sessao = SEM_SESSAO, criarMotor = criarMotorPadrao, recursos, aoTerMotor, aoMudarEmFalta, aoSoltarArquivos, tocados, semEnquadrar } = props;
   const areaRef = useRef<HTMLDivElement>(null);
   const cenaRef = useRef<HTMLCanvasElement>(null);
   const sobreposicoesRef = useRef<HTMLCanvasElement>(null);
@@ -111,6 +118,7 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
       if (!ctx) return;
       const doc = documento.obter();
       const { selecao } = iface.armazem.obter();
+      const doOtto = tocados?.obter() ?? SEM_TOCADOS;
       const editavel = sessao()?.obter().somenteLeitura === false;
       // as alças somem durante o gesto e enquanto o texto é editado; não existem em peça só para leitura
       const alvo = doc && editavel && !previa.obter() && !iface.armazem.obter().editandoTexto ? alvoDeTransformar(doc, selecao) : undefined;
@@ -123,7 +131,8 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
         contornos: doc ? contornosDaSelecao(doc, selecao, previa.obter()) : [],
         alcas: alvo && noPlano(alvo.quadro, alvo.origem),
         distanciaDoGiro: DISTANCIA_DO_GIRO,
-        tocados: SEM_TOCADOS,
+        tocados: doOtto,
+        contornosDoOtto: doc && doOtto.size > 0 ? contornosDaSelecao(doc, { tipo: 'camadas', ids: [...doOtto] }, null) : [],
         rotuloDaZonaDaInterface: textos.canvas.zonaDaInterface,
       });
     };
@@ -143,6 +152,7 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
 
     // enquadra quando o conjunto de pranchetas muda, não a cada lote
     const aoMudarODocumento = () => {
+      if (semEnquadrar?.()) return agendar();
       const assinatura = assinaturaDasPranchetas(documento.obter());
       if (assinatura && assinatura !== enquadrado) visao.enquadrar(caixaDoConteudo(documento.obter()?.pranchetas ?? []));
       enquadrado = assinatura;
@@ -157,6 +167,7 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
       visao.camera.assinar(agendar),
       iface.armazem.assinar(agendar),
       previa.assinar(agendar),
+      tocados?.assinar(agendar) ?? (() => undefined),
       documento.assinar(aoMudarODocumento),
       ligarControleDaCamera(area, visao, iface),
       ligarControleDeGestos(area, { visao, interface: iface, sessao, previa, aoEditarTexto: iface.editarTexto }),
@@ -166,7 +177,7 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
       for (const f of desligar) f();
       if (quadro) cancelAnimationFrame(quadro);
     };
-  }, [visao, iface, documento, sessao, previa]);
+  }, [visao, iface, documento, sessao, previa, tocados, semEnquadrar]);
 
   // Ciclo de vida do motor. Criar é assíncrono (o motor baixa o WebAssembly): se o componente
   // desmontar antes, o motor é destruído assim que chegar.

@@ -30,6 +30,7 @@ export const pecas = {
   /** O que o designer lê em cada estado de tarefa viva. Nome de estado é do código; este é o da tela. */
   estadoDaTarefa: {
     na_fila: 'Na fila',
+    preparando: 'Otto trabalhando',
     rodando: 'Otto trabalhando',
     aguardando_confirmacao: 'Aguardando seu "pode"',
     em_revisao: 'Pronto para revisar',

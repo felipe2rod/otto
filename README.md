@@ -155,20 +155,21 @@ docker compose run --rm teste pnpm format                        # Biome, corrig
 |---|---|
 | http://localhost:8080 | Site público, estático |
 | http://localhost:8080/editor | Peças: a lista da conta, com criar, renomear, duplicar e excluir |
-| http://localhost:8080/editor/p/:id | O editor da peça, ligado à API: mover (arraste e setas), redimensionar e girar pela alça (uma ou várias camadas, Shift trava a proporção e o giro em 15°), seleção múltipla (Shift+clique), duplicar (Ctrl+J), agrupar e desagrupar (Ctrl+G, Ctrl+Shift+G), editar texto no canvas (dois cliques ou Enter), inserir imagem ou SVG (botão ou soltar no canvas), trocar imagem, painéis de Camadas (arrastar reordena, põe e tira de grupo e leva a outra prancheta) e Propriedades, renomear a peça, desfazer e refazer, e **Exportar** (relatório antes do botão; PSD, PDF, SVG ou PNG; pacote .zip com arquivos, fontes e relatório; escolha de pranchetas, andamento por prancheta, download, exportações recentes e retomada depois de recarregar) |
+| http://localhost:8080/editor/p/:id | O editor da peça, ligado à API: mover (arraste e setas), redimensionar e girar pela alça (uma ou várias camadas, Shift trava a proporção e o giro em 15°), seleção múltipla (Shift+clique), duplicar (Ctrl+J), agrupar e desagrupar (Ctrl+G, Ctrl+Shift+G), editar texto no canvas (dois cliques ou Enter), inserir imagem ou SVG (botão ou soltar no canvas), trocar imagem, painéis de Camadas (arrastar reordena, põe e tira de grupo e leva a outra prancheta) e Propriedades, renomear a peça, desfazer e refazer, e **Exportar** (relatório antes do botão; PSD, PDF, SVG ou PNG; pacote .zip com arquivos, fontes e relatório; escolha de pranchetas, andamento por prancheta, download, exportações recentes e retomada depois de recarregar). **Painel do Otto** à esquerda: pedir (ajuste rápido ou pedido maior, com os limites da conta), o "pode" (direção e plano: aprovar, ajustar, cancelar), a espera (etapas, tempo, o que ele diz, interromper; a peça fica só para leitura, com o motivo), a revisão (camadas dele marcadas no canvas e em Camadas, segurar para ver o antes, pendências, aceitar, desfazer tudo, descartar prancheta, tentar de novo) e a retomada ao reabrir a peça |
 | http://localhost:8080/editor/bancada | **Só em desenvolvimento.** O editor com um documento de exemplo fixo, sem API: o motor de render desenhando, clicar seleciona, arrastar move. Não existe no build de produção |
 
 ```bash
-docker compose run --rm teste pnpm --filter @otto/web test    # estado, câmera, componentes e as três guardas abaixo
+docker compose run --rm teste pnpm --filter @otto/web test    # estado, câmera, componentes e as guardas abaixo
 docker compose run --rm teste pnpm --filter @otto/web build   # next build + teste de pacote por sentinela
 docker build -f docker/Dockerfile --target web -t otto-web .  # imagem de produção (roda os dois acima)
 ```
 
-Três guardas do web, que falham o teste ou o build:
+Guardas do web, que falham o teste ou o build:
 
 - **O site público não alcança o editor nem um `.wasm`** (ADR 019). Pelo código-fonte em `apps/web/testes/fronteira-do-site.test.ts` e pelo que o build gerou em `apps/web/scripts/conferir-pacote-publico.ts`.
 - **Componente não tem texto literal.** Todo texto visível mora em `apps/web/src/textos/` e é rascunho até passar pelo guardião da marca (`apps/web/testes/textos-literais.test.ts`).
 - **O motor de render entra por um arquivo só**, `apps/web/src/editor/canvas/motor.ts`, que carrega `@otto/render/navegador` por `import()` dinâmico. O `canvaskit.js` e o `.wasm` são copiados do pacote para `apps/web/public/motor/<versão>/` por `scripts/copiar-motor.ts`, antes de `next dev` e de `next build`; a pasta é gerada e fica fora do git.
+- **O que a tela não diz.** `apps/web/testes/textos-do-otto.test.ts` percorre todo texto do painel do Otto: nada de modelo, token, custo, "IA" nem nome de fornecedor (o designer vê o tempo). `apps/web/testes/textos-de-exportar.test.ts` faz o mesmo na exportação: nenhuma frase diz que o arquivo abre editável em outro programa.
 - **Rota só de desenvolvimento não chega à produção.** Página com nome terminado em `.dev.tsx` só é rota com `next dev`; o teste de pacote falha se `/editor/bancada` aparecer no build.
 
 ### Testes de navegador
@@ -183,6 +184,7 @@ docker compose run --rm navegador pnpm --filter @otto/web e2e -g "gira"        #
 
 - **Onde ficam:** `apps/web/e2e/*.e2e.ts`, com o apoio em `apps/web/e2e/apoio/`. O resultado (relatório, captura e rastro de cada falha) sai em `apps/web/e2e/resultado/`, fora do git. Para ver um rastro: `npx playwright show-trace <arquivo>.zip` numa máquina com navegador.
 - **Dados:** cada teste cria a peça que usa, pela API, e a arquiva ao terminar. Nenhum depende das peças que já existem na conta nem as altera. Ficam para trás as imagens enviadas e as exportações (que somem sozinhas em 7 dias).
+- **Tarefas do Otto:** `otto.e2e.ts` roda com o modelo roteirizado (confira `MODELO_DO_AGENTE=roteirizado` no worker; com outro valor esses testes gastariam inferência de verdade). A suíte inteira pede 5 tarefas, uma por vez, e a conta de desenvolvimento tem limite por dia (`TAREFAS_POR_DIA_POR_CONTA`, padrão 30): são poucas execuções por dia. A tarefa de briefing começa pela API, com a entrada gravada no roteiro, porque o pedido livre do painel não chega ao "pode" com o roteirizado. No fim de cada teste a tarefa viva da peça é cancelada ou desfeita antes de arquivar.
 - **Sem placa de vídeo:** o Chromium do contêiner desenha o canvas em WebGL por software. Nenhum teste daqui mede quadros por segundo.
 - **Endereços:** o navegador do contêiner usa `localhost:8080` e `localhost:8081`, como o designer; o serviço `navegador` os mapeia para `borda` e `armazenamento` na rede do compose. É por isso que o link assinado de download abre dentro do contêiner.
 - **Seletores:** por papel e por rótulo acessível importado de `apps/web/src/textos/` (a constante, não a frase), ou por atributo. Trocar a redação da tela não quebra os testes; trocar o papel de um controle, sim.

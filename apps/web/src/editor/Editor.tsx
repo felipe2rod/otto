@@ -8,9 +8,11 @@
 // documento: é por ela que TODO gesto (arraste, seta, painel, Delete) vira lote do catálogo, com a
 // fila otimista, o conflito de versão e a falta de conexão tratados num lugar só.
 import { type Documento, type Medidor, type Operacao, todasAsCamadas } from '@otto/documento';
+import type { Tarefa } from '@otto/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { editor as textos } from '../textos/editor';
 import { erros } from '../textos/erros';
+import { duracao, otto as textosDoOtto } from '../textos/otto';
 import { type AmbienteDoEditor, ProvedorDoEditor } from './ambiente';
 import { AreaDoCanvas, type OndeSoltou } from './canvas/AreaDoCanvas';
 import { caixaDoConteudo } from './canvas/guias';
@@ -31,11 +33,14 @@ import { criarArmazem, useArmazem } from './nucleo/armazem';
 import { resolverAtalho } from './nucleo/atalhos';
 import { aplicadorDoCatalogo } from './nucleo/catalogo';
 import { agruparSelecao, desagruparSelecao, duplicarSelecao } from './nucleo/comandos';
+import { criarControleDoOtto } from './nucleo/controleDoOtto';
 import { criarInterface } from './nucleo/interface';
 import { criarSessaoDoDocumento, type Historico, type RespostaDoEnvio, type Salvamento, type SessaoDoDocumento } from './nucleo/sessaoDoDocumento';
+import { emAndamento, inicioDoTempo, naoTerminou, tarefaViva } from './nucleo/tarefaDoOtto';
 import { criarVisao } from './nucleo/visao';
 import { PainelDeCamadas } from './paineis/PainelDeCamadas';
 import { PainelDePropriedades } from './paineis/PainelDePropriedades';
+import { type EstadoDoAviso, PainelDoOtto } from './paineis/PainelDoOtto';
 import { SENTINELA_DO_EDITOR } from './sentinela';
 
 type Sessao = SessaoDoDocumento<Documento, Operacao>;
@@ -59,6 +64,16 @@ export interface EstadoDaPecaAberta {
 const SEM_PECA: EstadoDaPecaAberta = { salvamento: 'salvo', pendentes: 0, versao: 0, somenteLeitura: true };
 /** O servidor fala um catálogo de operações mais novo que o desta página: nenhuma escrita entra até recarregar. */
 const CATALOGO_DESATUALIZADO = 'catalogo_desatualizado';
+const SEM_TOCADOS: ReadonlySet<string> = new Set();
+/** Onde ler a tarefa quando não há por onde pedir (a bancada): um armazém sem tarefa nenhuma. */
+const SEM_OTTO = criarArmazem<{ atual?: { tarefa: Tarefa } }>({});
+
+/** Se o navegador pode avisar quando a tarefa do Otto mudar de estado. */
+function estadoDoAvisoDoNavegador(): EstadoDoAviso {
+  if (typeof Notification === 'undefined') return 'indisponivel';
+  return Notification.permission === 'granted' ? 'ligado' : Notification.permission === 'denied' ? 'negado' : 'a-pedir';
+}
+
 const SEM_HISTORICO: Historico = { podeDesfazer: false, podeRefazer: false };
 const INTERVALO_DE_NOVA_TENTATIVA = 5000;
 /** Quanto esperar antes de cada novo pedido de uma fonte ou imagem que não chegou. Depois da última, só à mão. */
@@ -74,6 +89,13 @@ function focoNoCanvas(): boolean {
 }
 
 const semDestino = async (): Promise<RespostaDoEnvio<Documento>> => ({ tipo: 'recusado', codigo: 'somente_leitura' });
+
+/** Por que a edição está travada pela tarefa do Otto, se está. */
+function fraseDaTrava(tarefa: Pick<Tarefa, 'estado'> | undefined): string | undefined {
+  if (!tarefaViva(tarefa)) return undefined;
+  if (tarefa?.estado === 'em_revisao') return textosDoOtto.trava.emRevisao;
+  return tarefa?.estado === 'aguardando_confirmacao' ? textosDoOtto.trava.aguardando : textosDoOtto.trava.trabalhando;
+}
 
 export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = detectarWebGL }: PropriedadesDoEditor) {
   const [fontePadrao] = useState(() => (fonteDeFora ? undefined : criarFonteDaApi(pecaId)));
@@ -98,6 +120,13 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   const [situacao, setSituacao] = useState<SituacaoDaPeca>({ estado: 'abrindo' });
   const [tentativa, setTentativa] = useState(0);
   const [catalogoVelho, setCatalogoVelho] = useState(false);
+  const catalogoVelhoRef = useRef(false);
+  // A tarefa do Otto: as camadas que ela tocou (a marca em âmbar), a peça de antes (para "segure
+  // para ver o antes") e o aviso do navegador.
+  const [tocadosPeloOtto] = useState(() => criarArmazem<ReadonlySet<string>>(SEM_TOCADOS));
+  const [antes] = useState(() => criarArmazem<Documento | null>(null));
+  const [avisoDoNavegador] = useState(() => criarArmazem<EstadoDoAviso>('indisponivel'));
+  const nomeRef = useRef<string | undefined>(undefined);
   const paineisVisiveis = useArmazem(iface.armazem, (e) => e.paineisVisiveis);
   const mensagem = useArmazem(aviso, (a) => a);
   const semConexao = useArmazem(estado, (e) => e.salvamento === 'sem-conexao');
@@ -119,6 +148,45 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   });
   const [aoMudarEmFalta] = useState(() => (emFalta: RecursosEmFalta) => faltas.definir((f) => ({ ...f, emFalta })));
 
+  /** A peça só aceita edição com destino para o lote, catálogo em dia e sem tarefa do Otto viva. */
+  const [atualizarTrava] = useState(() => () => {
+    sessaoRef.current?.definirSomenteLeitura(!fonte.lotes || catalogoVelhoRef.current || tarefaViva(ottoRef.current?.armazem.obter().atual?.tarefa));
+  });
+
+  /** A peça mudou no servidor por causa da tarefa do Otto: adota a que veio, ou busca a de agora. */
+  const [aoMudarAPeca] = useState(() => async (peca?: { versao: number; arvore: Documento }) => {
+    if (peca) return sessaoRef.current?.adotar({ doc: peca.arvore, versao: peca.versao });
+    const atual = await fonte.abrir(pecaId);
+    if (atual.estado !== 'aberta') return;
+    sessaoRef.current?.adotar({ doc: atual.peca.arvore, versao: atual.peca.versao });
+    historico.definir(atual.peca.historico);
+  });
+
+  const [otto] = useState(() =>
+    fonte.tarefas
+      ? criarControleDoOtto({
+          api: fonte.tarefas,
+          aoMudarAPeca: (peca) => void aoMudarAPeca(peca),
+          // quem não está olhando é avisado pelo navegador, se deixou; o título da aba muda de qualquer jeito
+          aoMudarDeEstado: (tarefa, anterior) => {
+            if (anterior === undefined || typeof Notification === 'undefined' || Notification.permission !== 'granted' || !document.hidden) return;
+            const peca = nomeRef.current ?? '';
+            const texto =
+              tarefa.estado === 'aguardando_confirmacao'
+                ? textosDoOtto.aviso.aguardando(peca)
+                : naoTerminou(tarefa)
+                  ? textosDoOtto.aviso.naoTerminou(peca)
+                  : tarefa.estado === 'em_revisao'
+                    ? textosDoOtto.aviso.pronto(peca)
+                    : undefined;
+            if (texto) new Notification(texto);
+          },
+        })
+      : undefined,
+  );
+  const ottoRef = useRef(otto);
+  const tarefaDoOtto = useArmazem(otto?.armazem ?? SEM_OTTO, (e) => e.atual?.tarefa);
+
   /** Seleciona camadas pelo nome, na peça como está agora (os ids de nó novo só existem depois do lote). */
   const [selecionarPorNome] = useState(() => (nomes: string[]) => {
     const doc = documento.obter();
@@ -138,7 +206,11 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       if (!lote || !sessao) return false;
       const r = sessao.aplicar(lote.descricao, lote.operacoes);
       // o motivo local é texto do catálogo, escrito para o agente: a tela diz a frase dela
-      if (!r.ok) aviso.definir({ texto: erros.doCodigo(r.motivo === 'somente_leitura' || r.motivo === 'sem_conexao' ? r.motivo : 'lote_invalido'), tom: 'erro' });
+      if (!r.ok) {
+        // com tarefa do Otto viva, o motivo de verdade é ela, não "aberta só para leitura"
+        const daTarefa = r.motivo === 'somente_leitura' ? fraseDaTrava(ottoRef.current?.armazem.obter().atual?.tarefa) : undefined;
+        aviso.definir({ texto: daTarefa ?? erros.doCodigo(r.motivo === 'somente_leitura' || r.motivo === 'sem_conexao' ? r.motivo : 'lote_invalido'), tom: 'erro' });
+      }
       return r.ok;
     };
     const envio = criarEnvio({
@@ -158,8 +230,19 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       enviando,
     });
     const avisar = (texto: string) => aviso.definir({ texto, tom: 'erro' });
-    return { interface: iface, documento, somenteLeitura, faltas, listarFontes: () => fonte.listarFontes(), aplicar, avisar, inserirArquivos: envio.inserir, trocarImagem: envio.trocarImagem };
-  }, [iface, documento, somenteLeitura, faltas, fonte, aviso, enviando, selecionarPorNome]);
+    return {
+      interface: iface,
+      documento,
+      somenteLeitura,
+      faltas,
+      tocadosPeloOtto,
+      listarFontes: () => fonte.listarFontes(),
+      aplicar,
+      avisar,
+      inserirArquivos: envio.inserir,
+      trocarImagem: envio.trocarImagem,
+    };
+  }, [iface, documento, somenteLeitura, faltas, tocadosPeloOtto, fonte, aviso, enviando, selecionarPorNome]);
 
   // Abre a peça e cria a sessão do documento. Sem WebGL nem busca: a peça não abre assim.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `tentativa` existe para o "tentar de novo" repetir a busca
@@ -196,8 +279,8 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
           gerarId: () => crypto.randomUUID(),
         },
       );
-      if (!lotes) sessao.definirSomenteLeitura(true);
       sessaoRef.current = sessao;
+      atualizarTrava();
       historico.definir(aberta.peca.historico);
 
       let docAnterior: Documento | undefined;
@@ -221,7 +304,8 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
           // e a faixa fica, com a única saída que existe (recarregar).
           if (e.recusa.codigo === CATALOGO_DESATUALIZADO) {
             setCatalogoVelho(true);
-            sessao.definirSomenteLeitura(true);
+            catalogoVelhoRef.current = true;
+            atualizarTrava();
           } else aviso.definir({ texto: erros.doCodigo(e.recusa.codigo), tom: 'erro' });
           sessao.dispensarRecusa();
         }
@@ -238,9 +322,68 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   }, [fonte, pecaId, comWebGL, documento, estado, somenteLeitura, faltas, aviso, historico, tentativa]);
 
   const nome = situacao.estado === 'aberta' ? situacao.nome : undefined;
+  nomeRef.current = nome;
+
+  // O título da aba é o primeiro aviso para quem saiu: diz se o Otto está trabalhando (e há quanto
+  // tempo), se espera o "pode" ou se terminou.
+  const estadoDaTarefa = tarefaDoOtto?.estado;
+  const tarefaParou = naoTerminou(tarefaDoOtto);
+  const inicioDaTarefa = tarefaDoOtto && emAndamento(tarefaDoOtto) ? inicioDoTempo(tarefaDoOtto) : undefined;
   useEffect(() => {
-    document.title = textos.tituloDaPagina(nome);
-  }, [nome]);
+    const titular = () => {
+      const t = textosDoOtto.aba;
+      if (nome === undefined || estadoDaTarefa === undefined) document.title = textos.tituloDaPagina(nome);
+      else if (estadoDaTarefa === 'na_fila') document.title = t.naFila(nome);
+      else if (inicioDaTarefa !== undefined) document.title = t.trabalhando(duracao(Math.floor((Date.now() - inicioDaTarefa) / 60_000) * 60_000), nome);
+      else if (estadoDaTarefa === 'aguardando_confirmacao') document.title = t.aguardando(nome);
+      else if (estadoDaTarefa === 'em_revisao') document.title = tarefaParou ? t.naoTerminou(nome) : t.pronto(nome);
+      else document.title = textos.tituloDaPagina(nome);
+    };
+    titular();
+    if (inicioDaTarefa === undefined) return;
+    const relogio = setInterval(titular, 30_000);
+    return () => clearInterval(relogio);
+  }, [nome, estadoDaTarefa, tarefaParou, inicioDaTarefa]);
+
+  // A tarefa viva trava a edição, e as camadas que ela tocou ficam marcadas até a revisão acabar.
+  useEffect(() => {
+    if (!otto) return;
+    const espelhar = () => {
+      const { atual } = otto.armazem.obter();
+      atualizarTrava();
+      tocadosPeloOtto.definir(atual && tarefaViva(atual.tarefa) ? atual.tocados : SEM_TOCADOS);
+      if (atual?.tarefa.estado !== 'em_revisao') antes.definir(null);
+    };
+    espelhar();
+    return otto.armazem.assinar(espelhar);
+  }, [otto, atualizarTrava, tocadosPeloOtto, antes]);
+
+  useEffect(() => {
+    avisoDoNavegador.definir(estadoDoAvisoDoNavegador());
+    return () => otto?.parar();
+  }, [otto, avisoDoNavegador]);
+
+  /** Segurar "ver o antes": o canvas mostra a peça de antes da tarefa. Soltar antes de ela chegar não mostra nada. */
+  const segurando = useRef(false);
+  const [verOAntes] = useState(() => async (ligado: boolean) => {
+    segurando.current = ligado;
+    if (!ligado) return antes.definir(null);
+    const id = ottoRef.current?.armazem.obter().atual?.tarefa.id;
+    const peca = id ? await fonte.tarefas?.antes(id) : undefined;
+    if (peca && segurando.current) antes.definir(peca.arvore);
+  });
+  const vendoOAntes = useArmazem(antes, (a) => a !== null);
+  const [comparando] = useState(() => () => antes.obter() !== null);
+  /** O que o canvas desenha: a peça, ou a de antes da tarefa enquanto o botão estiver seguro. */
+  const [documentoNoCanvas] = useState(() => ({
+    obter: () => antes.obter() ?? documento.obter(),
+    assinar: (ouvinte: () => void) => {
+      const parar = [documento.assinar(ouvinte), antes.assinar(ouvinte)];
+      return () => {
+        for (const f of parar) f();
+      };
+    },
+  }));
 
   // Desfazer e refazer são da API: ela grava um lote de reversão e devolve a árvore, que a sessão adota.
   const [reverter] = useState(() => async (qual: 'desfazer' | 'refazer') => {
@@ -249,6 +392,8 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
     if (!sessao || !lotes || revertendo.current) return;
     const e = sessao.obter();
     // com lote por confirmar a versão base ainda não é a do servidor: espera a fila esvaziar
+    // a tarefa do Otto é uma unidade do histórico: em revisão, Ctrl+Z não a desmonta lote a lote
+    if (ottoRef.current?.armazem.obter().atual?.tarefa.estado === 'em_revisao') return aviso.definir({ texto: textosDoOtto.trava.desfazerEmRevisao, tom: 'erro' });
     if (e.somenteLeitura || e.pendentes > 0) return;
     // a API já disse que não há: o botão está desligado e o atalho não faz a viagem
     if (!historico.obter()[qual === 'desfazer' ? 'podeDesfazer' : 'podeRefazer']) return;
@@ -261,7 +406,8 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       historico.definir(r.historico);
     } else if (r.codigo === CATALOGO_DESATUALIZADO) {
       setCatalogoVelho(true);
-      sessao.definirSomenteLeitura(true);
+      catalogoVelhoRef.current = true;
+      atualizarTrava();
     } else aviso.definir({ texto: erros.doCodigo(r.codigo), tom: 'erro' });
   });
 
@@ -271,6 +417,10 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   // Recarregou a página ou reabriu a peça com uma exportação em curso: volta a acompanhá-la. As já
   // terminadas não viram aviso no topo; ficam na lista de recentes do diálogo.
   const pecaAberta = situacao.estado === 'aberta';
+  // Abrir a peça (ou recarregar a página) volta à tarefa viva dela, no ponto em que está.
+  useEffect(() => {
+    if (pecaAberta) void otto?.iniciar();
+  }, [pecaAberta, otto]);
   useEffect(() => {
     if (!pecaAberta || !exportador || !fonte.exportacoes) return;
     let desmontado = false;
@@ -463,7 +613,15 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
           <>
             <BarraDeFerramentas interface={iface} podeInserir={podeEditar && fonte.arquivos !== undefined} aoInserir={(arquivos) => void ambiente.inserirArquivos(arquivos)} />
             <div className={estilos.esquerda}>
-              <Painel titulo={textos.paineis.otto.titulo} vazio={textos.paineis.otto.vazio} destaque />
+              {otto ? (
+                <PainelDoOtto
+                  otto={otto}
+                  aoVerOAntes={(ligado) => void verOAntes(ligado)}
+                  aviso={{ estado: avisoDoNavegador, pedir: () => void Notification.requestPermission().then(() => avisoDoNavegador.definir(estadoDoAvisoDoNavegador())) }}
+                />
+              ) : (
+                <Painel titulo={textos.paineis.otto.titulo} vazio={textos.paineis.otto.vazio} destaque />
+              )}
             </div>
           </>
         )}
@@ -474,7 +632,9 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
               <AreaDoCanvas
                 visao={visao}
                 interface={iface}
-                documento={documento}
+                documento={documentoNoCanvas}
+                tocados={tocadosPeloOtto}
+                semEnquadrar={comparando}
                 sessao={obterSessao}
                 aoTerMotor={aoTerMotor}
                 aoMudarEmFalta={aoMudarEmFalta}
@@ -487,6 +647,22 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
                 <p className={estilos.semConexao} role="status">
                   {erros.doCodigo('sem_conexao')}
                 </p>
+              )}
+              {vendoOAntes && (
+                <p className={estilos.seloDoAntes} role="status" data-selo-do-antes>
+                  {textosDoOtto.revisao.seloDoAntes}
+                </p>
+              )}
+              {/* a edição travada, dita uma vez no topo do canvas, com o motivo */}
+              {tarefaViva(tarefaDoOtto) && !catalogoVelho && (
+                <div className={estilos.faixaDoOtto} role="status" data-trava-do-otto={estadoDaTarefa}>
+                  <p>{fraseDaTrava(tarefaDoOtto)}</p>
+                  {estadoDaTarefa === 'em_revisao' && (
+                    <button type="button" onClick={() => void otto?.aceitar()}>
+                      {textosDoOtto.trava.aceitarEEditar}
+                    </button>
+                  )}
+                </div>
               )}
               {catalogoVelho && (
                 <div className={estilos.faixaDeRecarregar} role="alert">

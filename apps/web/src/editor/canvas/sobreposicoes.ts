@@ -27,6 +27,8 @@ export interface Cena {
   selecao: Selecao;
   /** O contorno de cada camada selecionada, no plano do editor, com a rotação dela (canvas/alvo.ts). */
   contornos: readonly Quadro[];
+  /** O contorno de cada camada tocada pela tarefa do Otto, em âmbar, até a revisão acabar. */
+  contornosDoOtto?: readonly Quadro[];
   /** O quadro que mostra as alças e a pega de girar: o da camada, ou o do conjunto. Ausente: sem alças. */
   alcas?: Quadro | undefined;
   /** A que distância do lado de cima fica a pega de girar, em pixels de tela. */
@@ -63,7 +65,12 @@ type Contexto = Pick<
 export function desenharSobreposicoes(ctx: Contexto, cena: Cena): void {
   const { camera, area, pixelsPorPonto: dpr } = cena;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, area.largura * dpr, area.altura * dpr);
+  // Limpa em duas metades, de propósito. Um clearRect que cobre o canvas inteiro, num quadro em que
+  // nada mais é desenhado (a peça ficou sem prancheta), foi descartado pelo Chromium dos testes de
+  // navegador (WebGL por software): a tela continuava mostrando rótulos e contornos do quadro anterior.
+  const meio = Math.ceil((area.largura * dpr) / 2);
+  ctx.clearRect(0, 0, meio, area.altura * dpr);
+  ctx.clearRect(meio, 0, area.largura * dpr - meio, area.altura * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const posicoes = disporPranchetas(cena.pranchetas);
@@ -124,6 +131,15 @@ export function desenharSobreposicoes(ctx: Contexto, cena: Cena): void {
     ctx.closePath();
     ctx.stroke();
   };
+
+  // camadas tocadas pelo Otto: contorno fino em âmbar, tracejado (não depende só da cor)
+  if (cena.contornosDoOtto?.length) {
+    ctx.strokeStyle = AMBAR;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    for (const q of cena.contornosDoOtto) tracar(q);
+    ctx.setLineDash([]);
+  }
 
   // contorno de cada camada selecionada, girado como ela
   ctx.strokeStyle = LARANJA;

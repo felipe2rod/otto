@@ -194,3 +194,14 @@
   color: var(--ambar);
   font: 700 10px var(--mono);
 }
+
+/* tocada pela tarefa do Otto, até a revisão acabar: âmbar é o que o Otto propôs */
+.marcaDoOtto {
+  flex: none;
+  color: var(--ambar);
+  font-size: 9px;
+}
+
+.linha[data-otto="sim"] {
+  box-shadow: inset -2px 0 var(--ambar);
+}

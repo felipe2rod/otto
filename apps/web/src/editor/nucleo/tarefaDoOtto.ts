@@ -1,99 +1,97 @@
-// Estado da tarefa do Otto na tela. Função pura: recebe a tarefa e um evento, devolve a tarefa.
-// Os nomes de estado, etapa e fim são os do contrato (docs/mvp/backend.md, seção 7.5). O que o
-// designer lê em cada estado fica em textos/, não aqui.
-//
-// Esqueleto da fatia 0: sem rede. O fluxo de eventos e a fotografia inicial entram na fatia da tarefa.
+// A tarefa do Otto como a tela a vê. Funções puras: recebem a tarefa na tela e uma fotografia ou um
+// evento do fluxo, e devolvem a tarefa na tela. Os nomes de estado, etapa e fim são os do contrato
+// (packages/shared/src/tarefa.ts). O que o designer lê em cada um fica em textos/otto.ts, não aqui.
+import { ESTADOS_DE_TAREFA_EM_ANDAMENTO, ESTADOS_VIVOS_DA_TAREFA, type EtapaDaTarefa, type EventoDaTarefa, type Tarefa } from '@otto/shared';
 
-export type EstadoDaTarefa = 'na_fila' | 'rodando' | 'aguardando_confirmacao' | 'em_revisao' | 'aceita' | 'aceita_em_parte' | 'desfeita' | 'cancelada' | 'falhou';
-
-/** Como o trabalho parou. Vale quando o estado deixa de ser `rodando`. */
-export type FimDaTarefa = 'entregue' | 'cancelada' | 'erro' | 'limite_de_passos' | 'interrompida';
+/** Um evento do fluxo, guardado para o registro fechado ("como o Otto está trabalhando"). */
+export interface LinhaDoRegistro {
+  sequencia: number;
+  evento: EventoDaTarefa;
+}
 
 export interface TarefaNaTela {
-  id: string;
-  estado: EstadoDaTarefa;
-  etapa?: string;
-  fim?: FimDaTarefa;
-  resumo?: string;
-  pendencias?: readonly string[];
-  /** Camadas e pranchetas tocadas pelos lotes da tarefa: é o que a marca em âmbar lê. */
+  /** A fotografia mais recente, com o que os eventos já acrescentaram. */
+  tarefa: Tarefa;
+  registro: readonly LinhaDoRegistro[];
+  /** Camadas e pranchetas tocadas pela tarefa: é o que a marca em âmbar lê. */
   tocados: ReadonlySet<string>;
-  /** Sequência do último evento aplicado. Evento com sequência menor ou igual é ignorado. */
+  /** Sequência do último evento aplicado; -1 se nenhum. Evento com sequência menor ou igual é ignorado. */
   ultimaSequencia: number;
 }
 
-export interface EventoDaTarefa {
-  sequencia: number;
-  tipo: string;
-  dados: Record<string, unknown>;
+const juntar = (a: ReadonlySet<string>, b: readonly string[]): ReadonlySet<string> => (b.every((id) => a.has(id)) ? a : new Set([...a, ...b]));
+
+export function novaTarefaNaTela(tarefa: Tarefa): TarefaNaTela {
+  return { tarefa, registro: [], tocados: new Set(tarefa.tocados), ultimaSequencia: -1 };
 }
 
-export function novaTarefa(inicial: { id: string; estado: EstadoDaTarefa; fim?: FimDaTarefa; etapa?: string; tocados?: Iterable<string>; ultimaSequencia?: number }): TarefaNaTela {
-  return {
-    id: inicial.id,
-    estado: inicial.estado,
-    ...(inicial.fim ? { fim: inicial.fim } : {}),
-    ...(inicial.etapa ? { etapa: inicial.etapa } : {}),
-    tocados: new Set(inicial.tocados ?? []),
-    ultimaSequencia: inicial.ultimaSequencia ?? 0,
-  };
+/**
+ * A fotografia que o servidor manda quando o estado muda. Ela é a verdade sobre o estado; o registro
+ * e as camadas tocadas que os eventos já trouxeram continuam.
+ */
+export function receberFotografia(naTela: TarefaNaTela, tarefa: Tarefa): TarefaNaTela {
+  if (tarefa.id !== naTela.tarefa.id) return novaTarefaNaTela(tarefa);
+  return { ...naTela, tarefa, tocados: juntar(naTela.tocados, tarefa.tocados) };
 }
 
-const ESTADOS: ReadonlySet<string> = new Set<EstadoDaTarefa>(['na_fila', 'rodando', 'aguardando_confirmacao', 'em_revisao', 'aceita', 'aceita_em_parte', 'desfeita', 'cancelada', 'falhou']);
-const FINS: ReadonlySet<string> = new Set<FimDaTarefa>(['entregue', 'cancelada', 'erro', 'limite_de_passos', 'interrompida']);
+/** Eventos que só atualizam o estado e não entram no registro que o designer lê. */
+const FORA_DO_REGISTRO: ReadonlySet<EventoDaTarefa['tipo']> = new Set(['etapas', 'direcao', 'plano']);
 
-const texto = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
-const textos = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
-
-/** Aplica um evento. Repetido ou atrasado devolve a MESMA tarefa: receber duas vezes não muda nada. */
-export function receberEvento(tarefa: TarefaNaTela, evento: EventoDaTarefa): TarefaNaTela {
-  if (evento.sequencia <= tarefa.ultimaSequencia) return tarefa;
-  const proxima: TarefaNaTela = { ...tarefa, ultimaSequencia: evento.sequencia };
-  const { dados } = evento;
+/** Aplica um evento do fluxo. Repetido ou atrasado devolve a MESMA tarefa: receber duas vezes não muda nada. */
+export function receberEvento(naTela: TarefaNaTela, sequencia: number, evento: EventoDaTarefa): TarefaNaTela {
+  if (sequencia <= naTela.ultimaSequencia) return naTela;
+  const proxima: TarefaNaTela = { ...naTela, ultimaSequencia: sequencia, registro: FORA_DO_REGISTRO.has(evento.tipo) ? naTela.registro : [...naTela.registro, { sequencia, evento }] };
+  const { tarefa } = naTela;
 
   switch (evento.tipo) {
-    case 'estado': {
-      const estado = texto(dados.estado);
-      const fim = texto(dados.fim);
-      if (estado && ESTADOS.has(estado)) proxima.estado = estado as EstadoDaTarefa;
-      if (fim && FINS.has(fim)) proxima.fim = fim as FimDaTarefa;
+    case 'etapa':
+      proxima.tarefa = { ...tarefa, etapa: { etapa: evento.etapa, ...(evento.prancheta ? { prancheta: evento.prancheta } : {}), ...(evento.rodada !== undefined ? { rodada: evento.rodada } : {}) } };
       return proxima;
-    }
-    case 'etapa': {
-      const etapa = texto(dados.etapa);
-      if (etapa) proxima.etapa = etapa;
+    case 'etapas':
+      proxima.tarefa = { ...tarefa, etapas: evento.previstas };
       return proxima;
-    }
-    case 'lote': {
-      const novos = textos(dados.tocados);
-      if (novos.length > 0) proxima.tocados = new Set([...tarefa.tocados, ...novos]);
+    case 'lote':
+      proxima.tocados = juntar(naTela.tocados, evento.tocados);
       return proxima;
-    }
-    case 'entrega': {
-      const resumo = texto(dados.resumo);
-      if (resumo) proxima.resumo = resumo;
-      proxima.pendencias = textos(dados.pendencias);
+    case 'entrega':
+      proxima.tarefa = { ...tarefa, resumo: evento.resumo, pendencias: evento.pendencias };
       return proxima;
-    }
     default:
       return proxima;
   }
 }
 
-/** Enquanto o Otto trabalha ou espera o "pode", o designer navega e seleciona, mas não edita. */
-export function documentoSomenteLeitura(tarefa: TarefaNaTela | undefined): boolean {
-  return tarefa?.estado === 'rodando' || tarefa?.estado === 'aguardando_confirmacao';
+export type SituacaoDaEtapa = 'feita' | 'atual' | 'por-vir';
+
+const mesmaEtapa = (a: EtapaDaTarefa, b: EtapaDaTarefa): boolean => a.etapa === b.etapa && (a.prancheta?.nome ?? '') === (b.prancheta?.nome ?? '') && (a.rodada ?? 1) === (b.rodada ?? 1);
+
+/**
+ * As etapas previstas com a situação de cada uma. Não é barra de progresso: o ciclo do Otto pode voltar
+ * (da conferência para a produção de outra prancheta), e a lista mostra onde ele ESTÁ, não uma fração.
+ */
+export function etapasNaTela(tarefa: Pick<Tarefa, 'etapa' | 'etapas'>): { etapa: EtapaDaTarefa; situacao: SituacaoDaEtapa }[] {
+  const { etapa: atual, etapas } = tarefa;
+  if (!atual) return etapas.map((etapa) => ({ etapa, situacao: 'por-vir' }));
+  let indice = etapas.findIndex((e) => mesmaEtapa(e, atual));
+  // a etapa atual não coincide com a prancheta prevista (o ciclo deu o id depois): vale a etapa de mesmo nome
+  if (indice < 0) indice = etapas.findIndex((e) => e.etapa === atual.etapa);
+  // etapa fora da previsão: entra no fim da lista, como a atual
+  if (indice < 0) return [...etapas.map((etapa) => ({ etapa, situacao: 'feita' as const })), { etapa: atual, situacao: 'atual' }];
+  return etapas.map((etapa, i) => ({ etapa, situacao: i < indice ? 'feita' : i === indice ? 'atual' : 'por-vir' }));
 }
 
-/** "Não terminou": parou sem entregar. O que foi feito, se houve, está no conjunto para revisar. */
-export function naoTerminou(tarefa: TarefaNaTela | undefined): boolean {
+/** A tarefa ocupa a peça: enquanto vive, o designer navega e seleciona, mas não edita. */
+export const tarefaViva = (tarefa: Pick<Tarefa, 'estado'> | undefined): boolean => tarefa !== undefined && ESTADOS_VIVOS_DA_TAREFA.includes(tarefa.estado);
+
+/** O Otto está trabalhando (ou na fila): é quando o fluxo de eventos fica aberto. */
+export const emAndamento = (tarefa: Pick<Tarefa, 'estado'> | undefined): boolean => tarefa !== undefined && ESTADOS_DE_TAREFA_EM_ANDAMENTO.includes(tarefa.estado);
+
+/** "Não terminou": parou sem entregar. O que foi feito, se houve, está em revisão. */
+export function naoTerminou(tarefa: Pick<Tarefa, 'estado' | 'fim'> | undefined): boolean {
   if (!tarefa) return false;
   if (tarefa.estado === 'falhou') return true;
   return tarefa.estado === 'em_revisao' && tarefa.fim !== undefined && tarefa.fim !== 'entregue';
 }
 
-/** Uma peça tem no máximo uma tarefa viva: qualquer estado antes de aceita, desfeita ou cancelada. */
-export function tarefaViva(tarefa: TarefaNaTela | undefined): boolean {
-  if (!tarefa) return false;
-  return tarefa.estado === 'na_fila' || tarefa.estado === 'rodando' || tarefa.estado === 'aguardando_confirmacao' || tarefa.estado === 'em_revisao' || tarefa.estado === 'falhou';
-}
+/** De quando contar o tempo que o designer vê: do começo da produção, ou do pedido enquanto ela não começa. */
+export const inicioDoTempo = (tarefa: Pick<Tarefa, 'criadaEm' | 'iniciadaEm'>): number => Date.parse(tarefa.iniciadaEm ?? tarefa.criadaEm);

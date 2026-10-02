@@ -6,6 +6,7 @@ import { criarCliente } from '../api/cliente';
 import { type ApiDeExportacoes, criarApiDeExportacoes } from '../api/exportacoes';
 import { type ApiDeLotes, criarApiDeLotes } from '../api/lotes';
 import { criarApiDePecas, type ResultadoDeAbrir } from '../api/pecas';
+import { type ApiDeTarefas, criarApiDeTarefas } from '../api/tarefas';
 import type { FamiliaDeFonte } from './ambiente';
 import type { RecursosDoRender } from './canvas/motor';
 import { criarRecursosDoRender } from './canvas/recursos';
@@ -18,6 +19,8 @@ export interface FonteDaPeca {
   arquivos?: ApiDeArquivos;
   /** Relatório, pedido e consulta de exportação. Ausente: o botão Exportar fica desligado. */
   exportacoes?: ApiDeExportacoes;
+  /** A tarefa do Otto: pedir, acompanhar, o "pode" e a revisão. Ausente: o painel do Otto fica vazio. */
+  tarefas?: ApiDeTarefas;
   /** Renomear a peça (o nome é do registro, não da árvore). Ausente: o nome não se troca daqui. */
   renomear?(id: string, nome: string): Promise<{ ok: true; nome: string } | { ok: false; codigo: string }>;
   /** Bytes de imagem e de fonte para o motor. */
@@ -34,6 +37,7 @@ export function criarFonteDaApi(pecaId: string): FonteDaPeca {
     renomear: pecas.renomear,
     arquivos: criarApiDeArquivos(cliente),
     exportacoes: criarApiDeExportacoes(cliente, pecaId),
+    tarefas: criarApiDeTarefas(cliente, pecaId),
     lotes: criarApiDeLotes(cliente, pecaId),
     recursos: criarRecursosDoRender(),
     listarFontes() {

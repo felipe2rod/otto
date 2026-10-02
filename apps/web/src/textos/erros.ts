@@ -19,6 +19,14 @@ const frases: Readonly<Record<string, string>> = {
   corpo_grande_demais: 'Essa alteração é grande demais para enviar de uma vez. Ela não entrou.',
   pedido_invalido: 'Esse nome não foi aceito. Use até 120 caracteres.',
   nao_encontrado: 'Essa peça não existe mais.',
+  // tarefa do Otto
+  revisao_pendente: 'As alterações do Otto estão em revisão. Aceite ou desfaça para voltar a editar.',
+  tarefa_em_andamento: 'Esta peça já tem uma tarefa do Otto. Espere ela terminar, ou interrompa.',
+  limite_de_tarefas: 'Esta conta chegou ao limite de tarefas por agora. Espere uma terminar, ou tente amanhã.',
+  limite_diario: 'Hoje não consigo começar tarefas novas. O limite volta amanhã.',
+  tarefa_fora_do_estado: 'A tarefa já mudou de estado. Atualizei o painel.',
+  editado_depois: 'A peça foi editada depois desta tarefa.',
+  prancheta_nao_descartavel: 'Essa prancheta não foi criada por esta tarefa: não dá para descartar daqui.',
   // exportação
   nada_para_exportar: 'Esta peça não tem prancheta para exportar.',
   prancheta_desconhecida: 'Uma das pranchetas escolhidas não existe mais na peça. Escolha de novo.',

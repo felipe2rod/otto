@@ -15,7 +15,7 @@ export function documentoDeTeste(operacoes: unknown[]): Documento {
   return r.doc;
 }
 
-export function ambienteDeTeste(doc: Documento | undefined, opcoes: { somenteLeitura?: boolean; faltas?: FaltasDoRender } = {}) {
+export function ambienteDeTeste(doc: Documento | undefined, opcoes: { somenteLeitura?: boolean; faltas?: FaltasDoRender; tocadosPeloOtto?: readonly string[] } = {}) {
   const documento = criarArmazem<Documento | undefined>(doc);
   const iface = criarInterface();
   const lotes: LoteParaAplicar[] = [];
@@ -35,6 +35,7 @@ export function ambienteDeTeste(doc: Documento | undefined, opcoes: { somenteLei
     },
     faltas: criarArmazem<FaltasDoRender>(opcoes.faltas ?? SEM_FALTAS),
     avisar: vi.fn(),
+    tocadosPeloOtto: criarArmazem<ReadonlySet<string>>(new Set(opcoes.tocadosPeloOtto ?? [])),
     trocarImagem: vi.fn(async () => undefined),
     inserirArquivos: vi.fn(async () => undefined),
     listarFontes: async () => [

@@ -117,6 +117,28 @@ describe('área do canvas', () => {
     expect(visao.camera.obter().zoom).toBeLessThan(1);
   });
 
+  it('comparar com outra peça (ver o antes) não mexe na câmera do designer, nem ao voltar', async () => {
+    const { motor } = motorFalso();
+    const visao = criarVisao();
+    const documento = criarArmazem<Documento | undefined>(undefined);
+    let comparando = false;
+    render(<AreaDoCanvas visao={visao} interface={criarInterface()} documento={documento} criarMotor={async () => motor} semEnquadrar={() => comparando} />);
+    await waitFor(() => expect(motor.definirCamera).toHaveBeenCalled());
+    visao.definirArea({ largura: 1000, altura: 800 });
+    act(() => documento.definir(EXEMPLO));
+    // o designer aproximou para olhar um detalhe
+    const doDesigner = { x: -300, y: -200, zoom: 2 };
+    act(() => visao.camera.definir(doDesigner));
+
+    comparando = true;
+    act(() => documento.definir({ ...EXEMPLO, pranchetas: [] }));
+    expect(motor.definirDocumento).toHaveBeenLastCalledWith(expect.objectContaining({ pranchetas: [] }));
+    comparando = false;
+    act(() => documento.definir(EXEMPLO));
+
+    expect(visao.camera.obter()).toEqual(doDesigner);
+  });
+
   it('a prévia do arraste chega ao motor, e o fim dela também', async () => {
     const { motor, previa } = montar();
     await waitFor(() => expect(motor.definirCamera).toHaveBeenCalled());

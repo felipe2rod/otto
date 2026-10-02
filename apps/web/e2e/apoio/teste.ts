@@ -135,7 +135,8 @@ export class Editor {
       await this.page.waitForTimeout(3000);
       await deNovo.click().catch(() => undefined);
     }
-    await expect(this.salvamento).toHaveText(textos.topo.salvamento.salvo, { timeout: 90_000 });
+    // salva, ou somente leitura (a peça com tarefa do Otto viva abre assim)
+    await expect(this.salvamento).toHaveAttribute('data-estado', /^(salvo|leitura)$/, { timeout: 90_000 });
     await expect(this.area).toHaveAttribute('data-camera', /\d/);
     // a árvore de camadas só aparece com o documento entregue aos painéis
     if (this.pranchetas.length > 0) await expect(this.page.getByRole('treeitem').first()).toBeVisible();
@@ -246,6 +247,24 @@ export class Editor {
       .toBeLessThanOrEqual(tolerancia);
   }
 
+  /**
+   * Quantos pixels as sobreposições do canvas têm pintados (rótulo e moldura de prancheta, guias,
+   * contornos, alças). Zero: não há nada por cima do que o motor desenhou.
+   */
+  tintaDasSobreposicoes(): Promise<number> {
+    return this.area.evaluate((area) => {
+      for (const tela of area.querySelectorAll('canvas')) {
+        const ctx = tela.getContext('2d');
+        if (!ctx) continue; // o canvas do motor é WebGL
+        const dados = ctx.getImageData(0, 0, tela.width, tela.height).data;
+        let pintados = 0;
+        for (let i = 3; i < dados.length; i += 4) if ((dados[i] ?? 0) > 0) pintados++;
+        return pintados;
+      }
+      return -1;
+    });
+  }
+
   /** Quantos pixels escuros há numa caixa da prancheta: é como se confere que um texto foi desenhado. */
   async pixelsEscuros(caixa: { x: number; y: number; largura: number; altura: number }, prancheta = 0): Promise<number> {
     const a = await this.naTela({ x: caixa.x, y: caixa.y }, prancheta);
@@ -292,7 +311,10 @@ export const test = base.extend<Ferramentas>({
       await api.lote(peca.id, operacoes);
       return api.abrir(peca.id);
     });
-    for (const id of criadas) await api.arquivar(id);
+    for (const id of criadas) {
+      await api.encerrarTarefas(id).catch(() => undefined);
+      await api.arquivar(id);
+    }
   },
   editor: async ({ page, api }, usar) => {
     const erros: string[] = [];

@@ -1,0 +1,462 @@
+/* O painel do Otto: a bancada do colega, ao lado do canvas. Âmbar é o que o Otto propôs; laranja é a
+   mão do designer. Denso, sem enfeite, com o tempo à vista e nenhuma barra de progresso. */
+
+.painel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.cabecalho {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--linha);
+}
+
+.titulo {
+  margin: 0;
+  font: 22px / 1 var(--serif);
+  color: var(--papel);
+}
+
+.titulo::first-letter {
+  color: var(--ambar);
+  font-style: italic;
+}
+
+.estado {
+  margin: 0 0 0 auto;
+  font: 11px var(--mono);
+  color: var(--ambar);
+  white-space: nowrap;
+}
+
+.tempo {
+  color: var(--texto-2);
+  font: 11px var(--mono);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.corpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 0;
+  border-bottom: 1px solid var(--linha);
+}
+
+.rotulo {
+  margin: 0;
+  padding: 0;
+  font: 600 11px / 1.2 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--texto-2);
+}
+
+.apoio,
+.discreto {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--texto-2);
+}
+
+.discreto {
+  color: var(--texto-3);
+  font: 11px var(--mono);
+}
+
+.tipos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tipos legend {
+  margin-bottom: 6px;
+}
+
+.tipo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tipo input {
+  margin: 0;
+  accent-color: var(--ambar);
+}
+
+.sobre {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: 11px var(--mono);
+  color: var(--laranja);
+}
+
+.sobre button {
+  padding: 0 4px;
+  background: none;
+  border: 0;
+  color: var(--texto-3);
+  cursor: pointer;
+}
+
+.campo {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--grafite-4);
+  border-radius: 4px;
+  background: var(--grafite-0);
+  color: var(--texto);
+  font: 13px / 1.4 var(--sans);
+  resize: vertical;
+}
+
+.campo:focus-visible {
+  outline: 2px solid var(--ambar);
+  outline-offset: 1px;
+}
+
+.acoes {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.acoes .discreto:first-child {
+  margin-right: auto;
+}
+
+.botao,
+.principal,
+.segurar {
+  padding: 6px 12px;
+  border: 1px solid var(--grafite-4);
+  border-radius: 4px;
+  background: var(--grafite-3);
+  color: var(--texto);
+  font: 600 12px var(--sans);
+  cursor: pointer;
+}
+
+.principal {
+  border-color: var(--ambar);
+  background: var(--ambar);
+  color: var(--grafite-0);
+}
+
+.botao:disabled,
+.principal:disabled {
+  border-color: var(--grafite-4);
+  background: var(--grafite-3);
+  color: var(--texto-3);
+  cursor: default;
+}
+
+.segurar {
+  background: none;
+  border-style: dashed;
+  color: var(--texto-2);
+  user-select: none;
+  touch-action: none;
+}
+
+.segurar:active {
+  border-color: var(--ambar);
+  color: var(--ambar);
+}
+
+.discretoBotao {
+  margin-right: auto;
+  padding: 6px 0;
+  background: none;
+  border: 0;
+  color: var(--texto-2);
+  font: 12px var(--sans);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.alerta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--erro);
+  background: var(--erro-fundo);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.alerta p {
+  margin: 0;
+}
+
+.corpo > .alerta {
+  margin: 12px 12px 0;
+}
+
+.pedido {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--laranja);
+  color: var(--texto-2);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.fala,
+.pergunta {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pergunta {
+  font: 18px / 1.25 var(--serif);
+  color: var(--papel);
+}
+
+/* as etapas: uma lista com a marca de cada situação. Não é barra: não há fração para mostrar. */
+.etapas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.etapas li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--texto-3);
+}
+
+.marca {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--texto-3);
+  border-radius: 50%;
+}
+
+.etapas li[data-situacao="feita"] {
+  color: var(--texto-2);
+}
+
+.etapas li[data-situacao="feita"] .marca {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.etapas li[data-situacao="atual"] {
+  color: var(--papel);
+  font-weight: 600;
+}
+
+.etapas li[data-situacao="atual"] .marca {
+  border-color: var(--ambar);
+  background: linear-gradient(90deg, var(--ambar) 50%, transparent 50%);
+}
+
+.soParaLeitorDeTela {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.registro {
+  font-size: 12px;
+  color: var(--texto-2);
+}
+
+.registro summary {
+  cursor: pointer;
+}
+
+.registro ol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font: 11px / 1.45 var(--mono);
+  color: var(--texto-3);
+}
+
+.registro li[data-fala="sim"] {
+  padding-left: 8px;
+  border-left: 1px solid var(--ambar);
+  color: var(--texto);
+  font: 12px / 1.45 var(--sans);
+  white-space: pre-wrap;
+}
+
+.cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--grafite-4);
+  border-left: 2px solid var(--ambar);
+  border-radius: 2px;
+  background: var(--grafite-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cartao div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.cartao dt {
+  color: var(--texto-3);
+  font: 600 10px / 1.6 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cartao dd {
+  margin: 0;
+}
+
+.cartao div[data-atencao="sim"] dt {
+  color: var(--erro);
+}
+
+.paleta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.cor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.amostra {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--grafite-4);
+  border-radius: 2px;
+}
+
+.itens {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ajuste {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.ajuste .apoio {
+  align-self: stretch;
+}
+
+.pendencias,
+.pranchetas {
+  display: flex;
+  flex-direction: column;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.pendencias li,
+.pranchetas li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--linha);
+}
+
+.pendencias li > span:first-child,
+.pranchetas li > span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.pendencias li::before {
+  content: "!";
+  color: var(--ambar);
+  font: 600 12px var(--mono);
+}
+
+.acaoDaLinha {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--texto-2);
+  font: 11px var(--mono);
+  text-decoration: underline;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.acaoDaLinha:disabled {
+  color: var(--texto-3);
+  cursor: default;
+}
+
+.painel :focus-visible {
+  outline: 2px solid var(--ambar);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .etapas li[data-situacao="atual"] .marca {
+    animation: girando 1.6s linear infinite;
+  }
+}
+
+@keyframes girando {
+  to {
+    transform: rotate(360deg);
+  }
+}

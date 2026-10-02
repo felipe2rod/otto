@@ -159,6 +159,51 @@
   color: #ffd9d3;
 }
 
+/* a tarefa do Otto travou a edição: o motivo, dito uma vez, em âmbar (é do Otto, não é erro) */
+.faixaDoOtto {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--ambar-fundo);
+  border-bottom: 1px solid rgba(244, 196, 48, 0.5);
+  color: var(--ambar);
+}
+
+.faixaDoOtto p {
+  margin: 0;
+}
+
+.faixaDoOtto button {
+  padding: 3px 10px;
+  background: none;
+  border: 1px solid currentcolor;
+  border-radius: 4px;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.seloDoAntes {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  z-index: 2;
+  margin: 0;
+  padding: 5px 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--ambar);
+  border-radius: 999px;
+  background: var(--grafite-0);
+  color: var(--ambar);
+  font: 12px var(--mono);
+}
+
 .faixaDeRecarregar p {
   margin: 0;
 }
