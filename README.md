@@ -37,7 +37,7 @@ Entram 48 dos 51 documentos. Os outros três estão com o arquivo corrompido no 
 
 ### Exportar uma peça
 
-A exportação sai da fila: a API só registra o pedido e o `worker` renderiza e monta os arquivos, uma exportação por vez. O download é um link assinado de 5 minutos, novo a cada pedido.
+A exportação sai da fila: a API só registra o pedido e os `worker` renderizam e montam os arquivos. Sobem dois workers, cada um com duas exportações ao mesmo tempo; uma conta tem no máximo uma exportação rodando, e quem tem menos na fila passa na frente. O download é um link assinado de 5 minutos, novo a cada pedido.
 
 ```bash
 API=http://localhost:8080/api
@@ -78,6 +78,26 @@ Em qualquer um: `"pranchetas":[ids]` exporta só essas, e `"pacote":true` entreg
 
 Os arquivos ficam 7 dias. Cada exportação agenda a própria limpeza na fila; o worker apaga os arquivos no vencimento e o registro fica.
 
+### Workers
+
+```bash
+WORKERS=3 docker compose up -d --scale worker=3            # mais réplicas
+EXPORTACOES_POR_WORKER=1 docker compose up -d              # uma exportação por worker (cada uma é uma thread e um núcleo)
+docker compose ps worker                                   # otto-worker-1, otto-worker-2...
+docker compose logs -f worker | grep exportacao_terminada  # quem exportou o quê, com espera e duração
+docker kill otto-worker-1                                  # a exportação que ele rodava é refeita por outro, uma vez
+```
+
+Para medir a fila com duas contas (sem login só existe a conta fixa, então o roteiro cria duas contas de medição e copia peças da POC para elas):
+
+```bash
+docker compose run --rm teste pnpm --filter @otto/api medir:fila espera    # uma leve atrás de uma pesada de outra conta
+docker compose run --rm teste pnpm --filter @otto/api medir:fila justica   # uma leve atrás de cinco de outra conta
+docker compose run --rm teste pnpm --filter @otto/api medir:fila carga     # as duas contas, todos os formatos, lado a lado
+```
+
+Tetos de uma exportação: 36 megapixels por prancheta na escala de saída (`422 exportacao_grande_demais`) e 400 MB por pacote. Números medidos e o desenho em `docs/mvp/backend.md`, seção 17.10.
+
 Para derrubar: `docker compose down`. Para apagar também os dados e as dependências instaladas: `docker compose down -v`.
 
 ## Testes, tipos e Biome
@@ -115,6 +135,28 @@ Três guardas do web, que falham o teste ou o build:
 - **Componente não tem texto literal.** Todo texto visível mora em `apps/web/src/textos/` e é rascunho até passar pelo guardião da marca (`apps/web/testes/textos-literais.test.ts`).
 - **O motor de render entra por um arquivo só**, `apps/web/src/editor/canvas/motor.ts`, que carrega `@otto/render/navegador` por `import()` dinâmico. O `canvaskit.js` e o `.wasm` são copiados do pacote para `apps/web/public/motor/<versão>/` por `scripts/copiar-motor.ts`, antes de `next dev` e de `next build`; a pasta é gerada e fica fora do git.
 - **Rota só de desenvolvimento não chega à produção.** Página com nome terminado em `.dev.tsx` só é rota com `next dev`; o teste de pacote falha se `/editor/bancada` aparecer no build.
+
+### Testes de navegador
+
+Playwright com Chromium de verdade, contra a pilha inteira (borda, web, api, worker, banco e armazenamento). Um comando; ele sobe o que estiver parado:
+
+```bash
+docker compose run --rm navegador                                              # a suíte inteira
+docker compose run --rm navegador pnpm --filter @otto/web e2e exportar         # um arquivo (pelo nome)
+docker compose run --rm navegador pnpm --filter @otto/web e2e -g "gira"        # os testes cujo título casa
+```
+
+- **Onde ficam:** `apps/web/e2e/*.e2e.ts`, com o apoio em `apps/web/e2e/apoio/`. O resultado (relatório, captura e rastro de cada falha) sai em `apps/web/e2e/resultado/`, fora do git. Para ver um rastro: `npx playwright show-trace <arquivo>.zip` numa máquina com navegador.
+- **Dados:** cada teste cria a peça que usa, pela API, e a arquiva ao terminar. Nenhum depende das peças que já existem na conta nem as altera. Ficam para trás as imagens enviadas e as exportações (que somem sozinhas em 7 dias).
+- **Sem placa de vídeo:** o Chromium do contêiner desenha o canvas em WebGL por software. Nenhum teste daqui mede quadros por segundo.
+- **Endereços:** o navegador do contêiner usa `localhost:8080` e `localhost:8081`, como o designer; o serviço `navegador` os mapeia para `borda` e `armazenamento` na rede do compose. É por isso que o link assinado de download abre dentro do contêiner.
+- **Seletores:** por papel e por rótulo acessível importado de `apps/web/src/textos/` (a constante, não a frase), ou por atributo. Trocar a redação da tela não quebra os testes; trocar o papel de um controle, sim.
+- **Versão do navegador:** a imagem `navegador` (alvo de mesmo nome em `docker/Dockerfile`) traz o Chromium da versão de `@playwright/test` em `apps/web/package.json`. Ao subir a versão lá, suba o `ARG PLAYWRIGHT_VERSION` do Dockerfile e rode `docker compose build navegador`.
+- **Na integração contínua:** `docker compose up -d --wait` e depois `CI=1 docker compose run --rm navegador`. Com `CI` definido, um teste que falha é repetido uma vez (com rastro) e `test.only` vira erro. O código de saída do comando é o da suíte. Trabalhadores: `E2E_TRABALHADORES` (padrão 3).
+
+## CI
+
+`.github/workflows/ci.yml` faz no GitHub o mesmo que os comandos acima: sobe o `compose`, roda testes, Biome e tipos, exporta um pacote pela fila e constrói as imagens de produção. Roda em PR para `develop` e em push nas branches de trabalho. O job de testes de navegador só roda com a variável de repositório `TESTES_DE_NAVEGADOR = ligado`. **Ainda não rodou nenhuma vez**: foi escrito sem acesso ao GitHub Actions.
 
 ## Dependência nova
 
@@ -169,6 +211,6 @@ Migração nova: escreva o `schema.prisma`, gere o SQL de base com `prisma migra
 
 A fila (pg-boss) mora no esquema `pgboss` do mesmo banco. Quem cria o esquema e as filas é o migrador (`pnpm --filter @otto/api fila:preparar`, que o serviço `migracao` já roda); API e worker só leem e escrevem linha.
 
-## Suposição em vigor
+## Sem login
 
-Não há login no MVP (ADR 035). O banco nasce com `conta_id` e RLS, e o servidor resolve o escopo sempre para **uma conta fixa**, semeada pela migração. O ponto único é `apps/api/src/plataforma/escopo/`. Isso ainda não foi confirmado pelo Felipe e está marcado no código. Enquanto valer, não exponha a API fora da máquina local.
+Não há login no MVP (ADR 035, aceito pelo Felipe em 2026-10-02). O banco nasce com `conta_id` e RLS, e o servidor resolve o escopo sempre para **uma conta fixa**, semeada pela migração. O ponto único é `apps/api/src/plataforma/escopo/`: o login entra trocando só o adaptador de `ResolvedorDeEscopo`. Enquanto não houver login, não exponha a API fora da máquina local.

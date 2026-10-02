@@ -1,0 +1,143 @@
+# CI do Otto: sobe a pilha do compose e roda testes, Biome e tipos DENTRO do contêiner, do mesmo
+# jeito que no desenvolvimento (README, "Testes, tipos e Biome"). Nada é instalado na máquina do CI
+# além do Docker.
+#
+# AINDA NÃO RODOU NENHUMA VEZ: foi escrito sem acesso ao GitHub Actions. A sintaxe foi conferida
+# com o actionlint; o que só a primeira execução prova está em docs/mvp/backend.md, seção 17.10.
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main, "feature/**", "release/**", "hotfix/**"]
+
+# um push novo na mesma branch cancela a execução anterior
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # sem cor e sem barra de progresso no log
+  COMPOSE_ANSI: never
+  DOCKER_BUILDKIT: "1"
+  CI: "1"
+
+jobs:
+  verificar:
+    name: Testes, Biome e tipos
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      # O código entra no contêiner por montagem e o contêiner roda como "node" (id 1000). No CI o
+      # dono dos arquivos é outro usuário: sem isto, gerar o cliente do banco e o next-env.d.ts falha.
+      - name: Dar os arquivos ao usuário do contêiner
+        run: sudo chown -R 1000:1000 .
+
+      - name: Construir a imagem de desenvolvimento
+        run: docker compose build api
+
+      - name: Subir a pilha (banco, armazenamento, API, dois workers, web, borda)
+        run: docker compose up -d
+
+      - name: Esperar a API, os workers e a página
+        run: |
+          for tentativa in $(seq 1 90); do
+            if curl -fsS http://localhost:8080/api/saude/pronto >/dev/null 2>&1 \
+              && curl -fsS -o /dev/null http://localhost:8080/ 2>/dev/null \
+              && [ "$(docker compose ps worker --format '{{.Health}}' | grep -c '^healthy$')" -ge 1 ]; then
+              echo "pronto em ${tentativa} tentativas"
+              curl -fsS http://localhost:8080/api/saude/pronto
+              exit 0
+            fi
+            sleep 4
+          done
+          echo "a pilha não ficou pronta em 6 minutos"
+          docker compose ps
+          exit 1
+
+      - name: Testes (todos os pacotes; banco e armazenamento de teste)
+        run: docker compose run --rm teste
+
+      - name: Biome
+        run: docker compose run --rm teste pnpm lint
+
+      - name: Tipos
+        run: docker compose run --rm teste pnpm typecheck
+
+      - name: Exportar uma peça pela fila (fumaça, com os workers de verdade)
+        run: |
+          API=http://localhost:8080/api
+          chamar() { curl -fsS -H 'X-Otto-Cliente: editor' -H 'Content-Type: application/json' "$@"; }
+          campo() { python3 -c "import sys,json; print(json.load(sys.stdin)['$1'])"; }
+          DOC=$(chamar -X POST "$API/documentos" -d '{"nome":"Fumaça do CI"}' | campo id)
+          chamar -X POST "$API/documentos/$DOC/lotes" -o /dev/null \
+            -d '{"id":"00000000-0000-4000-8000-000000000001","versaoBase":0,"descricao":"monta","operacoes":[{"op":"criarPrancheta","nome":"Feed","largura":400,"altura":500,"fundo":"#ffffff"},{"op":"criarNo","prancheta":"Feed","no":{"tipo":"forma","nome":"Faixa","forma":"retangulo","x":0,"y":0,"largura":400,"altura":100,"preenchimento":"#cc3300"}}]}'
+          EXP=$(chamar -X POST "$API/documentos/$DOC/exportacoes" -d '{"formato":"psd","pacote":true}' | campo id)
+          ESTADO=na_fila
+          for _ in $(seq 1 60); do
+            ESTADO=$(chamar "$API/exportacoes/$EXP" | campo estado)
+            if [ "$ESTADO" = "pronta" ] || [ "$ESTADO" = "falhou" ]; then break; fi
+            sleep 1
+          done
+          if [ "$ESTADO" != "pronta" ]; then echo "a exportação não ficou pronta em 60 s (estado: $ESTADO)"; exit 1; fi
+          curl -fsSL -o pacote.zip "$API/exportacoes/$EXP/arquivos/0"
+          unzip -l pacote.zip
+
+      - name: Log dos serviços (só se algo falhou)
+        if: failure()
+        run: docker compose logs --no-color --tail 300
+
+      - name: Derrubar
+        if: always()
+        run: |
+          docker compose --profile teste down -v
+          sudo chown -R "$(id -u):$(id -g)" .
+
+  # ---------------------------------------------------------------------------------------------
+  # Lugar do job de testes de navegador (Playwright), do especialista-react. O serviço já existe no
+  # compose: `docker compose run --rm navegador`. Só roda com a variável de repositório
+  # TESTES_DE_NAVEGADOR = ligado (Settings > Secrets and variables > Actions > Variables).
+  # ---------------------------------------------------------------------------------------------
+  navegador:
+    name: Testes de navegador
+    if: ${{ vars.TESTES_DE_NAVEGADOR == 'ligado' }}
+    needs: verificar
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dar os arquivos ao usuário do contêiner
+        run: sudo chown -R 1000:1000 .
+      - name: Subir a pilha
+        run: docker compose up -d --build
+      - name: Testes de navegador
+        run: docker compose run --rm navegador
+      - name: Log dos serviços (só se algo falhou)
+        if: failure()
+        run: docker compose logs --no-color --tail 300
+      - name: Derrubar
+        if: always()
+        run: |
+          docker compose --profile teste down -v
+          sudo chown -R "$(id -u):$(id -g)" .
+
+  # As imagens de produção: o build roda os testes de fronteira, os tipos e o empacotamento da API,
+  # e os testes, o build e o teste de pacote do web (docker/Dockerfile). Sai imagem ou o PR não passa.
+  imagens:
+    name: Imagens de produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: API e worker
+        run: docker build -f docker/Dockerfile --target servidor -t otto-servidor:ci .
+      - name: Migração
+        run: docker build -f docker/Dockerfile --target migracao -t otto-migracao:ci .
+      - name: Web
+        run: docker build -f docker/Dockerfile --target web -t otto-web:ci .

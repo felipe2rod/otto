@@ -18,6 +18,7 @@ x-node: &node
     - nm_raiz:/workspace/node_modules
     - nm_api:/workspace/apps/api/node_modules
     - nm_web:/workspace/apps/web/node_modules
+    - nm_agente:/workspace/packages/agente/node_modules
     - nm_documento:/workspace/packages/documento/node_modules
     - nm_psd:/workspace/packages/psd/node_modules
     - nm_render:/workspace/packages/render/node_modules
@@ -30,7 +31,7 @@ x-servidor: &servidor
   AMBIENTE: desenvolvimento
   NIVEL_DE_LOG: ${NIVEL_DE_LOG:-info}
   BANCO_URL_APP: postgresql://otto_app:${BANCO_SENHA_APP:-app-dev}@banco:5432/otto
-  # SUPOSIÇÃO A CONFIRMAR (ADR 035, item 7): sem login, uma conta fixa, semeada pela migração.
+  # Sem login no MVP (ADR 035): uma conta fixa, semeada pela migração.
   CONTA_FIXA_ID: 01990000-0000-7000-8000-000000000001
   # Compatível com S3 (serviço "armazenamento"). Plano B, de uma máquina só:
   #   ARMAZENAMENTO_ADAPTADOR: disco-local  e  ARMAZENAMENTO_PASTA: /dados/arquivos
@@ -41,6 +42,8 @@ x-servidor: &servidor
   ARMAZENAMENTO_BUCKET: otto
   ARMAZENAMENTO_CHAVE_DE_ACESSO: ${ARMAZENAMENTO_CHAVE_DE_ACESSO:-otto-dev}
   ARMAZENAMENTO_CHAVE_SECRETA: ${ARMAZENAMENTO_CHAVE_SECRETA:-segredo-do-armazenamento-dev}
+  # Quantas exportações cada worker roda ao mesmo tempo (uma thread e um núcleo para cada). A API ignora.
+  EXPORTACOES_AO_MESMO_TEMPO: ${EXPORTACOES_POR_WORKER:-2}
 
 services:
   # ---------- o que atende ----------
@@ -81,13 +84,19 @@ services:
     environment:
       <<: *servidor
       PORTA: "3001"
-    # Teto de memória do worker. Uma exportação por vez (EXPORTACOES_AO_MESMO_TEMPO = 1). Medido em
-    # 2026-10-01 com PSD, PNG 2x, SVG, PDF e pacote das duas peças mais pesadas, em seguida, no mesmo
-    # processo: pico de 886 MB aqui (com recarga automática) e 896 MB na imagem de produção
-    # (docs/mvp/backend.md, 17.9). 2 GB dá o dobro. Em produção, comece com 1,5 GB: 1 GB não tem folga.
-    # Passou do teto: o contêiner é morto, a exportação fica sem sinal de vida e é dada como
-    # interrompida, e a API continua de pé.
-    mem_limit: 2g
+    # Mais vazão é mais réplica (WORKERS) ou mais exportações por réplica (EXPORTACOES_POR_WORKER).
+    # Qualquer réplica pega qualquer trabalho; a regra "uma exportação por vez por conta" é do banco.
+    deploy:
+      replicas: ${WORKERS:-2}
+    # worker morto por falta de memória volta sozinho; a exportação que ele rodava é retomada por outro
+    restart: unless-stopped
+    # Cada exportação ao mesmo tempo é uma thread: um núcleo inteiro e a própria memória de render.
+    # Medido em 2026-10-02 (docs/mvp/backend.md, 17.10): duas exportações pesadas lado a lado chegam a
+    # 1,2 GB neste contêiner; uma prancheta no teto de tamanho (36 megapixels), a cerca de 1,3 GB sozinha.
+    # 3 GB cobre duas no teto. Com EXPORTACOES_POR_WORKER=1, 2 GB e 1 CPU bastam.
+    # Passou do teto de memória: o contêiner é morto e volta; a exportação é retomada por outro worker.
+    mem_limit: 3g
+    cpus: 2
     healthcheck: *saude
     depends_on:
       instalar: { condition: service_completed_successfully }
@@ -108,7 +117,9 @@ services:
   instalar:
     <<: *node
     # instala nos volumes e gera o cliente do banco (arquivo gerado, fora do git)
-    command: ["sh", "-c", "pnpm install --frozen-lockfile && pnpm --filter @otto/api banco:gerar"]
+    # Com a trava: duas execuções ao mesmo tempo (dois `docker compose run`) regravavam o cliente do
+    # banco uma por cima da outra e o arquivo gerado saía corrompido (visto em 2026-10-02).
+    command: ["sh", "-c", "flock /workspace/node_modules/.instalar.trava sh -c 'pnpm install --frozen-lockfile && pnpm --filter @otto/api banco:gerar'"]
 
   migracao:
     <<: *node
@@ -183,10 +194,37 @@ services:
       banco: { condition: service_healthy }
       armazenamento: { condition: service_started }
 
+  # Testes de navegador (Playwright), contra a pilha inteira: `docker compose run --rm navegador`.
+  # O navegador do contêiner enxerga a página e o armazenamento pelos MESMOS endereços do designer
+  # (localhost:8080 e localhost:8081), mapeados para os serviços da rede do compose: a origem é
+  # "localhost" (contexto seguro, como em desenvolvimento) e o link assinado de download abre.
+  navegador:
+    <<: *node
+    image: otto-navegador:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: navegador
+    profiles: ["teste"]
+    # o navegador já vem na imagem; `install` só baixa se a versão do Playwright tiver mudado
+    command: ["sh", "-c", "pnpm --filter @otto/web exec playwright install chromium && pnpm --filter @otto/web e2e"]
+    environment:
+      E2E_PAGINA: http://localhost:${PORTA_DA_BORDA:-8080}
+      E2E_API: http://borda:8080
+      E2E_MAPA_DE_HOSTS: "MAP localhost:${PORTA_DA_BORDA:-8080} borda:8080, MAP localhost:${PORTA_DO_ARMAZENAMENTO:-8081} armazenamento:7070"
+      CI: ${CI:-}
+    # o Chromium usa memória compartilhada para a página; o padrão do Docker (64 MB) é pouco
+    shm_size: 1gb
+    depends_on:
+      borda: { condition: service_started }
+      worker: { condition: service_healthy }
+      web: { condition: service_started }
+
 volumes:
   nm_raiz:
   nm_api:
   nm_web:
+  nm_agente:
   nm_documento:
   nm_psd:
   nm_render:

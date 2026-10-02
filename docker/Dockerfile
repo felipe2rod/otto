@@ -30,12 +30,26 @@ RUN mkdir -p \
       /workspace/apps/api/node_modules \
       /workspace/apps/web/node_modules \
       /workspace/apps/web/.next \
+      /workspace/packages/agente/node_modules \
       /workspace/packages/documento/node_modules \
       /workspace/packages/psd/node_modules \
       /workspace/packages/render/node_modules \
       /workspace/packages/shared/node_modules \
       /dados/arquivos \
  && chown -R node:node /workspace /dados
+USER node
+
+# ---------- testes de navegador ----------
+# A imagem de desenvolvimento mais o Chromium do Playwright e as bibliotecas de sistema dele.
+# A versão é a de @playwright/test em apps/web/package.json: mudou lá, mude aqui. Se ficarem
+# diferentes, o serviço "navegador" baixa o navegador certo ao subir (mais lento, mas não quebra).
+FROM dev AS navegador
+USER root
+ARG PLAYWRIGHT_VERSION=1.63.0
+ENV PLAYWRIGHT_BROWSERS_PATH=/navegadores
+RUN npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/* /root/.npm \
+ && chown -R node:node /navegadores
 USER node
 
 # ---------- produção ----------
@@ -45,6 +59,7 @@ ENV CI=1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY packages/agente/package.json packages/agente/
 COPY packages/documento/package.json packages/documento/
 COPY packages/psd/package.json packages/psd/
 COPY packages/render/package.json packages/render/

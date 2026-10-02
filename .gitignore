@@ -30,3 +30,5 @@ apps/web/next-env.d.ts
 
 # motor de render copiado do pacote para a pasta estática (apps/web/scripts/copiar-motor.ts)
 apps/web/public/motor/
+# testes de navegador: rastros, capturas e relatório
+apps/web/e2e/resultado/

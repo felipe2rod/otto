@@ -5,6 +5,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     projects: [
+      'packages/agente',
       'packages/documento',
       'packages/psd',
       'packages/render',
@@ -16,6 +17,14 @@ export default defineConfig({
           name: 'fronteira',
           root: '.',
           include: ['testes/fronteira/**/*.test.ts'],
+        },
+      },
+      {
+        // Conjunto de avaliação do agente (ADR 029, item 6). Não é pacote do workspace: fica fora da imagem.
+        test: {
+          name: 'avaliacao',
+          root: '.',
+          include: ['avaliacao/**/*.test.ts'],
         },
       },
     ],
