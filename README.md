@@ -131,7 +131,38 @@ docker compose logs worker | grep tarefa_terminada      # estado, lotes, chamada
 | `TAREFAS_POR_DIA_POR_CONTA`, `TAREFAS_NA_FILA_POR_CONTA` | 30 e 3 | Limites operacionais da conta |
 | `TETO_DIARIO_DE_TOKENS`, `RESTO_MINIMO_NO_FORNECEDOR` | 40 milhões e 3 milhões | Teto nosso da plataforma por dia (UTC). Passou: tarefa nova responde 429 e a que roda fecha com o que já fez |
 
+Pelo formulário de briefing (o caminho padrão), o corpo é `{"tipo":"briefing","briefing":{"versao":1,...},"cuidado":"cuidadoso"}`. O contrato está em `packages/shared/src/briefing.ts`. Para o roteiro gravado funcionar, os formatos são Feed 1080×1350 e Story 1080×1920:
+
+```bash
+cat > /tmp/formulario.json <<'JSON'
+{"tipo":"briefing","cuidado":"cuidadoso","briefing":{"versao":1,"nome":"Novo horário",
+ "formatos":[{"nome":"Feed","largura":1080,"altura":1350},{"nome":"Story","largura":1080,"altura":1920}],
+ "textos":{"titulo":"Abrimos às 7h"},"imagens":{"fonte":"nenhuma"}}}
+JSON
+curl -s $H -X POST localhost:8080/api/documentos/$DOC/tarefas -d @/tmp/formulario.json | jq '{estado, entrada}'
+```
+
 Uma tarefa por vez por peça e por conta. Enquanto ela vive, a peça é somente leitura (`409 documento_em_tarefa`; em revisão, `409 revisao_pendente`). Parar o worker fecha a tarefa em curso como interrompida, com o que já foi feito em revisão. Em desenvolvimento, salvar um arquivo reinicia o worker e a tarefa em curso é fechada por falta de sinal de vida, 60 s depois. O contrato está em `packages/shared/src/tarefa.ts` e o desenho em `docs/mvp/backend.md`, seção 17.11.
+
+### Marcas, banco de imagens, fontes e texturas
+
+```bash
+curl -s $H -X POST localhost:8080/api/marcas -d '{"nome":"Café Aurora","cores":{"primaria":"#0f3b2c"}}' | jq .   # marca
+curl -s $H 'localhost:8080/api/imagens/busca?q=padaria&orientacao=vertical' | jq '.banco, .itens[0]'             # busca (com a origem)
+curl -s $H -X POST localhost:8080/api/imagens/trazer -d '{"banco":"pixabay","id":"<id de um resultado>"}' | jq .  # vira arquivo da conta
+curl -s $H 'localhost:8080/api/fontes?q=oswald&catalogo=1' | jq .                                                # o que o catálogo tem
+curl -s $H localhost:8080/api/fontes/Oswald/500 | jq .                                                           # traz a família, na primeira vez
+curl -s $H -X POST localhost:8080/api/texturas/papel/trazer -d '{}' | jq .                                       # textura como arquivo da conta
+```
+
+| Variável | Padrão no `compose` | O que é |
+|---|---|---|
+| `PIXABAY_API_KEY` | vazia | Chave do banco de imagens. **Tem de estar no `.env` da raiz** (hoje está só em `poc/.env`). Sem ela a busca responde 503 e o Otto fica sem as ferramentas de imagem |
+| `CATALOGO_DE_FONTES` | `google` | `nenhum` não vai à rede: só as fontes semeadas |
+| `IMAGENS_TRAZIDAS_POR_DIA_POR_CONTA` | 100 | Nada de trazer em massa |
+| `TAREFAS_POR_DIA_POR_CONTA` | 1000 no desenvolvimento | O padrão do código, que vale em produção, é 30 |
+
+`docker compose run --rm semear` (roda a cada `up`) semeia as fontes, gera as texturas e cria a peça de exemplo da conta, uma vez. O desenho está em `docs/mvp/backend.md`, seção 17.12.
 
 Para derrubar: `docker compose down`. Para apagar também os dados e as dependências instaladas: `docker compose down -v`.
 

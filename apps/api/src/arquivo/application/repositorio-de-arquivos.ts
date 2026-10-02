@@ -11,19 +11,24 @@ export interface ArquivoRegistrado {
   altura: number | null;
   especie: EspecieDeArquivo;
   chaveDoObjeto: string;
+  /** O nome com que foi enviado. É conteúdo: nunca vai para log. */
+  nomeOriginal?: string;
+  /** Presente só no arquivo que veio de um banco de imagens ou da biblioteca do Otto. */
+  origem?: OrigemDoArquivo;
 }
 
 export interface OrigemDoArquivo {
   banco: string;
+  /** O id da imagem no banco de onde veio. */
+  idExterno?: string;
   autor: string;
   licenca: string;
+  /** A página da imagem no banco (para mostrar a origem). Nunca o endereço do arquivo. */
   url: string;
 }
 
 export interface NovoArquivo extends ArquivoRegistrado {
   id: string;
-  nomeOriginal?: string;
-  origem?: OrigemDoArquivo;
 }
 
 export abstract class RepositorioDeArquivos {
@@ -33,4 +38,9 @@ export abstract class RepositorioDeArquivos {
   abstract quaisExistem(escopo: EscopoDaConta, sha256s: readonly string[]): Promise<Set<string>>;
   /** Registra. Se a conta já tem este conteúdo, devolve o registro que já existe, sem alterar. */
   abstract registrar(escopo: EscopoDaConta, novo: NovoArquivo): Promise<ArquivoRegistrado>;
+  /**
+   * Quantos arquivos trazidos de banco de imagens (os que têm o id do banco na origem) a conta registrou desde
+   * `desde`. É o limite diário. Textura do Otto tem origem e não tem id de banco: não conta.
+   */
+  abstract contarTrazidosDesde(escopo: EscopoDaConta, desde: Date): Promise<number>;
 }

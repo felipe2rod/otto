@@ -4,15 +4,62 @@ import type { PrismaComEscopo, TransacaoComEscopo } from '../../../plataforma/pe
 import { type ArquivoRegistrado, type NovoArquivo, RepositorioDeArquivos } from '../../application/repositorio-de-arquivos';
 
 const SHA256 = /^[0-9a-f]{64}$/;
-const CAMPOS = { sha256: true, tipoMime: true, bytes: true, largura: true, altura: true, especie: true, chaveDoObjeto: true } as const;
+const CAMPOS = {
+  sha256: true,
+  tipoMime: true,
+  bytes: true,
+  largura: true,
+  altura: true,
+  especie: true,
+  chaveDoObjeto: true,
+  nomeOriginal: true,
+  origemBanco: true,
+  origemIdExterno: true,
+  origemAutor: true,
+  origemLicenca: true,
+  origemUrl: true,
+} as const;
+
+interface Linha {
+  sha256: string;
+  tipoMime: string;
+  bytes: number;
+  largura: number | null;
+  altura: number | null;
+  especie: ArquivoRegistrado['especie'];
+  chaveDoObjeto: string;
+  nomeOriginal: string | null;
+  origemBanco: string | null;
+  origemIdExterno: string | null;
+  origemAutor: string | null;
+  origemLicenca: string | null;
+  origemUrl: string | null;
+}
+
+function registro(l: Linha): ArquivoRegistrado {
+  return {
+    sha256: l.sha256,
+    tipoMime: l.tipoMime,
+    bytes: l.bytes,
+    largura: l.largura,
+    altura: l.altura,
+    especie: l.especie,
+    chaveDoObjeto: l.chaveDoObjeto,
+    ...(l.nomeOriginal ? { nomeOriginal: l.nomeOriginal } : {}),
+    ...(l.origemBanco
+      ? { origem: { banco: l.origemBanco, ...(l.origemIdExterno ? { idExterno: l.origemIdExterno } : {}), autor: l.origemAutor ?? '', licenca: l.origemLicenca ?? '', url: l.origemUrl ?? '' } }
+      : {}),
+  };
+}
 
 export class RepositorioDeArquivosNoBanco extends RepositorioDeArquivos {
   constructor(private readonly prisma: PrismaComEscopo) {
     super();
   }
 
-  private buscarNa(tx: TransacaoComEscopo, escopo: EscopoDaConta, sha256: string): Promise<ArquivoRegistrado | null> {
-    return tx.arquivo.findUnique({ where: { contaId_sha256: { contaId: escopo.contaId, sha256 } }, select: CAMPOS });
+  private async buscarNa(tx: TransacaoComEscopo, escopo: EscopoDaConta, sha256: string): Promise<ArquivoRegistrado | null> {
+    const linha = await tx.arquivo.findUnique({ where: { contaId_sha256: { contaId: escopo.contaId, sha256 } }, select: CAMPOS });
+    return linha ? registro(linha) : null;
   }
 
   async buscar(escopo: EscopoDaConta, sha256: string): Promise<ArquivoRegistrado | undefined> {
@@ -32,13 +79,17 @@ export class RepositorioDeArquivosNoBanco extends RepositorioDeArquivos {
       // ON CONFLICT DO NOTHING: o mesmo conteúdo enviado duas vezes não é erro, e otto_app não tem
       // UPDATE nesta tabela. (Um INSERT que falha abortaria a transação inteira no PostgreSQL.)
       await tx.$executeRaw`
-        INSERT INTO arquivos (id, conta_id, sha256, tipo_mime, bytes, largura, altura, especie, chave_do_objeto, nome_original, origem_banco, origem_autor, origem_licenca, origem_url)
+        INSERT INTO arquivos (id, conta_id, sha256, tipo_mime, bytes, largura, altura, especie, chave_do_objeto, nome_original, origem_banco, origem_id_externo, origem_autor, origem_licenca, origem_url)
         VALUES (${novo.id}::uuid, ${escopo.contaId}::uuid, ${novo.sha256}, ${novo.tipoMime}, ${novo.bytes}, ${novo.largura}, ${novo.altura}, ${novo.especie}::especie_de_arquivo, ${novo.chaveDoObjeto},
-                ${novo.nomeOriginal ?? null}, ${novo.origem?.banco ?? null}, ${novo.origem?.autor ?? null}, ${novo.origem?.licenca ?? null}, ${novo.origem?.url ?? null})
+                ${novo.nomeOriginal ?? null}, ${novo.origem?.banco ?? null}, ${novo.origem?.idExterno ?? null}, ${novo.origem?.autor ?? null}, ${novo.origem?.licenca ?? null}, ${novo.origem?.url ?? null})
         ON CONFLICT (conta_id, sha256) DO NOTHING`;
       const registrado = await this.buscarNa(tx, escopo, novo.sha256);
       if (!registrado) throw new Error('arquivo não ficou registrado');
       return registrado;
     });
+  }
+
+  contarTrazidosDesde(escopo: EscopoDaConta, desde: Date): Promise<number> {
+    return this.prisma.executar(escopo, (tx) => tx.arquivo.count({ where: { contaId: escopo.contaId, origemIdExterno: { not: null }, criadoEm: { gte: desde } } }));
   }
 }

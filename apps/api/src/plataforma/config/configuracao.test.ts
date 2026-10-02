@@ -160,3 +160,27 @@ describe('configuração da tarefa do Otto', () => {
     expect(lerConfiguracao({ ...valida, AMBIENTE: 'producao', MODELO_DO_AGENTE: 'claude', MODELO_CHAVE: 'chave-de-mentira-123' }).agente.modelo.adaptador).toBe('claude');
   });
 });
+
+describe('configuração do banco de imagens e do catálogo de fontes', () => {
+  it('sem chave não há banco de imagens, e o catálogo de fontes fica desligado: nada vai à rede por padrão', () => {
+    const c = lerConfiguracao(valida);
+    expect(c.bancoDeImagens).toEqual({ adaptador: 'nenhum' });
+    expect(c.catalogoDeFontes).toBe('nenhum');
+    expect(c.imagens).toEqual({ trazidasPorDia: 100, buscasNovasPorMinuto: 20 });
+  });
+
+  it('com a chave, o banco de imagens de fábrica vale para a API e para o worker; a chave malformada cita só o nome da variável', () => {
+    for (const servico of ['api', 'worker'] as const)
+      expect(lerConfiguracao({ ...valida, PIXABAY_API_KEY: 'chave-de-mentira-123' }, servico).bancoDeImagens).toEqual({ adaptador: 'pixabay', chave: 'chave-de-mentira-123' });
+    const erro = erroDe({ ...valida, PIXABAY_API_KEY: 'curta' });
+    expect(erro.variaveis).toEqual(['PIXABAY_API_KEY']);
+    expect(erro.message).not.toContain('curta');
+  });
+
+  it('a API sabe se o modelo das tarefas é o de verdade, sem receber a chave dele', () => {
+    expect(lerConfiguracao(valida, 'api').agente.modeloDeVerdade).toBe(false);
+    const comClaude = lerConfiguracao({ ...valida, MODELO_DO_AGENTE: 'claude' }, 'api');
+    expect(comClaude.agente.modeloDeVerdade).toBe(true);
+    expect(comClaude.agente.modelo).toEqual({ adaptador: 'nenhum' });
+  });
+});

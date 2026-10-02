@@ -8,7 +8,7 @@
 // - recurso de outra conta responde 404 com o mesmo corpo de id inexistente.
 import { CaminhoVetorial, Documento } from '@otto/documento';
 import { z } from 'zod';
-import { EstadoDaTarefa } from './tarefa';
+import { EstadoDaTarefa, FimDaTarefa } from './tarefa';
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -101,6 +101,16 @@ export const CODIGOS_DE_ERRO = {
   limiteDeTarefas: 'limite_de_tarefas',
   /** 429. O Otto inteiro bateu no limite de hoje. Só amanhã. */
   limiteDiario: 'limite_diario',
+  /** 422. O briefing ou o briefing salvo cita uma marca que a conta não tem. */
+  marcaDesconhecida: 'marca_desconhecida',
+  /** 429. A conta chegou ao limite de marcas ou de briefings salvos. detalhe: { limite }. */
+  limiteDeCadastros: 'limite_de_cadastros',
+  /** 503. O banco de imagens não respondeu, ou não está configurado neste servidor. */
+  bancoDeImagensIndisponivel: 'banco_de_imagens_indisponivel',
+  /** 422. A imagem pedida não veio de uma busca das últimas 24 horas. Busque de novo. */
+  imagemNaoBuscada: 'imagem_nao_buscada',
+  /** 429. A conta chegou ao limite de buscas ou de imagens trazidas por dia. detalhe: { limite }. */
+  limiteDeImagens: 'limite_de_imagens',
   /** 500. */
   erroInterno: 'erro_interno',
 } as const;
@@ -119,7 +129,8 @@ const Cursor = z.string().min(1).nullable();
 
 /** Estados da tarefa do Otto (seção 7.5). Na fatia 1 nenhuma tarefa existe; o campo já está no contrato. */
 
-const TarefaResumida = z.object({ id: Id, estado: EstadoDaTarefa });
+/** `fim` vem quando o trabalho parou: em revisão com `fim` diferente de `entregue`, a tarefa não terminou. */
+const TarefaResumida = z.object({ id: Id, estado: EstadoDaTarefa, fim: FimDaTarefa.optional() });
 
 /**
  * Se há o que desfazer e o que refazer DEPOIS desta resposta. Vem em abrir, lote, desfazer e refazer.
@@ -293,6 +304,11 @@ export const VetorImportado = z.object({
     origem: z.object({ arquivo: Sha256, nome: z.string() }),
   }),
   avisos: z.array(z.string()),
+  /**
+   * O vetor como o Otto o entendeu, em SVG gerado pelo servidor a partir dos caminhos lidos (só caminhos e
+   * cores: sem script, sem estilo, sem referência externa). Para mostrar em <img src="data:image/svg+xml,...">.
+   */
+  miniatura: z.string().optional(),
 });
 export type VetorImportado = z.infer<typeof VetorImportado>;
 
@@ -313,7 +329,12 @@ export function pesoMaisProximo(pesos: readonly number[], pedido: number): numbe
 }
 
 /** Item de GET /api/fontes?q= */
-export const FonteDaLista = z.object({ familia: z.string(), pesos: z.array(z.int()) });
+export const CATEGORIAS_DE_FONTE = ['sem serifa', 'serifada', 'display', 'manuscrita', 'monoespaçada'] as const;
+/**
+ * `naBiblioteca: false` é família do catálogo que ainda não foi baixada: pedir GET /api/fontes/:familia/:peso
+ * a traz (na primeira vez demora mais).
+ */
+export const FonteDaLista = z.object({ familia: z.string(), pesos: z.array(z.int()), categoria: z.enum(CATEGORIAS_DE_FONTE).optional(), naBiblioteca: z.boolean().optional() });
 export type FonteDaLista = z.infer<typeof FonteDaLista>;
 
 export const ListaDeFontes = z.object({ itens: z.array(FonteDaLista) });

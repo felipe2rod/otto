@@ -2,7 +2,7 @@
 // conferida em toda leitura e cache imutável (o endereço é o hash do conteúdo): decisão registrada
 // em docs/mvp/README.md. Nenhuma rota aceita chave de objeto vinda do cliente.
 import { Controller, Get, Inject, Param, Post, Query, Req, Res } from '@nestjs/common';
-import type { ArquivoEnviado, VetorImportado } from '@otto/shared';
+import type { ArquivoEnviado, DadosDoArquivo, VetorImportado } from '@otto/shared';
 import type { Request, Response } from 'express';
 import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
 import { Escopo } from '../../plataforma/http/escopo';
@@ -34,6 +34,13 @@ export class ControladorDeArquivos {
     return this.arquivos.enviarImagem(escopo, conteudo, { ...(nome ? { nome } : {}), ...(tipoDeclarado ? { tipoDeclarado } : {}) });
   }
 
+  /** O que a conta tem sobre um arquivo (medidas, espécie, nome, origem), sem os bytes. */
+  @Get(':sha256/dados')
+  dados(@Escopo() escopo: EscopoDaConta, @Param('sha256') sha256: string, @Res({ passthrough: true }) res: Response): Promise<DadosDoArquivo> {
+    res.setHeader('Cache-Control', 'private, no-store');
+    return this.arquivos.dados(escopo, sha256);
+  }
+
   @Get(':sha256')
   async ler(@Escopo() escopo: EscopoDaConta, @Param('sha256') sha256: string, @Req() req: Request, @Res() res: Response): Promise<void> {
     const arquivo = await this.arquivos.ler(escopo, sha256);
@@ -61,5 +68,12 @@ export class ControladorDeVetores {
     // o corpo só é texto quando o tipo declarado é de SVG ou de texto; qualquer outra coisa é recusada pelo importador
     const svg = typeof req.body === 'string' ? req.body : '';
     return this.arquivos.importarVetor(escopo, svg, typeof nome === 'string' ? nome : undefined);
+  }
+
+  /** Um vetor já enviado, como o Otto o entendeu: o nó, os avisos e a miniatura. O SVG de origem não sai. */
+  @Get(':sha256')
+  ler(@Escopo() escopo: EscopoDaConta, @Param('sha256') sha256: string, @Res({ passthrough: true }) res: Response): Promise<VetorImportado> {
+    res.setHeader('Cache-Control', 'private, no-store');
+    return this.arquivos.vetor(escopo, sha256);
   }
 }

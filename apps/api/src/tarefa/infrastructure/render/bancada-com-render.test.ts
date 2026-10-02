@@ -27,6 +27,8 @@ class ArmazenamentoQueConta extends ArmazenamentoEmMemoria {
 }
 
 let bancada: BancadaComRender;
+let fontes: BibliotecaDeFontesEmMemoria;
+const ANTON = new Uint8Array(readFileSync(path.join(RECURSOS, 'fontes/Anton-Regular.ttf')));
 let armazenamento: ArmazenamentoQueConta;
 let peca: Documento;
 
@@ -37,7 +39,7 @@ function montar(doc: Documento, operacoes: unknown[]): Documento {
 }
 
 beforeAll(async () => {
-  const fontes = new BibliotecaDeFontesEmMemoria();
+  fontes = new BibliotecaDeFontesEmMemoria();
   await fontes.registrar({
     familia: 'Anton',
     peso: 400,
@@ -112,6 +114,26 @@ describe('BancadaComRender', () => {
       expect(armazenamento.lidas).toEqual([]);
     } finally {
       deB.fechar();
+    }
+  });
+
+  it('fonte que entra na biblioteca no meio da tarefa (trazida do catálogo) é lida quando o documento passa a citá-la', async () => {
+    const aberta = await bancada.abrir(contaA, { nome: 'Promoção', arvore: peca });
+    try {
+      await fontes.registrar({ familia: 'Chegou Depois', peso: 400, nomePostScript: 'ChegouDepois-Regular', licenca: 'OFL', conteudo: ANTON });
+      const comNova = montar(peca, [{ op: 'alterar', alvo: 'Feed/Título', props: { fonte: 'Chegou Depois' } }]);
+      const lidas: string[] = [];
+      const pesosDa = fontes.pesosDa.bind(fontes);
+      fontes.pesosDa = async (familia) => {
+        lidas.push(familia);
+        return pesosDa(familia);
+      };
+      await aberta.renderizar(comNova, { prancheta: comNova.pranchetas[0]?.id as string, ladoMaximo: 200 });
+      await aberta.verificar(comNova);
+      // lida uma vez, no primeiro uso; a que já estava na sessão não é relida
+      expect(lidas).toEqual(['Chegou Depois']);
+    } finally {
+      aberta.fechar();
     }
   });
 

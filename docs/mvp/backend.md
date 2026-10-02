@@ -530,6 +530,8 @@ O evento `lote` traz as operações e a versão resultante, como o frontend pedi
 
 ### 7.7 Briefings salvos
 
+> **Implementado na fatia 4.** O contrato que vale é `packages/shared/src/briefing.ts` (marcas, briefings salvos, formulário, banco de imagens, texturas); o desenho está na seção 17.12.
+
 | Rota | Fatia | Pedido | Resposta |
 |---|---|---|---|
 | `GET /api/briefings` | 4 | cursor | Itens `{ id, nome, alteradoEm, usos }` |
@@ -818,7 +820,7 @@ Li `docs/mvp/frontend.md` depois de fechar o desenho. O que confere, o que respo
 13. Os preços de hospedagem são os de `custos.md` (2026-09-26). Não reconferi.
 14. O tamanho relativo das fatias (P, M, G) é estimativa minha, sem base medida.
 
-## 17. O que mudou na implementação (fatias 0 a 3)
+## 17. O que mudou na implementação (fatias 0 a 4)
 
 O plano acima foi escrito antes do código. Esta seção registra onde a implementação se afastou dele, e por quê. Onde ela e o texto das seções anteriores divergem, vale esta.
 
@@ -1176,10 +1178,93 @@ Não há job de manutenção: a baixa é feita na leitura, por conta (a varredur
 - O fluxo por consulta custa uma leitura a cada 500 ms por painel aberto. Serve para o MVP; com muitas conexões, `NOTIFY`.
 - Render e verificação da tarefa rodam no laço principal do worker. Uma prancheta grande segura o processo por décimos de segundo; o sinal de vida atrasa, não se perde. Se pesar, vai para thread como a exportação.
 - A baixa da tarefa cujo worker caiu não emite `tarefa_terminada` (as linhas de `chamadas_ao_modelo` existem; o evento de uso, não).
-- Tarefa em `na_fila` cujo trabalho se perdeu depois das 3 tentativas fica na fila até o designer cancelar.
+- ~~Tarefa em `na_fila` cujo trabalho se perdeu fica na fila até o designer cancelar.~~ Resolvido na fatia 4 (17.12): o trabalho é publicado de novo.
 - `lotes_de_operacoes.tarefa_id` não tem chave estrangeira para `tarefas_do_agente`.
 - Pendência não se resolve sozinha quando o designer corrige a camada: só dispensar e reabrir.
 - A "faixa de tempo típica" que o plano de experiência pede antes de enviar não existe: faltam dados (uma medição por tipo).
-- Com o modelo roteirizado, o resto anotado do fornecedor continua valendo no dia: depois de rodar com Claude perto do fim do limite, o roteirizado também é recusado até virar o dia (UTC). `RESTO_MINIMO_NO_FORNECEDOR=0` desliga.
+- ~~Com o modelo roteirizado, o resto anotado do fornecedor continua valendo no dia.~~ Resolvido na fatia 4 (17.12): com o roteirizado, os tetos de tokens não recusam.
 - O roteiro de briefing não traz contagem de tokens (o de ajuste traz): rodar o roteirizado não exercita o custo de uma tarefa grande.
 - Sem prova: tarefa de briefing com Claude pela API (proibida nesta rodada por custo; o treinador mediu fora da API), duas tarefas longas de contas diferentes no mesmo worker, e o comportamento do fluxo atrás de um proxy que não seja o Caddy do `compose`.
+
+### 17.12 Fatia 4: briefing, marcas, banco de imagens, fontes sob demanda e texturas
+
+**Onde está o contrato.** `packages/shared/src/briefing.ts`, com as rotas no cabeçalho. O editor não conhece banco de imagens nem catálogo de fontes pelo nome: mostra o `nome` que o servidor devolve e manda de volta o `id` (ADR 020; o teste de fronteira acusa nome de fornecedor fora de `adaptadores/` e da configuração).
+
+**Rotas novas.**
+
+| Rota | Resposta | Recusas |
+|---|---|---|
+| `POST /api/documentos/:id/tarefas` com `{ tipo: "briefing", briefing: FormularioDeBriefing, cuidado?, briefingId? }` | `202 Tarefa` | `400 pedido_invalido` (com o campo), `422 marca_desconhecida`, `422 arquivo_desconhecido` (com `quantos`), e as da tarefa |
+| `GET`, `POST /api/marcas`; `GET`, `PUT`, `DELETE /api/marcas/:id` | `Marca`, `ListaDeMarcas`, `204` | `422 arquivo_desconhecido`, `429 limite_de_cadastros` |
+| `GET`, `POST /api/briefings`; `GET`, `PUT`, `DELETE /api/briefings/:id` | `BriefingSalvo`, `ListaDeBriefings` (sem os dados), `204` | `422 marca_desconhecida`, `422 arquivo_desconhecido`, `429 limite_de_cadastros` |
+| `GET /api/imagens/busca?q=&orientacao=` | `ResultadoDaBuscaDeImagens`, com a origem | `503 banco_de_imagens_indisponivel`, `429 limite_de_imagens` |
+| `GET /api/imagens/:banco/:id/previa` | Os bytes da prévia, pelo servidor | `404` se o id não veio de busca |
+| `POST /api/imagens/trazer` com `{ banco, id }` | `201 ImagemTrazida` (arquivo da conta, origem, `no` para `criarNo`) | `422 imagem_nao_buscada`, `429 limite_de_imagens`, `503` |
+| `GET /api/texturas`; `POST /api/texturas/:nome/trazer` | `ListaDeTexturas`; `201 TexturaTrazida` | `404` |
+| `GET /api/arquivos/:sha256/dados` | `DadosDoArquivo` (espécie, medidas, nome, origem) | `404` |
+| `GET /api/vetores/:sha256` | `VetorImportado`, com a miniatura | `404` |
+| `GET /api/fontes?q=&categoria=&catalogo=1` | `ListaDeFontes`; com `catalogo`, também o que ainda não foi baixado | — |
+
+**Formulário de briefing.** `FormularioDeBriefing` (versão 1) é fechado: campo a mais é recusado. Obrigatórios: título, de um a três formatos com nomes diferentes, e de onde vêm as imagens (`minhas`, `banco` ou `nenhuma`). Imagem, logo e ícone entram pelo hash de um arquivo que a conta já enviou; nenhum campo aceita endereço. O cuidado tem três opções (`direto`, `cuidadoso`, `autoral`) e o servidor traduz para o nível do ciclo com a tabela do treinador (`esforcoDaOpcao`, em `@otto/agente`).
+
+São dois momentos, de propósito:
+
+| Quando | Onde | O que faz |
+|---|---|---|
+| Criação | API (`BriefingParaOOtto.preparar`) | Confere que a marca e os arquivos são da conta; aplica a marca ao formulário (identidade, logo, ícones, rodapé e restrições que o formulário não trouxe; o que ele trouxe vence). **O que fica guardado em `entradas_de_tarefa` é o formulário**, só com referências: é pequeno, e é o que "nova peça com este briefing" devolve (`briefingDaTarefa`) |
+| Execução | Worker (`paraOCiclo`) | Troca as referências pelo material que o ciclo lê: nó de imagem com as medidas, o desenho do logo (relido do SVG guardado). Cada arquivo é relido sob a conta do trabalho |
+
+A marca é copiada para o formulário no momento do pedido: apagar ou mudar a marca depois não muda a tarefa. Marca sem identidade não inventa identidade: o material diz "não definida". A forma do material é a da POC (`paraOAgente`, em `Briefing.tsx`), que é a que o ciclo espera.
+
+O briefing solto (sem `versao`), que é como os roteiros gravados chegam, continua aceito **fora de produção**, com o mesmo teto de três formatos. Em produção só entra o formulário.
+
+**Marcas e briefings salvos.** Tabelas `marcas` e `briefings`, com `conta_id` e RLS com `FORCE`. Só o nome da marca é obrigatório. O briefing salvo guarda o formulário pela metade (`RascunhoDeBriefing`). Apagar a marca não apaga o briefing: a chave estrangeira anula o vínculo (`ON DELETE SET NULL (marca_id)`). A tarefa guarda o briefing salvo de origem (`briefing_id`) e ele conta os usos. Limites: 200 marcas e 500 briefings por conta, contados e criados na mesma transação. Tudo aqui é conteúdo (ADR 031): o evento de uso leva contagens (`marca_salva`: quantas cores, fontes, ícones, restrições). "Resultado aceito vira briefing" não precisa de rota: o editor lê o formulário da tarefa e o salva.
+
+**Banco de imagens (ADR 032).** Porta `BancoDeImagens`, com o adaptador do Pixabay e um falso, e teste de contrato nos dois (o do Pixabay contra uma resposta gravada). O caso de uso cumpre as regras do banco:
+
+| Regra | Como |
+|---|---|
+| Cache de 24 h | Tabela `buscas_de_imagens`, da plataforma (sem `conta_id`, exceção `catalogo-global`): a chave é o SHA-256 de banco, consulta normalizada e orientação. **O texto da busca não é guardado.** Só cresce |
+| Link direto proibido | `trazer` baixa para o armazenamento da conta, como arquivo comum (tipo conferido pelo conteúdo, limites de tamanho). O nó do documento leva hash, banco, autor e licença, com `url` vazia; a página da imagem fica na linha do arquivo |
+| Só id que veio de busca | O endereço baixado sai do cache do servidor, nunca do pedido. Sem busca nas últimas 24 h: `422 imagem_nao_buscada`. O adaptador só baixa dos hosts do banco, em https, sem seguir redirecionamento, com teto de bytes |
+| Origem sempre à vista | Vem em toda resposta de busca e de `trazer`, e em `GET /api/arquivos/:sha256/dados` |
+| Nada em massa | Por conta: 100 imagens por dia e 20 buscas novas por minuto (o que vem do cache não conta). Por tarefa do Otto: 8 buscas e 6 imagens |
+| A chave | `PIXABAY_API_KEY`, só na configuração. Vai na query da busca, então nenhum erro do adaptador carrega endereço nem resposta: só um código |
+
+A prévia sai pelo servidor (`GET /api/imagens/:banco/:id/previa`): o navegador não fala com o banco. O Otto usa o mesmo caso de uso, com a origem `otto` no evento.
+
+**Fontes sob demanda.** Porta `CatalogoDeFontes`, com o adaptador do Google Fonts e um falso. Uma família que não está na biblioteca e está no catálogo é trazida na primeira vez em que é pedida: os pesos de 300 a 700 que ela tem. O nome PostScript e a licença são lidos do próprio arquivo. Dois gatilhos: `GET /api/fontes/:familia/:peso` (o editor) e o lote que cita a família (`garantir`, antes de travar a peça: é rede, não cabe na transação). Quem lê fonte (medidor, bancada, exportação) continua lendo só da biblioteca. O catálogo fica guardado por 7 dias no armazenamento da biblioteca. `CATALOGO_DE_FONTES=nenhum` (o padrão do código) não vai à rede.
+
+**Texturas.** As seis da POC, redesenhadas com o CanvasKit (a receita é a mesma; os pixels não são os da POC). São geradas pela semeadura (ou pelo worker, se faltar) e guardadas no armazenamento da biblioteca; a API não desenha. Para entrar numa peça, a textura vira arquivo da conta.
+
+**Arquivo enviado.** O vetor volta com a miniatura do que foi entendido: um SVG montado pelo servidor a partir dos caminhos já validados (só `<svg>` e `<path>`), sem render. A ampliação por formato é a função `ampliacoesPorFormato`, em `@otto/shared`, sobre as medidas que o envio já devolve.
+
+**Portas do ciclo ligadas.** `imagens` (se há banco configurado), `texturas`, `fontes.buscar` (se há catálogo) e `previaDeArquivo`. Ausente a configuração, o ciclo nem recebe a ferramenta.
+
+**Peça de exemplo.** `semear` cria uma peça em camadas na conta (um lote de operações do catálogo), uma vez: `documentos.de_exemplo` marca, e a peça apagada não volta.
+
+**Pendências da fatia 3, resolvidas.**
+
+- A lista de peças e `tarefaAtiva` trazem `fim`.
+- Limite diário da conta: o padrão do código continua 30; o `compose` de desenvolvimento usa 1.000. Com o modelo roteirizado o teto de tokens e o resto do fornecedor não recusam nem são somados (a API recebe `MODELO_DO_AGENTE`, sem a chave).
+- Tarefa parada na fila: depois de 5 minutos o trabalho é publicado de novo, uma vez por intervalo, na leitura da conta. Publicar de novo não roda o ciclo duas vezes.
+
+**Medições de 2026-10-02, pela API.**
+
+| O quê | Resultado |
+|---|---|
+| Busca no Pixabay | 0,33 s; a mesma busca de novo, 8 ms (cache); 12 resultados, nenhum endereço do banco na resposta |
+| Trazer uma imagem | 0,34 s; 853 × 1280, 183 KB, no armazenamento da conta, com banco, autor e licença |
+| Fonte do catálogo (Oswald) | 2,8 s na primeira vez (5 pesos, 432 KB); 10 ms depois |
+| Tarefa roteirizada pelo formulário, com marca e briefing salvo | Para no "pode" com Feed e Story; com o "pode", 21 s, 5 lotes, em revisão |
+
+**Em aberto.**
+
+- O Otto usando o banco de imagens numa tarefa de verdade não foi rodado (briefing com Claude estava fora desta rodada). O que há é teste da porta com o ciclo trocado e a busca de verdade pela rota do editor.
+- O relatório de exportação lista banco, autor e licença de cada imagem, com o endereço vazio: a página da imagem está no arquivo da conta e não é lida na exportação.
+- O cache de busca só cresce; não há limpeza das linhas vencidas.
+- O texto da busca não é guardado em lugar nenhum (o ADR 032 o trata como dado de uso de acesso restrito).
+- O teto de buscas novas por minuto é por processo.
+- Fonte: a rota é aberta e traz no máximo 60 famílias novas por hora por processo; só os pesos de 300 a 700; família já na biblioteca com menos pesos não é completada pelo catálogo.
+- Leitura do site da marca, recorte de sujeito e chave própria de banco de imagens: fora.
+- Texto público a revisar: os textos da peça de exemplo e as descrições das texturas.

@@ -50,6 +50,8 @@ function paraGuardada(l: Linha): TarefaGuardada {
     ...(l.conferida !== null ? { conferida: l.conferida } : {}),
     idsDoPreparo: l.idsDoPreparo,
     ...(l.origemId ? { origemId: l.origemId } : {}),
+    ...(l.briefingId ? { briefingId: l.briefingId } : {}),
+    enfileiradaEm: l.enfileiradaEm,
     ...(l.cancelamentoPedidoEm ? { cancelamentoPedidoEm: l.cancelamentoPedidoEm } : {}),
     ultimoEvento: l.ultimoEvento,
     chamadas: l.chamadas,
@@ -114,6 +116,8 @@ export class RepositorioDeTarefasNoBanco extends RepositorioDeTarefas {
             esforco: esforco ?? null,
             versaoInicial: peca[0].versao_atual,
             origemId: nova.origemId ?? null,
+            briefingId: nova.briefingId ?? null,
+            enfileiradaEm: nova.criadaEm,
             criadaEm: nova.criadaEm,
           },
         });
@@ -146,11 +150,11 @@ export class RepositorioDeTarefasNoBanco extends RepositorioDeTarefas {
     return l ? paraGuardada(l) : undefined;
   }
 
-  async vivasDaConta(escopo: EscopoDaConta): Promise<Map<string, { id: string; estado: EstadoDaTarefa }>> {
+  async vivasDaConta(escopo: EscopoDaConta): Promise<Map<string, { id: string; estado: EstadoDaTarefa; fim?: FimDaTarefa }>> {
     const linhas = await this.prisma.executar(escopo, (tx) =>
-      tx.tarefaDoAgente.findMany({ where: { contaId: escopo.contaId, estado: { in: VIVOS } }, select: { id: true, estado: true, documentoId: true } }),
+      tx.tarefaDoAgente.findMany({ where: { contaId: escopo.contaId, estado: { in: VIVOS } }, select: { id: true, estado: true, fim: true, documentoId: true } }),
     );
-    return new Map(linhas.map((l) => [l.documentoId, { id: l.id, estado: l.estado }]));
+    return new Map(linhas.map((l) => [l.documentoId, { id: l.id, estado: l.estado, ...(l.fim ? { fim: l.fim as FimDaTarefa } : {}) }]));
   }
 
   async listarDoDocumento(escopo: EscopoDaConta, documentoId: string, limite: number): Promise<TarefaGuardada[]> {
@@ -218,7 +222,7 @@ export class RepositorioDeTarefasNoBanco extends RepositorioDeTarefas {
   private async voltarParaAFila(
     escopo: EscopoDaConta,
     id: string,
-    dados: { fase: FaseDaTarefa; aprovadaEm?: Date },
+    dados: { fase: FaseDaTarefa; aprovadaEm?: Date; agora: Date },
     depois?: (tx: TransacaoComEscopo) => Promise<unknown>,
   ): Promise<{ jaNaFila: number } | undefined> {
     if (!UUID.test(id)) return undefined;
@@ -226,7 +230,7 @@ export class RepositorioDeTarefasNoBanco extends RepositorioDeTarefas {
       const jaNaFila = await this.travarFilaDaConta(tx, escopo);
       const mudou = await tx.tarefaDoAgente.updateMany({
         where: { id, contaId: escopo.contaId, estado: 'aguardando_confirmacao' },
-        data: { estado: 'na_fila', fase: dados.fase, ...(dados.aprovadaEm ? { aprovadaEm: dados.aprovadaEm } : {}) },
+        data: { estado: 'na_fila', fase: dados.fase, enfileiradaEm: dados.agora, ...(dados.aprovadaEm ? { aprovadaEm: dados.aprovadaEm } : {}) },
       });
       if (mudou.count === 0) return undefined;
       await depois?.(tx);
@@ -235,14 +239,25 @@ export class RepositorioDeTarefasNoBanco extends RepositorioDeTarefas {
   }
 
   async aprovar(escopo: EscopoDaConta, id: string, agora: Date): Promise<{ jaNaFila: number } | undefined> {
-    return this.voltarParaAFila(escopo, id, { fase: 'execucao', aprovadaEm: agora });
+    return this.voltarParaAFila(escopo, id, { fase: 'execucao', aprovadaEm: agora, agora });
   }
 
-  async pedirAjuste(escopo: EscopoDaConta, id: string, texto: string): Promise<{ jaNaFila: number } | undefined> {
-    return this.voltarParaAFila(escopo, id, { fase: 'preparo' }, async (tx) => {
+  async pedirAjuste(escopo: EscopoDaConta, id: string, texto: string, agora: Date): Promise<{ jaNaFila: number } | undefined> {
+    return this.voltarParaAFila(escopo, id, { fase: 'preparo', agora }, async (tx) => {
       const l = await tx.entradaDeTarefa.findFirst({ where: { tarefaId: id, contaId: escopo.contaId }, select: { ajustes: true } });
       const ajustes = [...((Array.isArray(l?.ajustes) ? l.ajustes : []) as string[]), texto];
       await tx.entradaDeTarefa.updateMany({ where: { tarefaId: id, contaId: escopo.contaId }, data: { ajustes } });
+    });
+  }
+
+  devolverAFila(escopo: EscopoDaConta, antesDe: Date, agora: Date): Promise<{ id: string; jaNaFila: number }[]> {
+    return this.prisma.executar(escopo, async (tx) => {
+      // a condição vai no UPDATE: duas leituras ao mesmo tempo devolvem a tarefa uma vez só
+      const linhas = await tx.$queryRaw<{ id: string }[]>`
+        UPDATE tarefas_do_agente SET enfileirada_em = ${agora}
+        WHERE conta_id = ${escopo.contaId}::uuid AND estado = 'na_fila' AND enfileirada_em < ${antesDe}
+        RETURNING id`;
+      return linhas.map((l, i) => ({ id: l.id, jaNaFila: i }));
     });
   }
 

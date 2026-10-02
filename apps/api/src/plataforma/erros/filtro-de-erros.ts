@@ -43,6 +43,11 @@ const STATUS_POR_CODIGO: Record<CodigoDeErro, number> = {
   [C.pranchetaNaoDescartavel]: 422,
   [C.limiteDeTarefas]: 429,
   [C.limiteDiario]: 429,
+  [C.marcaDesconhecida]: 422,
+  [C.limiteDeCadastros]: 429,
+  [C.bancoDeImagensIndisponivel]: 503,
+  [C.imagemNaoBuscada]: 422,
+  [C.limiteDeImagens]: 429,
   [C.erroInterno]: 500,
 };
 

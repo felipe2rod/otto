@@ -32,6 +32,10 @@ export interface TarefaGuardada {
   /** Quantos ids a primeira parte consumiu (só o modelo roteirizado usa: para a segunda parte continuar a sequência). */
   idsDoPreparo: number;
   origemId?: string;
+  /** O briefing salvo de onde o formulário partiu, se houve e ainda existe. */
+  briefingId?: string;
+  /** Quando entrou, ou voltou, para a fila. */
+  enfileiradaEm: Date;
   cancelamentoPedidoEm?: Date;
   /** Sequência do último evento gravado; -1 se nenhum. */
   ultimoEvento: number;
@@ -49,6 +53,8 @@ export interface NovaTarefa {
   documentoId: string;
   entrada: EntradaDaTarefa;
   origemId?: string;
+  /** Já conferido por quem chama: é um briefing desta conta. */
+  briefingId?: string;
   criadaEm: Date;
 }
 
@@ -111,7 +117,7 @@ export abstract class RepositorioDeTarefas {
   abstract entradaDe(escopo: EscopoDaConta, id: string): Promise<{ entrada: EntradaDaTarefa; ajustes: string[] } | undefined>;
   abstract vivaDoDocumento(escopo: EscopoDaConta, documentoId: string): Promise<TarefaGuardada | undefined>;
   /** As tarefas vivas da conta, por peça: para a lista de peças. */
-  abstract vivasDaConta(escopo: EscopoDaConta): Promise<Map<string, { id: string; estado: EstadoDaTarefa }>>;
+  abstract vivasDaConta(escopo: EscopoDaConta): Promise<Map<string, { id: string; estado: EstadoDaTarefa; fim?: FimDaTarefa }>>;
   /** Da mais nova para a mais velha. */
   abstract listarDoDocumento(escopo: EscopoDaConta, documentoId: string, limite: number): Promise<TarefaGuardada[]>;
   abstract contarCriadasDesde(escopo: EscopoDaConta, desde: Date): Promise<number>;
@@ -132,7 +138,7 @@ export abstract class RepositorioDeTarefas {
   /** O "pode": aguardando_confirmacao → na_fila, na fase de execução. Devolve a posição da conta na fila; undefined se a tarefa não estava aguardando. */
   abstract aprovar(escopo: EscopoDaConta, id: string, agora: Date): Promise<{ jaNaFila: number } | undefined>;
   /** "Ajustar a direção": aguardando_confirmacao → na_fila, de volta à fase de preparo, com o texto guardado. */
-  abstract pedirAjuste(escopo: EscopoDaConta, id: string, texto: string): Promise<{ jaNaFila: number } | undefined>;
+  abstract pedirAjuste(escopo: EscopoDaConta, id: string, texto: string, agora: Date): Promise<{ jaNaFila: number } | undefined>;
   /**
    * Na fila ou no "pode": cancela na hora ('cancelada'). Trabalhando: marca o pedido, e o worker interrompe ('pedido').
    * Em qualquer outro estado: 'fora'.
@@ -150,6 +156,12 @@ export abstract class RepositorioDeTarefas {
   abstract concluir(escopo: EscopoDaConta, id: string, conclusao: ConclusaoDeTarefa): Promise<boolean>;
   /** A decisão do designer: de um dos estados `de` para `para`. false se a tarefa não estava em nenhum deles. */
   abstract decidir(escopo: EscopoDaConta, id: string, decisao: { de: readonly EstadoDaTarefa[]; para: 'aceita' | 'desfeita'; resultado: string; agora: Date }): Promise<boolean>;
+  /**
+   * As tarefas DESTA conta que estão na fila desde antes de `antesDe` voltam a contar a espera a partir de `agora`,
+   * e são devolvidas para quem chama publicar o trabalho de novo (o trabalho na fila pode ter se perdido; entregar
+   * de novo não roda o ciclo duas vezes). Dentro do mesmo intervalo, a mesma tarefa não é devolvida de novo.
+   */
+  abstract devolverAFila(escopo: EscopoDaConta, antesDe: Date, agora: Date): Promise<{ id: string; jaNaFila: number }[]>;
   /**
    * Fecha, NESTA conta, a tarefa que está trabalhando sem sinal de vida desde `semSinalDesde` (o worker caiu):
    * com lote gravado vai para revisão, sem lote falha; nos dois casos com fim `interrompida`. Devolve as que fechou.

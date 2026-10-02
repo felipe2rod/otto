@@ -54,6 +54,15 @@ export function chaveDeFonteDaBiblioteca(sha256: string): string {
   return `${BIBLIOTECA}/fontes/${sha256}.ttf`;
 }
 
+/** Chave de uma textura gerada pelo Otto. `nome` vem do catálogo de texturas, nunca de um pedido. */
+export function chaveDeTexturaDaBiblioteca(versao: string, nome: string): string {
+  if (!SEGMENTO.test(versao) || !/^[a-z][a-z0-9-]{0,40}$/.test(nome)) throw new ChaveDeObjetoInvalida();
+  return `${BIBLIOTECA}/texturas/${versao}/${nome}.jpg`;
+}
+
+/** Onde fica guardado o catálogo de fontes de onde a biblioteca traz famílias sob demanda. */
+export const CHAVE_DO_CATALOGO_DE_FONTES = `${BIBLIOTECA}/catalogos/fontes-v1.json`;
+
 /** Confere que a chave é da biblioteca do Otto, e bem formada. */
 export function conferirChaveDaBiblioteca(chave: string): void {
   const segmentos = chave.split('/');

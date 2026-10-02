@@ -565,3 +565,82 @@ describe('a peça e a tarefa do Otto', () => {
     expect((await comTarefa.historico(contaA, id, { limite: 1 })).itens[0]).toMatchObject({ versao: 3, autoria: 'designer', tarefaId: TAREFA });
   });
 });
+
+describe('a lista de peças diz como a tarefa parou', () => {
+  it('a tarefa em revisão que não terminou vem com o fim, para a lista não dizer "pronto para revisar"', async () => {
+    const vivas = new Map<string, { id: string; estado: EstadoDaTarefa; fim?: 'interrompida' | 'entregue' }>();
+    const comTarefa = new CasosDeUsoDeDocumento(new RepositorioDeDocumentosEmMemoria(), arquivos, medidor, randomUUID, undefined, fontes, {
+      viva: async (_e, id) => {
+        const v = vivas.get(id);
+        return v ? { ...v, versaoInicial: 0, tocados: [] } : undefined;
+      },
+      vivas: async () => vivas,
+    });
+    const [parou, entregou, livre] = [await comTarefa.criar(contaA, { nome: 'parou' }), await comTarefa.criar(contaA, { nome: 'entregou' }), await comTarefa.criar(contaA, { nome: 'livre' })];
+    vivas.set(parou.id, { id: randomUUID(), estado: 'em_revisao', fim: 'interrompida' });
+    vivas.set(entregou.id, { id: randomUUID(), estado: 'em_revisao', fim: 'entregue' });
+    const lista = (await comTarefa.listar(contaA, { limite: 10 })).itens;
+    expect(lista.find((d) => d.id === parou.id)?.tarefa).toEqual({ id: vivas.get(parou.id)?.id, estado: 'em_revisao', fim: 'interrompida' });
+    expect(lista.find((d) => d.id === entregou.id)?.tarefa?.fim).toBe('entregue');
+    expect(lista.find((d) => d.id === livre.id)?.tarefa).toBeUndefined();
+    expect((await comTarefa.abrir(contaA, parou.id)).tarefaAtiva).toEqual({ id: vivas.get(parou.id)?.id, estado: 'em_revisao', fim: 'interrompida' });
+  });
+});
+
+describe('fonte sob demanda, antes do lote', () => {
+  it('as famílias que o lote cita são garantidas ANTES de travar a peça e medir; as que só estão no documento, não', async () => {
+    const pedidas: string[][] = [];
+    const abertosNaHora: number[] = [];
+    const comGarantia = new CasosDeUsoDeDocumento(new RepositorioDeDocumentosEmMemoria(), arquivos, medidor, randomUUID, undefined, fontes, undefined, {
+      garantir: async (familias) => {
+        // a garantia vem antes da medida deste lote
+        abertosNaHora.push(medidor.abertos);
+        pedidas.push([...familias]);
+      },
+    });
+    const d = await comGarantia.criar(contaA, { nome: 'Peça' });
+    await comGarantia.aplicarLote(
+      contaA,
+      d.id,
+      lote(0, [
+        criarPrancheta(),
+        { op: 'criarNo', prancheta: 'Feed', no: { tipo: 'texto', nome: 'Título', x: 0, y: 0, largura: 400, altura: 100, conteudo: 'Oi', fonte: 'Lilita One', tamanho: 40, cor: '#111111' } },
+      ]),
+    );
+    await comGarantia.aplicarLote(contaA, d.id, lote(1, [{ op: 'mover', alvo: 'Feed/Título', x: 10, y: 10 }]));
+    await comGarantia.aplicarLoteDoAgente(contaA, d.id, randomUUID(), { id: randomUUID(), descricao: 'x', operacoes: [{ op: 'alterar', alvo: 'Feed/Título', props: { fonte: 'Poppins' } }] });
+    expect(pedidas).toEqual([['Lilita One'], ['Poppins']]);
+    expect(abertosNaHora[0]).toBe(0);
+  });
+});
+
+describe('peça de exemplo da conta nova', () => {
+  it('semeia uma peça em camadas, válida para o catálogo, marcada como exemplo; da segunda vez não faz nada', async () => {
+    const id = await docs.semearExemplo(contaA);
+    expect(id).toBeDefined();
+    const peca = await docs.abrir(contaA, id as string);
+    expect(peca.versao).toBe(1);
+    expect(peca.arvore.pranchetas).toHaveLength(1);
+    expect(peca.arvore.pranchetas[0]?.filhos.length).toBeGreaterThanOrEqual(4);
+    expect(peca.arvore.pranchetas[0]?.filhos.some((n) => n.tipo === 'texto')).toBe(true);
+    // nasce com identidade em tokens, para o designer ver o recurso funcionando
+    expect(Object.keys(peca.arvore.tokens.cores).length).toBeGreaterThanOrEqual(3);
+    expect(await docs.semearExemplo(contaA)).toBeUndefined();
+    expect((await docs.listar(contaA, { limite: 10 })).itens).toHaveLength(1);
+  });
+
+  it('apagada pelo designer, não volta; e cada conta tem a sua', async () => {
+    const id = (await docs.semearExemplo(contaA)) as string;
+    await docs.arquivar(contaA, id);
+    expect(await docs.semearExemplo(contaA)).toBeUndefined();
+    expect((await docs.listar(contaA, { limite: 10 })).itens).toEqual([]);
+    expect(await docs.semearExemplo(contaB)).toBeDefined();
+  });
+
+  it('o evento de uso diz que foi semeada, sem o nome nem o conteúdo', async () => {
+    const eventos: unknown[] = [];
+    const comUso = new CasosDeUsoDeDocumento(new RepositorioDeDocumentosEmMemoria(), arquivos, medidor, randomUUID, { registrar: (_e, evento) => void eventos.push(evento) }, fontes);
+    const id = await comUso.semearExemplo(contaA);
+    expect(eventos.at(-1)).toEqual({ evento: 'peca_de_exemplo_semeada', documentoId: id });
+  });
+});

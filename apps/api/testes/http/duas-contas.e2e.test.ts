@@ -2,7 +2,25 @@
 // de B, tenta-se alcançar o que é de A por cada rota. O esperado é sempre o 404 de "não existe",
 // com corpo idêntico ao de id inexistente (nunca 403, que confirmaria a existência), e nada alterado.
 import { createHash, randomUUID } from 'node:crypto';
-import { ArquivoEnviado, CODIGOS_DE_ERRO, DocumentoAberto, ErroDaApi, Exportacao, Historico, LimitesDeTarefa, ListaDeDocumentos, ListaDePendencias, Tarefa } from '@otto/shared';
+import {
+  ArquivoEnviado,
+  BriefingSalvo,
+  CODIGOS_DE_ERRO,
+  DocumentoAberto,
+  ErroDaApi,
+  Exportacao,
+  Historico,
+  ImagemTrazida,
+  LimitesDeTarefa,
+  ListaDeBriefings,
+  ListaDeDocumentos,
+  ListaDeMarcas,
+  ListaDePendencias,
+  Marca,
+  Tarefa,
+  TexturaTrazida,
+  VetorImportado,
+} from '@otto/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CasosDeUsoDeTarefa } from '../../src/tarefa/application/casos-de-uso-de-tarefa';
 import { type ApiDeTeste, type ClienteDeTeste, criarForma, criarPrancheta, ENTRADA_DE_BRIEFING, PECA_PARA_O_AJUSTE, PNG, subirApi } from './subir';
@@ -208,6 +226,90 @@ describe('com a sessão de B, a tarefa de A não existe', () => {
   it('A, que é dona, decide', async () => {
     expect((await A.post(`/api/tarefas/${emRevisao.id}/aceitar`).send({})).status).toBe(200);
     expect((await A.post(`/api/tarefas/${noPode.id}/cancelar`).send({})).status).toBe(200);
+  });
+});
+
+describe('com a sessão de B, a marca, o briefing salvo e as imagens de A não existem', () => {
+  const LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0 L10 0 L10 10 Z" fill="#112233"/></svg>';
+  const FORMULARIO = { versao: 1, formatos: [{ nome: 'Feed', largura: 1080, altura: 1350 }], textos: { titulo: 'de B' }, imagens: { fonte: 'nenhuma' } };
+  let marcaDeA: Marca;
+  let briefingDeA: BriefingSalvo;
+  let logoDeA: VetorImportado;
+  let trazidaPorA: ImagemTrazida;
+  let texturaDeA: TexturaTrazida;
+
+  beforeAll(async () => {
+    logoDeA = VetorImportado.parse((await A.post('/api/vetores?nome=logo-de-a.svg').set('Content-Type', 'image/svg+xml').send(LOGO)).body);
+    marcaDeA = Marca.parse((await A.post('/api/marcas').send({ nome: 'Marca de A', cores: { primaria: '#112233' }, logo: { arquivo: logoDeA.no.origem.arquivo }, restricoes: ['segredo de A'] })).body);
+    briefingDeA = BriefingSalvo.parse((await A.post('/api/briefings').send({ nome: 'Briefing de A', dados: { versao: 1, marcaId: marcaDeA.id, textos: { rodape: 'rodapé de A' } } })).body);
+    await A.get('/api/imagens/busca?q=segredo');
+    trazidaPorA = ImagemTrazida.parse((await A.post('/api/imagens/trazer').send({ banco: 'banco-de-mentira', id: '1001' })).body);
+    texturaDeA = TexturaTrazida.parse((await A.post('/api/texturas/papel/trazer').send({})).body);
+  });
+
+  it.each([
+    ['GET /api/marcas/:id', () => B.get(`/api/marcas/${marcaDeA.id}`)],
+    ['PUT /api/marcas/:id', () => B.put(`/api/marcas/${marcaDeA.id}`).send({ nome: 'tomada por B' })],
+    ['PUT /api/marcas/:id (corpo com arquivo de A)', () => B.put(`/api/marcas/${marcaDeA.id}`).send({ nome: 'x', logo: { arquivo: logoDeA.no.origem.arquivo } })],
+    ['DELETE /api/marcas/:id', () => B.delete(`/api/marcas/${marcaDeA.id}`)],
+    ['GET /api/briefings/:id', () => B.get(`/api/briefings/${briefingDeA.id}`)],
+    ['PUT /api/briefings/:id', () => B.put(`/api/briefings/${briefingDeA.id}`).send({ nome: 'tomado', dados: { versao: 1 } })],
+    ['DELETE /api/briefings/:id', () => B.delete(`/api/briefings/${briefingDeA.id}`)],
+    ['GET /api/vetores/:sha256', () => B.get(`/api/vetores/${logoDeA.no.origem.arquivo}`)],
+    ['GET /api/arquivos/:sha256/dados (vetor)', () => B.get(`/api/arquivos/${logoDeA.no.origem.arquivo}/dados`)],
+    ['GET /api/arquivos/:sha256 (imagem que A trouxe do banco)', () => B.get(`/api/arquivos/${trazidaPorA.sha256}`)],
+    ['GET /api/arquivos/:sha256/dados (imagem que A trouxe do banco)', () => B.get(`/api/arquivos/${trazidaPorA.sha256}/dados`)],
+    ['GET /api/arquivos/:sha256 (textura que A trouxe)', () => B.get(`/api/arquivos/${texturaDeA.sha256}`)],
+    ['POST /api/documentos/:id/tarefas (formulário, na peça de A)', () => B.post(`/api/documentos/${docDeA.id}/tarefas`).send({ tipo: 'briefing', briefing: FORMULARIO })],
+  ])('%s responde o mesmo 404 de id inexistente, e o que é de A não muda', async (_rota, chamar) => {
+    const r = await chamar();
+    expect({ status: r.status, body: r.body }).toEqual(inexistente);
+    expect(Marca.parse((await A.get(`/api/marcas/${marcaDeA.id}`)).body)).toEqual(marcaDeA);
+    expect(BriefingSalvo.parse((await A.get(`/api/briefings/${briefingDeA.id}`)).body)).toEqual(briefingDeA);
+  });
+
+  it('as listas de B não têm nada de A', async () => {
+    expect(ListaDeMarcas.parse((await B.get('/api/marcas')).body).itens).toEqual([]);
+    expect(ListaDeBriefings.parse((await B.get('/api/briefings')).body).itens).toEqual([]);
+  });
+
+  it('B não usa a marca, o briefing salvo nem os arquivos de A no formulário dela: o hash e o id não são autorização', async () => {
+    const pecaDeB = DocumentoAberto.parse((await B.post('/api/documentos').send({ nome: 'Peça de B' })).body);
+    const publicados = api.fila.publicados.length;
+    const comMarca = await B.post(`/api/documentos/${pecaDeB.id}/tarefas`).send({ tipo: 'briefing', briefing: { ...FORMULARIO, marcaId: marcaDeA.id } });
+    expect({ status: comMarca.status, codigo: ErroDaApi.parse(comMarca.body).codigo }).toEqual({ status: 422, codigo: CODIGOS_DE_ERRO.marcaDesconhecida });
+    for (const briefing of [
+      { ...FORMULARIO, logo: { arquivo: logoDeA.no.origem.arquivo } },
+      { ...FORMULARIO, icones: [{ arquivo: logoDeA.no.origem.arquivo }] },
+      { ...FORMULARIO, imagens: { fonte: 'minhas', arquivos: [trazidaPorA.sha256] } },
+    ]) {
+      const r = await B.post(`/api/documentos/${pecaDeB.id}/tarefas`).send({ tipo: 'briefing', briefing });
+      expect({ status: r.status, corpo: r.body }).toEqual({ status: 422, corpo: { codigo: CODIGOS_DE_ERRO.arquivoDesconhecido, detalhe: { quantos: 1 } } });
+    }
+    expect((await B.post('/api/marcas').send({ nome: 'de B', logo: { arquivo: logoDeA.no.origem.arquivo } })).status).toBe(422);
+    expect((await B.post('/api/briefings').send({ nome: 'de B', dados: { versao: 1, marcaId: marcaDeA.id } })).status).toBe(422);
+    expect(api.fila.publicados).toHaveLength(publicados);
+    // o briefing salvo de A como "origem" da tarefa de B: a tarefa entra sem o vínculo, e o uso de A não é contado
+    const comOrigem = await B.post(`/api/documentos/${pecaDeB.id}/tarefas`).send({ tipo: 'briefing', briefing: FORMULARIO, briefingId: briefingDeA.id });
+    expect(comOrigem.status).toBe(202);
+    await B.post(`/api/tarefas/${Tarefa.parse(comOrigem.body).id}/cancelar`).send({});
+    await api.fila.ociosa();
+    expect(BriefingSalvo.parse((await A.get(`/api/briefings/${briefingDeA.id}`)).body).usos).toBe(0);
+  });
+
+  it('a busca é do banco e vale para as duas contas, mas a imagem trazida é de quem trouxe: B traz a mesma e tem o arquivo dela', async () => {
+    const deB = ImagemTrazida.parse((await B.post('/api/imagens/trazer').send({ banco: 'banco-de-mentira', id: '1001' })).body);
+    expect(deB.sha256).toBe(trazidaPorA.sha256);
+    expect((await B.get(`/api/arquivos/${deB.sha256}`)).status).toBe(200);
+    // e B não põe no documento dela uma textura que só A trouxe
+    const pecaDeB = DocumentoAberto.parse((await B.post('/api/documentos').send({ nome: 'Outra de B' })).body);
+    const r = await B.post(`/api/documentos/${pecaDeB.id}/lotes`).send({
+      id: randomUUID(),
+      versaoBase: 0,
+      descricao: 'tenta',
+      operacoes: [criarPrancheta(), { op: 'criarNo', prancheta: 'Feed', no: { ...texturaDeA.no, nome: 'Textura', x: 0, y: 0, largura: 100, altura: 100 } }],
+    });
+    expect({ status: r.status, codigo: ErroDaApi.parse(r.body).codigo }).toEqual({ status: 422, codigo: CODIGOS_DE_ERRO.arquivoDesconhecido });
   });
 });
 

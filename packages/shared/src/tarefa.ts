@@ -1,6 +1,6 @@
 // O contrato HTTP da tarefa do Otto (docs/mvp/backend.md, 7.5 e 17.11).
 //
-//   POST /api/documentos/:id/tarefas          EntradaDaTarefa → 202 Tarefa
+//   POST /api/documentos/:id/tarefas          PedidoDeTarefa → 202 Tarefa (pelo formulário: PedidoDeTarefaPorBriefing, em briefing.ts)
 //   GET  /api/documentos/:id/tarefas          → ListaDeTarefas (as recentes da peça e qual está viva)
 //   GET  /api/tarefas/limites                 → LimitesDeTarefa (antes de enviar)
 //   GET  /api/tarefas/:id                     → Tarefa (a fotografia do estado atual)
@@ -41,8 +41,15 @@ import type {
 } from '@otto/agente';
 import type { Documento as ArvoreDoDocumento } from '@otto/documento';
 import { z } from 'zod';
+import type { PedidoDeTarefaPorBriefing } from './briefing';
 
 export type EntradaDaTarefa = EntradaDoAgente;
+/**
+ * O que POST /api/documentos/:id/tarefas aceita: o pedido livre e o ajuste (entradas do ciclo), ou o
+ * formulário de briefing (briefing.ts). `Tarefa.entrada` de uma tarefa criada pelo formulário traz o
+ * formulário em `briefing` (com a marca já aplicada) e o `cuidado`: leia com `briefingDaTarefa`.
+ */
+export type PedidoDeTarefa = Exclude<EntradaDoAgente, { tipo: 'briefing' }> | z.input<typeof PedidoDeTarefaPorBriefing>;
 export type PlanoDaTarefa = PlanoDoAgente;
 export type CartaoDaDirecao = CartaoDaDirecaoDoAgente;
 export type EtapaDaTarefa = EtapaDoAgente;

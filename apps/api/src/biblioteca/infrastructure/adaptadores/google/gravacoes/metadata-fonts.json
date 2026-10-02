@@ -1,0 +1,629 @@
+{
+  "familyMetadataList": [
+    {
+      "family": "Caveat",
+      "displayName": null,
+      "category": "Handwriting",
+      "stroke": null,
+      "classifications": ["Handwriting"],
+      "size": 403648,
+      "subsets": ["menu", "cyrillic", "cyrillic-ext", "latin", "latin-ext"],
+      "fonts": {
+        "400": {
+          "thickness": 3,
+          "slant": 6,
+          "width": 3,
+          "lineHeight": 1.26
+        },
+        "500": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.26
+        },
+        "600": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.26
+        },
+        "700": {
+          "thickness": 4,
+          "slant": 6,
+          "width": 3,
+          "lineHeight": 1.26
+        }
+      },
+      "axes": [
+        {
+          "tag": "wght",
+          "min": 400.0,
+          "max": 700.0,
+          "defaultValue": 400.0
+        }
+      ],
+      "designers": ["Impallari Type"],
+      "lastModified": "2025-09-04",
+      "dateAdded": "2015-09-23",
+      "popularity": 104,
+      "trending": 531,
+      "defaultSort": 103,
+      "androidFragment": null,
+      "isNoto": false,
+      "colorCapabilities": [],
+      "primaryScript": "",
+      "primaryLanguage": "",
+      "isOpenSource": true,
+      "isBrandFont": false,
+      "languages": []
+    },
+    {
+      "family": "Lilita One",
+      "displayName": null,
+      "category": "Display",
+      "stroke": "Sans Serif",
+      "classifications": ["Display"],
+      "size": 28092,
+      "subsets": ["menu", "latin", "latin-ext"],
+      "fonts": {
+        "400": {
+          "thickness": 8,
+          "slant": 1,
+          "width": 7,
+          "lineHeight": 1.143
+        }
+      },
+      "axes": [],
+      "designers": ["Juan Montoreano"],
+      "lastModified": "2025-09-10",
+      "dateAdded": "2012-01-11",
+      "popularity": 149,
+      "trending": 2221,
+      "defaultSort": 144,
+      "androidFragment": null,
+      "isNoto": false,
+      "colorCapabilities": [],
+      "primaryScript": "",
+      "primaryLanguage": "",
+      "isOpenSource": true,
+      "isBrandFont": false,
+      "languages": []
+    },
+    {
+      "family": "Noto Sans JP",
+      "displayName": "Noto Sans Japanese",
+      "category": "Sans Serif",
+      "stroke": "Sans Serif",
+      "classifications": [],
+      "size": 9589900,
+      "subsets": ["menu", "cyrillic", "japanese", "latin", "latin-ext", "vietnamese"],
+      "fonts": {
+        "100": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.448
+        },
+        "200": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.448
+        },
+        "300": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.448
+        },
+        "400": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.448
+        },
+        "500": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.448
+        },
+        "600": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.448
+        },
+        "700": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.448
+        },
+        "800": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.448
+        },
+        "900": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.448
+        }
+      },
+      "axes": [
+        {
+          "tag": "wght",
+          "min": 100.0,
+          "max": 900.0,
+          "defaultValue": 400.0
+        }
+      ],
+      "designers": ["Google"],
+      "lastModified": "2026-10-01",
+      "dateAdded": "2015-01-29",
+      "popularity": 10,
+      "trending": 1844,
+      "defaultSort": 13,
+      "androidFragment": null,
+      "isNoto": true,
+      "colorCapabilities": [],
+      "primaryScript": "Jpan",
+      "primaryLanguage": "",
+      "isOpenSource": true,
+      "isBrandFont": true,
+      "languages": []
+    },
+    {
+      "family": "Noto Sans Thai",
+      "displayName": null,
+      "category": "Sans Serif",
+      "stroke": "Sans Serif",
+      "classifications": [],
+      "size": 218652,
+      "subsets": ["menu", "latin", "latin-ext", "thai"],
+      "fonts": {
+        "100": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.511
+        },
+        "200": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.511
+        },
+        "300": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.511
+        },
+        "400": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.511
+        },
+        "500": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.511
+        },
+        "600": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.511
+        },
+        "700": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.511
+        },
+        "800": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.511
+        },
+        "900": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.511
+        }
+      },
+      "axes": [
+        {
+          "tag": "wdth",
+          "min": 62.5,
+          "max": 100.0,
+          "defaultValue": 100.0
+        },
+        {
+          "tag": "wght",
+          "min": 100.0,
+          "max": 900.0,
+          "defaultValue": 400.0
+        }
+      ],
+      "designers": ["Google"],
+      "lastModified": "2025-09-04",
+      "dateAdded": "2020-11-19",
+      "popularity": 152,
+      "trending": 1232,
+      "defaultSort": 147,
+      "androidFragment": null,
+      "isNoto": true,
+      "colorCapabilities": [],
+      "primaryScript": "Thai",
+      "primaryLanguage": "",
+      "isOpenSource": true,
+      "isBrandFont": true,
+      "languages": []
+    },
+    {
+      "family": "Playfair Display",
+      "displayName": null,
+      "category": "Serif",
+      "stroke": "Serif",
+      "classifications": ["Display"],
+      "size": 289706,
+      "subsets": ["menu", "cyrillic", "latin", "latin-ext", "vietnamese"],
+      "fonts": {
+        "400": {
+          "thickness": 4,
+          "slant": 1,
+          "width": 7,
+          "lineHeight": 1.333
+        },
+        "400i": {
+          "thickness": 4,
+          "slant": 5,
+          "width": 7,
+          "lineHeight": 1.333
+        },
+        "500": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.333
+        },
+        "500i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.333
+        },
+        "600": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.333
+        },
+        "600i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.333
+        },
+        "700": {
+          "thickness": 6,
+          "slant": 1,
+          "width": 7,
+          "lineHeight": 1.333
+        },
+        "700i": {
+          "thickness": 6,
+          "slant": 5,
+          "width": 7,
+          "lineHeight": 1.333
+        },
+        "800": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.333
+        },
+        "800i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.333
+        },
+        "900": {
+          "thickness": 7,
+          "slant": 1,
+          "width": 7,
+          "lineHeight": 1.333
+        },
+        "900i": {
+          "thickness": 7,
+          "slant": 5,
+          "width": 7,
+          "lineHeight": 1.333
+        }
+      },
+      "axes": [
+        {
+          "tag": "wght",
+          "min": 400.0,
+          "max": 900.0,
+          "defaultValue": 400.0
+        }
+      ],
+      "designers": ["Claus Eggers Sørensen"],
+      "lastModified": "2025-09-11",
+      "dateAdded": "2011-11-16",
+      "popularity": 25,
+      "trending": 1135,
+      "defaultSort": 25,
+      "androidFragment": null,
+      "isNoto": false,
+      "colorCapabilities": [],
+      "primaryScript": "",
+      "primaryLanguage": "",
+      "isOpenSource": true,
+      "isBrandFont": false,
+      "languages": []
+    },
+    {
+      "family": "Poppins",
+      "displayName": null,
+      "category": "Sans Serif",
+      "stroke": "Sans Serif",
+      "classifications": [],
+      "size": 170738,
+      "subsets": ["menu", "devanagari", "latin", "latin-ext"],
+      "fonts": {
+        "100": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "100i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "200": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "200i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "300": {
+          "thickness": 4,
+          "slant": 1,
+          "width": 8,
+          "lineHeight": 1.5
+        },
+        "300i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "400": {
+          "thickness": 5,
+          "slant": 1,
+          "width": 8,
+          "lineHeight": 1.5
+        },
+        "400i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "500": {
+          "thickness": 6,
+          "slant": 1,
+          "width": 8,
+          "lineHeight": 1.5
+        },
+        "500i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "600": {
+          "thickness": 6,
+          "slant": 1,
+          "width": 8,
+          "lineHeight": 1.5
+        },
+        "600i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "700": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "700i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "800": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "800i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "900": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        },
+        "900i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.5
+        }
+      },
+      "axes": [],
+      "designers": ["Indian Type Foundry", "Jonny Pinhorn", "Ninad Kale"],
+      "lastModified": "2025-09-16",
+      "dateAdded": "2015-06-03",
+      "popularity": 8,
+      "trending": 1217,
+      "defaultSort": 11,
+      "androidFragment": null,
+      "isNoto": false,
+      "colorCapabilities": [],
+      "primaryScript": "Deva",
+      "primaryLanguage": "",
+      "isOpenSource": true,
+      "isBrandFont": false,
+      "languages": []
+    },
+    {
+      "family": "Roboto Mono",
+      "displayName": null,
+      "category": "Monospace",
+      "stroke": null,
+      "classifications": ["Monospace"],
+      "size": 190246,
+      "subsets": ["menu", "cyrillic", "cyrillic-ext", "greek", "latin", "latin-ext", "vietnamese"],
+      "fonts": {
+        "100": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "100i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "200": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "200i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "300": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "300i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "400": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "400i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "500": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "500i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "600": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "600i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "700": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        },
+        "700i": {
+          "thickness": null,
+          "slant": null,
+          "width": null,
+          "lineHeight": 1.31884765625
+        }
+      },
+      "axes": [
+        {
+          "tag": "wght",
+          "min": 100.0,
+          "max": 700.0,
+          "defaultValue": 400.0
+        }
+      ],
+      "designers": ["Christian Robertson"],
+      "lastModified": "2026-05-05",
+      "dateAdded": "2025-05-12",
+      "popularity": 16,
+      "trending": 1201,
+      "defaultSort": 16,
+      "androidFragment": null,
+      "isNoto": false,
+      "colorCapabilities": [],
+      "primaryScript": "",
+      "primaryLanguage": "",
+      "isOpenSource": true,
+      "isBrandFont": true,
+      "languages": []
+    }
+  ]
+}

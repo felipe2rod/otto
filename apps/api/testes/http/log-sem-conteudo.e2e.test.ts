@@ -27,6 +27,23 @@ const SENTINELAS = {
   textoQueOOttoEscreveu: 'Abrimos às 7h',
   camadaQueOOttoCriou: 'Subtítulo',
   fonteQueOOttoUsou: 'DM Serif Display',
+  // fatia 4: cadastros da conta, formulário de briefing e buscas
+  nomeDaMarca: 'SENTINELA-NOME-DA-MARCA-3c3c',
+  siteDaMarca: 'sentinela-site-da-marca.example',
+  rodapeDaMarca: 'SENTINELA-RODAPE-DA-MARCA-d2d2',
+  restricaoDaMarca: 'SENTINELA-RESTRICAO-DA-MARCA-9f9f',
+  corDaIdentidade: '#c0ffee',
+  nomeDoBriefingSalvo: 'SENTINELA-BRIEFING-SALVO-5e5e',
+  tituloDoFormulario: 'SENTINELA-TITULO-DO-FORMULARIO-a7a7',
+  publicoDoFormulario: 'SENTINELA-PUBLICO-b8b8',
+  observacoesDoFormulario: 'SENTINELA-OBSERVACOES-DO-FORMULARIO-c9c9',
+  // o cache de busca é da plataforma e fica no banco de teste: o termo muda a cada execução
+  buscaDeImagem: `SENTINELA-BUSCA-DE-IMAGEM-${randomUUID().slice(0, 8)}`,
+  nomeDoLogo: 'SENTINELA-LOGO-DO-CLIENTE-2e2e.svg',
+  autorDaImagem: 'fulana',
+  paginaDaImagem: 'banco-de-mentira.invalid/fotos',
+  enderecoDoArquivoNoBanco: '/get/1001',
+  buscaDeFonte: 'SENTINELA-BUSCA-NO-CATALOGO-4f4f',
 } as const;
 
 let api: ApiDeTeste;
@@ -36,6 +53,8 @@ let exportacaoId: string;
 let tokenDoLink: string;
 let tarefaId: string;
 let tarefaRecusadaId: string;
+let tarefaDoFormularioId: string;
+let marcaId: string;
 
 beforeAll(async () => {
   api = await subirApi();
@@ -111,6 +130,70 @@ beforeAll(async () => {
   tarefaRecusadaId = recusada.id;
   await api.fila.ociosa();
   await A.post(`/api/documentos/${documentoId}/tarefas`).send({ tipo: 'tipo-que-nao-existe', pedido: S.pedidoAoOtto });
+
+  // fatia 4: marca, briefing salvo, busca e imagem trazida, fonte do catálogo, textura, tarefa pelo formulário
+  const logo = (
+    await A.post(`/api/vetores?nome=${encodeURIComponent(S.nomeDoLogo)}`)
+      .set('Content-Type', 'image/svg+xml')
+      .send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0 L10 0 L10 10 Z" fill="#c0ffee"/></svg>')
+  ).body as { no: { origem: { arquivo: string } } };
+  const marca = (
+    await A.post('/api/marcas').send({
+      nome: S.nomeDaMarca,
+      site: S.siteDaMarca,
+      cores: { primaria: S.corDaIdentidade },
+      fonteDeTitulo: S.fonteQueOOttoUsou,
+      logo: { arquivo: logo.no.origem.arquivo },
+      rodape: S.rodapeDaMarca,
+      restricoes: [S.restricaoDaMarca],
+    })
+  ).body as { id: string };
+  marcaId = marca.id;
+  await A.put(`/api/marcas/${marca.id}`).send({ nome: S.nomeDaMarca, rodape: S.rodapeDaMarca, cores: { primaria: S.corDaIdentidade }, restricoes: [S.restricaoDaMarca] });
+  await A.post('/api/marcas').send({ nome: S.nomeDaMarca, cores: { primaria: 'cor-torta' }, [S.restricaoDaMarca]: true });
+  await A.get('/api/marcas');
+  await A.get(`/api/marcas/${marca.id}`);
+  await A.get(`/api/vetores/${logo.no.origem.arquivo}`);
+  await A.get(`/api/arquivos/${logo.no.origem.arquivo}/dados`);
+  const salvo = (await A.post('/api/briefings').send({ nome: S.nomeDoBriefingSalvo, dados: { versao: 1, marcaId: marca.id, publico: S.publicoDoFormulario, textos: { rodape: S.rodapeDaMarca } } }))
+    .body as { id: string };
+  await A.get('/api/briefings');
+  await A.get(`/api/briefings/${salvo.id}`);
+  const busca = (await A.get(`/api/imagens/busca?q=${encodeURIComponent(S.buscaDeImagem)}&orientacao=todas`)).body as { itens: { id: string; previa: string }[] };
+  await A.get(busca.itens[0]?.previa as string);
+  await A.post('/api/imagens/trazer').send({ banco: 'banco-de-mentira', id: busca.itens[0]?.id });
+  await A.post('/api/imagens/trazer').send({ banco: 'banco-de-mentira', id: 'nunca-buscado', [S.buscaDeImagem]: 1 });
+  await A.get(`/api/fontes?q=${encodeURIComponent(S.buscaDeFonte)}&catalogo=1`);
+  await A.get('/api/fontes/Lilita%20One/400');
+  await A.post('/api/texturas/concreto/trazer').send({});
+  const pecaDoFormulario = (await A.post('/api/documentos').send({ nome: S.nomeDoDocumento })).body as { id: string };
+  const doFormulario = (
+    await A.post(`/api/documentos/${pecaDoFormulario.id}/tarefas`).send({
+      tipo: 'briefing',
+      cuidado: 'autoral',
+      briefingId: salvo.id,
+      briefing: {
+        versao: 1,
+        nome: S.nomeDoBriefing,
+        marcaId: marca.id,
+        publico: S.publicoDoFormulario,
+        formatos: ENTRADA_DE_BRIEFING.briefing.formatos,
+        textos: { titulo: S.tituloDoFormulario },
+        imagens: { fonte: 'banco', termos: S.buscaDeImagem },
+        observacoes: S.observacoesDoFormulario,
+      },
+    })
+  ).body as { id: string };
+  tarefaDoFormularioId = doFormulario.id;
+  await api.fila.ociosa();
+  await A.post(`/api/tarefas/${doFormulario.id}/cancelar`).send({});
+  // formulário recusado: marca que não existe, e campo a mais
+  await A.post(`/api/documentos/${pecaDoFormulario.id}/tarefas`).send({
+    tipo: 'briefing',
+    briefing: { versao: 1, formatos: [], textos: { titulo: S.tituloDoFormulario }, imagens: { fonte: 'nenhuma' }, [S.observacoesDoFormulario]: 1 },
+  });
+  await A.delete(`/api/briefings/${salvo.id}`);
+  await A.delete(`/api/marcas/${marca.id}`);
 }, 120_000);
 afterAll(async () => {
   await api?.fechar();
@@ -240,5 +323,48 @@ describe('a tarefa do Otto no log: uso sim, conteúdo não (ADR 031)', () => {
     const fluxos = api.log.filter((l) => l.evento === 'requisicao' && l.rota === '/api/tarefas/:id/eventos');
     expect(fluxos).toHaveLength(2);
     expect(fluxos.every((l) => l.status === 200)).toBe(true);
+  });
+});
+
+describe('fatia 4 no log: cadastros, formulário e buscas', () => {
+  it('a marca registra o que ela tem em contagens; nome, site, cor, rodapé e restrição não aparecem', () => {
+    const salvas = api.log.filter((l) => l.evento === 'marca_salva' && l.marcaId === marcaId);
+    expect(salvas).toHaveLength(2);
+    expect(salvas[0]).toMatchObject({ nova: true, cores: 1, fontes: 1, comLogo: true, icones: 0, restricoes: 1 });
+    expect(api.log.some((l) => l.evento === 'marca_apagada' && l.marcaId === marcaId)).toBe(true);
+  });
+
+  it('a tarefa do formulário registra que veio do formulário, os formatos e o cuidado', () => {
+    const pedida = api.log.find((l) => l.evento === 'tarefa_pedida' && l.tarefaId === tarefaDoFormularioId);
+    expect(pedida).toMatchObject({ tipo: 'briefing', porFormulario: true, formatos: 2, cuidado: 'autoral', deBriefingSalvo: true, esforco: 'CONCEPTUAL' });
+    for (const valor of Object.values(pedida ?? {})) expect(['string', 'number', 'boolean']).toContain(typeof valor);
+  });
+
+  it('a busca de imagem registra banco, contagem e se veio do cache; a imagem trazida, bytes e medidas', () => {
+    expect(api.log.find((l) => l.evento === 'imagens_buscadas')).toMatchObject({ banco: 'banco-de-mentira', origem: 'editor', resultados: 2, doCache: false });
+    expect(api.log.find((l) => l.evento === 'imagem_trazida')).toMatchObject({ banco: 'banco-de-mentira', origem: 'editor', jaTinha: false });
+    expect(api.log.find((l) => l.evento === 'textura_trazida')).toMatchObject({ textura: 'concreto' });
+  });
+
+  it('a fonte baixada do catálogo registra quantos pesos e bytes, não qual família', () => {
+    const baixada = api.log.find((l) => l.evento === 'fonte_baixada');
+    expect(baixada).toMatchObject({ pesos: 1 });
+    expect(JSON.stringify(baixada)).not.toMatch(/Lilita/);
+  });
+
+  it('as rotas novas aparecem como modelo, sem o que a pessoa digitou na busca', () => {
+    const rotas = new Set(api.log.filter((l) => l.evento === 'requisicao').map((l) => l.rota));
+    for (const rota of [
+      '/api/marcas',
+      '/api/marcas/:id',
+      '/api/briefings/:id',
+      '/api/imagens/busca',
+      '/api/imagens/:banco/:id/previa',
+      '/api/imagens/trazer',
+      '/api/texturas/:nome/trazer',
+      '/api/vetores/:sha256',
+      '/api/arquivos/:sha256/dados',
+    ])
+      expect(rotas, rota).toContain(rota);
   });
 });

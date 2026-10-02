@@ -2,7 +2,7 @@
 // Envio é hostil até prova em contrário: tipo pelo conteúdo, limite de bytes e de medidas,
 // e nenhuma decodificação dentro da requisição.
 import { createHash } from 'node:crypto';
-import { type ArquivoEnviado, CODIGOS_DE_ERRO, LIMITES, type TipoDeImagem, VetorImportado } from '@otto/shared';
+import { type ArquivoEnviado, CODIGOS_DE_ERRO, type DadosDoArquivo, LIMITES, type TipoDeImagem, VetorImportado } from '@otto/shared';
 import { ErroDaAplicacao, NaoEncontrado } from '../../plataforma/erros/erro-da-aplicacao';
 import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
 import { type RegistroDeUso, RegistroDeUsoMudo } from '../../plataforma/uso/registro-de-uso';
@@ -11,6 +11,7 @@ import type { ArmazenamentoDeArquivo } from './armazenamento-de-arquivo';
 import { chaveDeArquivoDaConta } from './chave-de-objeto';
 import type { OrigemDoArquivo, RepositorioDeArquivos } from './repositorio-de-arquivos';
 import { importarSvg, SvgRecusado } from './vetor/importar-svg';
+import { miniaturaDoVetor } from './vetor/miniatura-do-vetor';
 
 export interface LimitesDeArquivo {
   bytesPorArquivo: number;
@@ -86,12 +87,8 @@ export class CasosDeUsoDeArquivo {
     const conteudo = Buffer.from(svg, 'utf8');
     const sha256 = createHash('sha256').update(conteudo).digest('hex');
     const nomeGuardado = nome?.trim().slice(0, LIMITES.caracteresDoNome) || 'vetor.svg';
-    // o resultado passa pelo esquema do contrato: o que o importador produzir fora dele não sai daqui
-    const lido = VetorImportado.safeParse({
-      no: { tipo: 'vetor', moldura: importado.moldura, caminhos: importado.caminhos, origem: { arquivo: sha256, nome: nomeGuardado } },
-      avisos: importado.avisos,
-    });
-    if (!lido.success) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.svgInvalido, { motivo: 'malformado' });
+    const lido = this.vetorLido(importado, sha256, nomeGuardado);
+    if (!lido) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.svgInvalido, { motivo: 'malformado' });
 
     const chave = chaveDeArquivoDaConta(escopo, sha256);
     await this.armazenamento.guardar(escopo, chave, conteudo, 'image/svg+xml');
@@ -106,7 +103,51 @@ export class CasosDeUsoDeArquivo {
       chaveDoObjeto: chave,
       nomeOriginal: nomeGuardado,
     });
-    return lido.data;
+    return lido;
+  }
+
+  /** O resultado passa pelo esquema do contrato: o que o importador produzir fora dele não sai daqui. */
+  private vetorLido(importado: ReturnType<typeof importarSvg>, sha256: string, nome: string): VetorImportado | undefined {
+    const lido = VetorImportado.safeParse({ no: { tipo: 'vetor', moldura: importado.moldura, caminhos: importado.caminhos, origem: { arquivo: sha256, nome } }, avisos: importado.avisos });
+    // a miniatura sai dos caminhos JÁ validados, não do arquivo
+    return lido.success ? { ...lido.data, miniatura: miniaturaDoVetor(lido.data.no) } : undefined;
+  }
+
+  /**
+   * Um vetor que a conta já enviou, lido de novo do SVG guardado: o nó, os avisos e a miniatura. É como a
+   * tela de marca e o formulário mostram o logo sem guardar o desenho no navegador, e como o worker monta
+   * o material do briefing. O SVG em si continua sem sair.
+   */
+  async vetor(escopo: EscopoDaConta, sha256: string): Promise<VetorImportado> {
+    if (!SHA256.test(sha256)) throw new NaoEncontrado();
+    const registro = await this.arquivos.buscar(escopo, sha256);
+    if (registro?.especie !== 'vetor') throw new NaoEncontrado();
+    const bytes = await this.armazenamento.ler(escopo, registro.chaveDoObjeto);
+    if (!bytes) throw new NaoEncontrado();
+    try {
+      const lido = this.vetorLido(importarSvg(Buffer.from(bytes).toString('utf8')), sha256, registro.nomeOriginal ?? 'vetor.svg');
+      if (lido) return lido;
+    } catch (e) {
+      if (!(e instanceof SvgRecusado)) throw e;
+    }
+    // foi aceito no envio e não é mais (o importador mudou): para quem pede, não existe
+    throw new NaoEncontrado();
+  }
+
+  /** O que a conta tem sobre um arquivo, sem os bytes. */
+  async dados(escopo: EscopoDaConta, sha256: string): Promise<DadosDoArquivo> {
+    if (!SHA256.test(sha256)) throw new NaoEncontrado();
+    const r = await this.arquivos.buscar(escopo, sha256);
+    if (!r) throw new NaoEncontrado();
+    return {
+      sha256: r.sha256,
+      especie: r.especie,
+      tipo: r.tipoMime,
+      bytes: r.bytes,
+      ...(r.largura && r.altura ? { largura: r.largura, altura: r.altura } : {}),
+      ...(r.nomeOriginal ? { nome: r.nomeOriginal } : {}),
+      ...(r.origem ? { origem: { banco: r.origem.banco, autor: r.origem.autor, licenca: r.origem.licenca, pagina: r.origem.url } } : {}),
+    };
   }
 
   /**

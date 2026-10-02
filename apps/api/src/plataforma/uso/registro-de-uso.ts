@@ -7,6 +7,7 @@ import type { EscopoDaConta } from '../escopo/escopo-da-conta';
 type FormatoExportado = 'psd' | 'png' | 'svg' | 'pdf';
 
 export type EventoDeUso =
+  | { evento: 'peca_de_exemplo_semeada'; documentoId: string }
   | { evento: 'lote_aplicado'; documentoId: string; autoria: 'designer' | 'agente'; operacoesPorTipo: Record<string, number>; nosTocados: number; mediuTexto: boolean; versao: number }
   | { evento: 'arquivo_enviado'; tipo: string; bytes: number; largura: number; altura: number }
   | { evento: 'exportacao_pedida'; exportacaoId: string; documentoId: string; formato: FormatoExportado; pacote: boolean; pranchetas: number; juntas: boolean }
@@ -14,7 +15,7 @@ export type EventoDeUso =
   | { evento: 'exportacao_limpa'; exportacaoId: string; arquivos: number; bytes: number }
   // A tarefa do Otto. O texto do pedido é dado de uso (ADR 031) e mora em entradas_de_tarefa, com acesso
   // restrito: NÃO entra aqui. Aqui só tipos, códigos e números.
-  | { evento: 'tarefa_pedida'; tarefaId: string; documentoId: string; tipo: string; esforco?: string }
+  | { evento: 'tarefa_pedida'; tarefaId: string; documentoId: string; tipo: string; esforco?: string; porFormulario?: boolean; formatos?: number; cuidado?: string; deBriefingSalvo?: boolean }
   | { evento: 'tarefa_confirmacao'; tarefaId: string; documentoId: string; resposta: 'pode' | 'ajustar' | 'cancelar' }
   | {
       evento: 'tarefa_terminada';
@@ -38,6 +39,15 @@ export type EventoDeUso =
       microDolares?: number;
       conferida: boolean;
     }
+  // Cadastros e banco de imagens (fatia 4). Marca, briefing e consulta de busca são conteúdo ou dado de uso
+  // de acesso restrito: aqui só identificadores, contagens e códigos.
+  | { evento: 'marca_salva'; marcaId: string; nova: boolean; cores: number; fontes: number; comLogo: boolean; icones: number; restricoes: number }
+  | { evento: 'marca_apagada'; marcaId: string }
+  | { evento: 'briefing_salvo'; briefingId: string; novo: boolean; formatos: number; comMarca: boolean }
+  | { evento: 'briefing_apagado'; briefingId: string }
+  | { evento: 'imagens_buscadas'; banco: string; origem: 'editor' | 'otto'; resultados: number; doCache: boolean; duracaoMs: number }
+  | { evento: 'imagem_trazida'; banco: string; origem: 'editor' | 'otto'; bytes: number; largura: number; altura: number; jaTinha: boolean }
+  | { evento: 'textura_trazida'; textura: string }
   | { evento: 'tarefa_decidida'; tarefaId: string; documentoId: string; resultado: 'aceita' | 'aceita_em_parte' | 'desfeita' }
   | {
       evento: 'exportacao_terminada';

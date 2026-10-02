@@ -60,6 +60,8 @@ model Documento {
   criadoEm        DateTime  @default(now()) @map("criado_em") @db.Timestamptz(3)
   alteradoEm      DateTime  @default(now()) @map("alterado_em") @db.Timestamptz(3)
   arquivadoEm     DateTime? @map("arquivado_em") @db.Timestamptz(3)
+  /// Peça de exemplo semeada na conta nova.
+  deExemplo       Boolean   @default(false) @map("de_exemplo")
 
   conta   Conta               @relation(fields: [contaId], references: [id])
   versoes     VersaoDeDocumento[]
@@ -308,6 +310,10 @@ model TarefaDoAgente {
   idsDoPreparo          Int            @default(0) @map("ids_do_preparo")
   ultimoEvento          Int            @default(-1) @map("ultimo_evento")
   origemId              String?        @map("origem_id") @db.Uuid
+  /// O briefing salvo de onde o formulário partiu. Apagado o briefing, vira nulo.
+  briefingId            String?        @map("briefing_id") @db.Uuid
+  /// Quando entrou (ou voltou) para a fila.
+  enfileiradaEm         DateTime       @default(now()) @map("enfileirada_em") @db.Timestamptz(3)
   cancelamentoPedidoEm  DateTime?      @map("cancelamento_pedido_em") @db.Timestamptz(3)
   batimentoEm           DateTime?      @map("batimento_em") @db.Timestamptz(3)
   criadaEm              DateTime       @default(now()) @map("criada_em") @db.Timestamptz(3)
@@ -397,4 +403,56 @@ model ConsumoDiarioDoModelo {
   vistoEm              DateTime? @map("visto_em") @db.Timestamptz(3)
 
   @@map("consumo_diario_do_modelo")
+}
+
+/// Identidade de um cliente do designer (docs/mvp/experiencia.md, 3.3). Conteúdo da conta.
+model Marca {
+  id            String   @id @db.Uuid
+  contaId       String   @map("conta_id") @db.Uuid
+  nome          String
+  site          String?
+  cores         Json     @default("{}")
+  fonteDeTitulo String?  @map("fonte_de_titulo")
+  fonteDeTexto  String?  @map("fonte_de_texto")
+  logoSha256    String?  @map("logo_sha256") @db.Char(64)
+  icones        Json     @default("[]")
+  rodape        String?
+  restricoes    Json     @default("[]")
+  criadaEm      DateTime @default(now()) @map("criada_em") @db.Timestamptz(3)
+  alteradaEm    DateTime @default(now()) @map("alterada_em") @db.Timestamptz(3)
+
+  @@unique([id, contaId])
+  // a lista de marcas da conta, por nome
+  @@index([contaId, nome])
+  @@map("marcas")
+}
+
+/// Formulário de briefing pela metade, reutilizável (ADR 033).
+model Briefing {
+  id         String   @id @db.Uuid
+  contaId    String   @map("conta_id") @db.Uuid
+  nome       String
+  marcaId    String?  @map("marca_id") @db.Uuid
+  dados      Json
+  cuidado    String?
+  usos       Int      @default(0)
+  criadoEm   DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  alteradoEm DateTime @default(now()) @map("alterado_em") @db.Timestamptz(3)
+
+  @@unique([id, contaId])
+  // a lista de briefings da conta, do alterado mais recentemente para o mais antigo
+  @@index([contaId, alteradoEm(sort: Desc)])
+  @@map("briefings")
+}
+
+/// Cache de 24 h das buscas no banco de imagens (ADR 032). Da plataforma, sem conta_id: exceção declarada
+/// em isolamento.excecoes.ts. Não guarda o texto da busca.
+model BuscaDeImagens {
+  banco      String
+  chave      String   @db.Char(64)
+  buscadaEm  DateTime @default(now()) @map("buscada_em") @db.Timestamptz(3)
+  resultados Json
+
+  @@id([banco, chave, buscadaEm])
+  @@map("buscas_de_imagens")
 }

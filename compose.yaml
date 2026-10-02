@@ -45,11 +45,22 @@ x-servidor: &servidor
   # Quantas exportações cada worker roda ao mesmo tempo (uma thread e um núcleo para cada). A API ignora.
   EXPORTACOES_AO_MESMO_TEMPO: ${EXPORTACOES_POR_WORKER:-2}
   # A tarefa do Otto. Limites operacionais (não são plano comercial) e o teto diário nosso de tokens.
-  TAREFAS_POR_DIA_POR_CONTA: ${TAREFAS_POR_DIA_POR_CONTA:-30}
+  # No desenvolvimento o teto diário da conta é folgado: os testes de navegador pedem 5 tarefas por execução.
+  # O padrão do código (o que vale em produção sem esta variável) é 30.
+  TAREFAS_POR_DIA_POR_CONTA: ${TAREFAS_POR_DIA_POR_CONTA:-1000}
   TAREFAS_NA_FILA_POR_CONTA: ${TAREFAS_NA_FILA_POR_CONTA:-3}
   TETO_DIARIO_DE_TOKENS: ${TETO_DIARIO_DE_TOKENS:-40000000}
   # Com menos que isto sobrando no limite diário do fornecedor, tarefa nova é recusada. 0 desliga a conferência.
   RESTO_MINIMO_NO_FORNECEDOR: ${RESTO_MINIMO_NO_FORNECEDOR:-3000000}
+  # Qual modelo roda as tarefas. A API não chama o modelo, mas precisa saber: com o roteirizado não há consumo,
+  # e o teto diário de tokens não recusa tarefa. A CHAVE do modelo vai só para o worker.
+  MODELO_DO_AGENTE: ${MODELO_DO_AGENTE:-roteirizado}
+  # Banco de imagens de fábrica (ADR 032). A chave é segredo: fica no .env da raiz, fora do repositório.
+  # Sem ela a busca responde 503 e o Otto não recebe as ferramentas de imagem.
+  PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
+  IMAGENS_TRAZIDAS_POR_DIA_POR_CONTA: ${IMAGENS_TRAZIDAS_POR_DIA_POR_CONTA:-100}
+  # De onde a biblioteca traz fonte que ainda não tem. "nenhum" não vai à rede.
+  CATALOGO_DE_FONTES: ${CATALOGO_DE_FONTES:-google}
 
 services:
   # ---------- o que atende ----------
@@ -92,9 +103,8 @@ services:
       PORTA: "3001"
       TAREFAS_AO_MESMO_TEMPO: ${TAREFAS_POR_WORKER:-2}
       # Só o worker chama o modelo, e só ele recebe a chave. O padrão é o roteirizado: reproduz uma tarefa
-      # gravada, sem custo. Para o modelo de verdade: MODELO_DO_AGENTE=claude docker compose up -d worker
+      # gravada, sem custo. Para o modelo de verdade: MODELO_DO_AGENTE=claude docker compose up -d api worker
       # (a chave vem de LLM_API_KEY_DO, no .env da raiz, que não entra no repositório).
-      MODELO_DO_AGENTE: ${MODELO_DO_AGENTE:-roteirizado}
       MODELO_CHAVE: ${LLM_API_KEY_DO:-}
       MODELO_NOME: ${MODELO_NOME:-}
       # 1: o roteiro demora o que demorou na gravação (7 minutos no de briefing). 0.05: vinte vezes mais rápido.
@@ -153,7 +163,7 @@ services:
 
   semear:
     <<: *node
-    # biblioteca do Otto (fontes base). Idempotente; roda como otto_app, depois da migração
+    # biblioteca do Otto (fontes base e texturas) e a peça de exemplo da conta. Idempotente; roda como otto_app, depois da migração
     command: ["pnpm", "--filter", "@otto/api", "biblioteca:semear"]
     environment:
       <<: *servidor

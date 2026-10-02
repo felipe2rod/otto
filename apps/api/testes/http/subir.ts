@@ -5,6 +5,7 @@
 // A fila roda no próprio processo, com o MESMO consumidor do worker e o motor de exportação de verdade
 // (no laço principal, sem a thread). A tarefa do Otto roda com o consumidor do worker, a bancada de render de
 // verdade e o modelo roteirizado (sem espera): nenhum teste fala com modelo.
+// Banco de imagens, catálogo de fontes e gerador de texturas são os falsos: nenhum teste vai à rede.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { INestApplication } from '@nestjs/common';
@@ -16,11 +17,15 @@ import { configurarAplicacao, ModuloRaiz } from '../../src/aplicacao';
 import { ArmazenamentoDeArquivo } from '../../src/arquivo/application/armazenamento-de-arquivo';
 import { ArmazenamentoEmMemoria } from '../../src/arquivo/infrastructure/adaptadores/memoria/armazenamento-em-memoria';
 import { BibliotecaDeFontes } from '../../src/biblioteca/application/biblioteca-de-fontes';
+import { CatalogoDeFontes } from '../../src/biblioteca/application/catalogo-de-fontes';
+import { CatalogoDeMentira } from '../../src/biblioteca/infrastructure/adaptadores/memoria/catalogo-de-mentira';
 import { BibliotecaDeFontesEmMemoria } from '../../src/biblioteca/infrastructure/memoria/biblioteca-de-fontes-em-memoria';
 import { CasosDeUsoDeExportacao } from '../../src/exportacao/application/casos-de-uso-de-exportacao';
 import { MotorDeExportacao } from '../../src/exportacao/application/motor-de-exportacao';
 import { consumirExportacoes } from '../../src/exportacao/infrastructure/consumidor-de-exportacoes';
 import { MotorDeExportacaoComRender } from '../../src/exportacao/infrastructure/render/motor-de-exportacao-com-render';
+import { BancoDeImagens } from '../../src/imagem/application/banco-de-imagens';
+import { BancoDeMentira } from '../../src/imagem/infrastructure/adaptadores/memoria/banco-de-mentira';
 import { lerConfiguracao } from '../../src/plataforma/config/configuracao';
 import type { EscopoDaConta } from '../../src/plataforma/escopo/escopo-da-conta';
 import { ResolvedorDeEscopo } from '../../src/plataforma/escopo/resolvedor-de-escopo';
@@ -29,11 +34,14 @@ import { BarramentoDeEventos } from '../../src/plataforma/fila/barramento-de-eve
 import { Registro } from '../../src/plataforma/log/registro';
 import { CasosDeUsoDeTarefa } from '../../src/tarefa/application/casos-de-uso-de-tarefa';
 import { consumirTarefas } from '../../src/tarefa/infrastructure/consumidor-de-tarefas';
+import { GeradorDeTexturas } from '../../src/textura/application/texturas';
 import { criarContaDeTeste, urlDoAppDeTeste } from '../banco/conexoes';
 
 const RECURSOS = path.resolve(import.meta.dirname, '../../../../packages/render/recursos-de-teste');
 export const PNG = readFileSync(path.join(RECURSOS, 'imagens/recorte-com-alfa.png'));
 export const JPEG = readFileSync(path.join(RECURSOS, 'imagens/foto-paisagem.jpg'));
+/** O que o gerador de texturas falso devolve: uma imagem válida cujo hash não coincide com o de nenhum outro arquivo de teste. */
+export const TEXTURA_DE_MENTIRA = Buffer.concat([PNG, Buffer.from('textura de mentira')]);
 export const FONTE_ANTON = readFileSync(path.join(RECURSOS, 'fontes/Anton-Regular.ttf'));
 
 /** Nos testes, a credencial (cookie otto_sessao) é o apelido da conta. Sem cookie: a conta A. */
@@ -68,6 +76,10 @@ export interface ApiDeTeste {
   contaB: EscopoDaConta;
   armazenamento: ArmazenamentoEspiao;
   fontes: BibliotecaDeFontesEmMemoria;
+  /** O banco de imagens falso: conta as buscas e os downloads. */
+  banco: BancoDeMentira;
+  /** O catálogo de fontes falso (Poppins, Playfair Display, Lilita One): conta os downloads. */
+  catalogo: CatalogoDeMentira;
   /** A fila, no próprio processo. `await fila.ociosa()` espera as exportações pedidas terminarem. */
   fila: BarramentoEmMemoria;
   /** Linhas de log emitidas, já lidas como JSON. */
@@ -84,6 +96,7 @@ export interface ClienteDeTeste {
   get(caminho: string): request.Test;
   post(caminho: string): request.Test;
   patch(caminho: string): request.Test;
+  put(caminho: string): request.Test;
   delete(caminho: string): request.Test;
   /** Sem o cabeçalho X-Otto-Cliente, como faria um site qualquer. */
   cru: ReturnType<typeof request>;
@@ -117,6 +130,8 @@ export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { 
   const armazenamento = new ArmazenamentoEspiao();
   const fontes = new BibliotecaDeFontesEmMemoria();
   const fila = new BarramentoEmMemoria();
+  const banco = new BancoDeMentira(JPEG);
+  const catalogo = new CatalogoDeMentira(FONTE_ANTON);
   await fontes.registrar({ familia: 'Anton', peso: 400, nomePostScript: 'Anton-Regular', licenca: 'SIL Open Font License 1.1', conteudo: FONTE_ANTON });
 
   const modulo = await Test.createTestingModule({ imports: [ModuloRaiz.para('api', config)] })
@@ -128,6 +143,13 @@ export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { 
     .useValue(fontes)
     .overrideProvider(BarramentoDeEventos)
     .useValue(fila)
+    .overrideProvider(BancoDeImagens)
+    .useValue(banco)
+    .overrideProvider(CatalogoDeFontes)
+    .useValue(catalogo)
+    // a API não desenha textura; aqui o "worker" é o mesmo processo, com um gerador que devolve uma foto
+    .overrideProvider(GeradorDeTexturas)
+    .useValue({ gerar: async () => TEXTURA_DE_MENTIRA })
     // o mesmo motor, no próprio laço: subir uma thread por exportação custa 1 s a cada teste. O motor em
     // thread tem o teste dele (motor-em-thread.test.ts) e roda de verdade no worker do compose.
     .overrideProvider(MotorDeExportacao)
@@ -144,9 +166,9 @@ export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { 
   const como = (conta: 'A' | 'B'): ClienteDeTeste => {
     const agente = request(app.getHttpServer());
     const com = (t: request.Test) => t.set('Cookie', `otto_sessao=${conta}`).set(CABECALHOS.cliente.nome, CABECALHOS.cliente.valor);
-    return { get: (c) => com(agente.get(c)), post: (c) => com(agente.post(c)), patch: (c) => com(agente.patch(c)), delete: (c) => com(agente.delete(c)), cru: agente };
+    return { get: (c) => com(agente.get(c)), post: (c) => com(agente.post(c)), patch: (c) => com(agente.patch(c)), put: (c) => com(agente.put(c)), delete: (c) => com(agente.delete(c)), cru: agente };
   };
-  return { app, contaA, contaB, armazenamento, fontes, fila, log, logCru, como, ligarTarefas, fechar: () => app.close() };
+  return { app, contaA, contaB, armazenamento, fontes, banco, catalogo, fila, log, logCru, como, ligarTarefas, fechar: () => app.close() };
 }
 
 export const criarPrancheta = (nome = 'Feed') => ({ op: 'criarPrancheta', nome, largura: 1080, altura: 1350, fundo: '#ffffff' });

@@ -11,6 +11,8 @@ export interface RepositorioDeTarefasSobTeste {
   contaB: EscopoDaConta;
   /** Cria um documento na conta, já com `versao` lotes gravados, e devolve o id. */
   criarDocumento(escopo: EscopoDaConta, versao?: number): Promise<string>;
+  /** Cria um briefing salvo na conta e devolve o id. Só o adaptador do banco precisa (a chave estrangeira confere). */
+  criarBriefing?(escopo: EscopoDaConta): Promise<string>;
 }
 
 const AGORA = new Date('2026-10-03T12:00:00.000Z');
@@ -183,10 +185,10 @@ export function contratoDoRepositorioDeTarefas(nome: string, criar: () => Promis
       const t = await nova(conta);
       await r.iniciar(conta, t.id, AGORA);
       await r.guardarPreparo(conta, t.id, { preparo: PREPARO, idsDoPreparo: 2, seguir: 'aguardar', agora: AGORA });
-      expect(await r.pedirAjuste(conta, t.id, 'menos dourado')).toEqual({ jaNaFila: 0 });
+      expect(await r.pedirAjuste(conta, t.id, 'menos dourado', AGORA)).toEqual({ jaNaFila: 0 });
       expect(await r.buscar(conta, t.id)).toMatchObject({ estado: 'na_fila', fase: 'preparo' });
       expect((await r.entradaDe(conta, t.id))?.ajustes).toEqual(['menos dourado']);
-      expect(await r.pedirAjuste(conta, t.id, 'outro')).toBeUndefined();
+      expect(await r.pedirAjuste(conta, t.id, 'outro', AGORA)).toBeUndefined();
       await encerrar(conta, t.id);
     });
 
@@ -285,6 +287,52 @@ export function contratoDoRepositorioDeTarefas(nome: string, criar: () => Promis
       expect(await r.darBaixaNasParadas(conta, depois(150), depois(135))).toEqual([]);
       expect((await r.darBaixaNasParadas(conta, depois(400), depois(340))).map((t) => [t.estado, t.fim, t.erroCodigo])).toEqual([['falhou', 'interrompida', 'interrompida']]);
       await encerrar(outra, viva.id);
+    });
+
+    it('a lista de vivas da conta diz como o trabalho parou: em revisão sem ter entregue, a tarefa não terminou', async () => {
+      const t = await nova(sob.contaA);
+      expect((await r.vivasDaConta(sob.contaA)).get(t.documentoId)).toEqual({ id: t.id, estado: 'na_fila' });
+      await r.iniciar(sob.contaA, t.id, AGORA);
+      await r.guardarPreparo(sob.contaA, t.id, { preparo: { ...PREPARO, pedeConfirmacao: false }, idsDoPreparo: 0, seguir: 'executar', agora: AGORA });
+      await r.registrarLote(sob.contaA, t.id, ['n1']);
+      await r.concluir(sob.contaA, t.id, { estado: 'em_revisao', fim: 'interrompida', agora: depois(5) });
+      expect((await r.vivasDaConta(sob.contaA)).get(t.documentoId)).toEqual({ id: t.id, estado: 'em_revisao', fim: 'interrompida' });
+      expect((await r.vivaDoDocumento(sob.contaA, t.documentoId))?.fim).toBe('interrompida');
+      await r.decidir(sob.contaA, t.id, { de: ['em_revisao'], para: 'desfeita', resultado: 'desfeita', agora: depois(6) });
+    });
+
+    it('a tarefa parada na fila (o trabalho se perdeu) é devolvida à fila uma vez por intervalo, e só a que está na fila', async () => {
+      const { contaA: conta } = await criar();
+      const parada = await nova(conta, { criadaEm: AGORA });
+      expect(parada.enfileiradaEm).toEqual(AGORA);
+      // ainda não passou o intervalo
+      expect(await r.devolverAFila(conta, depois(-1), depois(10))).toEqual([]);
+      expect(await r.devolverAFila(conta, depois(60), depois(120))).toEqual([{ id: parada.id, jaNaFila: 0 }]);
+      // devolvida agora: a próxima varredura, dentro do intervalo, não a devolve de novo
+      expect(await r.devolverAFila(conta, depois(60), depois(125))).toEqual([]);
+      expect((await r.buscar(conta, parada.id))?.enfileiradaEm).toEqual(depois(120));
+      // trabalhando, no "pode" ou encerrada: não é da fila
+      await r.iniciar(conta, parada.id, depois(130));
+      expect(await r.devolverAFila(conta, depois(1000), depois(1001))).toEqual([]);
+      await r.guardarPreparo(conta, parada.id, { preparo: PREPARO, idsDoPreparo: 0, seguir: 'aguardar', agora: depois(131) });
+      expect(await r.devolverAFila(conta, depois(1000), depois(1001))).toEqual([]);
+      // aprovada, volta para a fila com a hora da aprovação
+      await r.aprovar(conta, parada.id, depois(2000));
+      expect((await r.buscar(conta, parada.id))?.enfileiradaEm).toEqual(depois(2000));
+      expect(await r.devolverAFila(conta, depois(2060), depois(2061))).toEqual([{ id: parada.id, jaNaFila: 0 }]);
+      // de outra conta, nada
+      expect(await r.devolverAFila(sob.contaB, depois(99_999), depois(100_000))).toEqual([]);
+      await encerrar(conta, parada.id);
+    });
+
+    it('guarda o briefing salvo de onde a tarefa partiu', async () => {
+      const documentoId = await sob.criarDocumento(sob.contaA, 0);
+      const briefingId = sob.criarBriefing ? await sob.criarBriefing(sob.contaA) : randomUUID();
+      const criada = await r.criar(sob.contaA, { id: randomUUID(), documentoId, entrada: PEDIDO, briefingId, criadaEm: AGORA }, { naFilaPorConta: 50 });
+      if (!('tarefa' in criada)) throw new Error('não criou');
+      expect(criada.tarefa.briefingId).toBe(briefingId);
+      expect((await r.buscar(sob.contaA, criada.tarefa.id))?.briefingId).toBe(briefingId);
+      await encerrar(sob.contaA, criada.tarefa.id);
     });
 
     it('lista as tarefas de uma peça, da mais nova para a mais velha', async () => {

@@ -16,6 +16,7 @@
 import {
   type AmbienteBase,
   type AmbienteDaTarefa,
+  type BancoDeImagens as BancoDeImagensDoCiclo,
   type ChamadaRegistrada,
   type CustoDaTarefa,
   criarGuarda,
@@ -24,6 +25,7 @@ import {
   ErroDoModelo,
   type EventoDaTarefa,
   executarTarefa,
+  type ImagemParaOModelo,
   type LimitesDoSistema,
   type ModeloDoAgente,
   prepararTarefa,
@@ -32,6 +34,7 @@ import {
 import type { Documento } from '@otto/documento';
 import {
   type AntesDaTarefa,
+  briefingDaTarefa,
   CODIGOS_DE_ERRO,
   ESTADOS_DE_TAREFA_EM_ANDAMENTO,
   type EstadoDaPendencia,
@@ -43,6 +46,7 @@ import {
   type PedidoDeAjusteDoPlano,
   type PedidoDeDescartar,
   type PedidoDeDesfazerTarefa,
+  type PedidoDeTarefaPorBriefing,
   type PendenciaDaPeca,
   type RespostaDeDesfazerTarefa,
   type Tarefa,
@@ -54,8 +58,10 @@ import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
 import { type BarramentoDeEventos, FILAS } from '../../plataforma/fila/barramento-de-eventos';
 import { type RegistroDeUso, RegistroDeUsoMudo } from '../../plataforma/uso/registro-de-uso';
 import type { BancadaDoOtto } from './bancada-do-otto';
+import type { BriefingDaTarefa } from './briefing-da-tarefa';
 import type { ConsumoDoModelo } from './consumo-do-modelo';
 import type { ModelosDoOtto } from './modelos-do-otto';
+import type { FontesDoOtto, ImagensDoOtto, TexturasDoOtto } from './recursos-do-otto';
 import type { PendenciaGuardada, RepositorioDeTarefas, TarefaGuardada } from './repositorio-de-tarefas';
 
 /** Tarefa trabalhando sem sinal de vida há mais que isto: o worker caiu. O sinal sai a cada 2 s. */
@@ -63,6 +69,15 @@ export const SEM_SINAL_DA_TAREFA_MS = 60_000;
 const INTERVALO_DO_SINAL_DE_VIDA_MS = 2_000;
 /** Quanto o desligamento espera as tarefas abortadas gravarem o fecho. Cabe com folga no prazo de parada do contêiner. */
 const ESPERA_DO_FECHO_MS = 8_000;
+/**
+ * Tarefa na fila há mais que isto sem começar: o trabalho dela pode ter se perdido (worker morto ao pegar,
+ * tentativas esgotadas). É publicado de novo, uma vez por prazo. Publicar de novo não roda o ciclo duas vezes:
+ * só a tarefa que está "na fila" começa. Se a fila só está cheia, o trabalho a mais é ignorado quando chegar.
+ */
+export const NA_FILA_SEM_TRABALHO_MS = 5 * 60_000;
+/** Nada de download em massa (ADR 032): tetos de uma tarefa no banco de imagens. */
+const BUSCAS_POR_TAREFA = 8;
+const IMAGENS_POR_TAREFA = 6;
 const TAREFAS_NA_LISTA = 20;
 /** Até quantos lotes para trás se olha para separar o que é da revisão da tarefa do que o designer fez depois. */
 const JANELA_DO_HISTORICO = 200;
@@ -79,6 +94,14 @@ export interface LimitesDaTarefa {
   restoMinimoNoFornecedor: number;
   /** Tetos de uma tarefa (custo, tempo, tokens, chamadas). Sem isto, os padrões de @otto/agente. */
   sistema?: Partial<LimitesDoSistema>;
+  /**
+   * Falso quando o modelo é o roteirizado: não há consumo de verdade, então o teto de tokens e o resto do
+   * fornecedor não recusam nada e o contador do dia não é somado. Com o modelo de verdade é sempre verdadeiro.
+   */
+  contarConsumo?: boolean;
+  /** Quantas buscas no banco de imagens, e quantas imagens trazidas, uma tarefa pode fazer. */
+  buscasPorTarefa?: number;
+  imagensPorTarefa?: number;
 }
 
 /** O que aconteceu de errado, sem conteúdo: a mensagem do erro pode citar a peça e não sai daqui. */
@@ -101,6 +124,13 @@ export interface DependenciasDaTarefa {
   agora?: () => Date;
   uso?: RegistroDeUso;
   aoFalhar?: (falha: FalhaDaTarefa) => void;
+  /** O formulário de briefing. Ausente: só pedido livre e ajuste. */
+  briefing?: BriefingDaTarefa;
+  /** Banco de imagens. Ausente: o Otto não recebe buscarImagens nem trazerImagem. */
+  imagens?: ImagensDoOtto;
+  texturas?: TexturasDoOtto;
+  /** Catálogo de fontes. Ausente: o Otto só usa as da biblioteca. */
+  fontes?: FontesDoOtto;
   /** O ciclo do agente. Só os testes trocam. */
   ciclo?: { preparar: typeof prepararTarefa; executar: typeof executarTarefa };
   intervaloDoSinalDeVidaMs?: number;
@@ -137,12 +167,14 @@ export class CasosDeUsoDeTarefa {
   private readonly uso: RegistroDeUso;
   private readonly ciclo: { preparar: typeof prepararTarefa; executar: typeof executarTarefa };
   private readonly emCurso = new Map<string, EmCurso>();
+  private readonly contaConsumo: boolean;
   private desligando = false;
 
   constructor(private readonly d: DependenciasDaTarefa) {
     this.agora = d.agora ?? (() => new Date());
     this.uso = d.uso ?? new RegistroDeUsoMudo();
     this.ciclo = d.ciclo ?? { preparar: prepararTarefa, executar: executarTarefa };
+    this.contaConsumo = d.limites.contarConsumo !== false;
   }
 
   // ---------------------------------------------------------------- pedir e consultar
@@ -150,7 +182,7 @@ export class CasosDeUsoDeTarefa {
   /** O que dizer ao designer ANTES de enviar: em tarefas, nunca em tokens. */
   async limites(escopo: EscopoDaConta): Promise<LimitesDeTarefa> {
     const agora = this.agora();
-    await this.darBaixaNasParadas(escopo);
+    await this.varrer(escopo);
     const [tarefasHoje, naFila, semTeto] = [await this.d.tarefas.contarCriadasDesde(escopo, inicioDoDia(agora)), await this.d.tarefas.contarNaFila(escopo), await this.plataformaSemTeto(agora)];
     const motivo = semTeto
       ? ('limite_diario' as const)
@@ -163,9 +195,9 @@ export class CasosDeUsoDeTarefa {
   }
 
   /** Cria a tarefa sobre a versão atual da peça e põe a primeira parte na fila. */
-  async criar(escopo: EscopoDaConta, documentoId: string, entrada: EntradaDaTarefa, origemId?: string): Promise<Tarefa> {
+  async criar(escopo: EscopoDaConta, documentoId: string, entrada: EntradaDaTarefa, origemId?: string, briefingId?: string): Promise<Tarefa> {
     const agora = this.agora();
-    await this.darBaixaNasParadas(escopo);
+    await this.varrer(escopo);
     // parar no meio custa mais que recusar no começo: o teto do dia é conferido antes de aceitar
     if (await this.plataformaSemTeto(agora)) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.limiteDiario);
     if ((await this.d.tarefas.contarCriadasDesde(escopo, inicioDoDia(agora))) >= this.d.limites.tarefasPorDia)
@@ -173,7 +205,7 @@ export class CasosDeUsoDeTarefa {
 
     const criada = await this.d.tarefas.criar(
       escopo,
-      { id: this.d.gerarId(), documentoId, entrada, ...(origemId ? { origemId } : {}), criadaEm: agora },
+      { id: this.d.gerarId(), documentoId, entrada, ...(origemId ? { origemId } : {}), ...(briefingId ? { briefingId } : {}), criadaEm: agora },
       { naFilaPorConta: this.d.limites.naFilaPorConta },
     );
     if ('recusa' in criada) {
@@ -182,21 +214,46 @@ export class CasosDeUsoDeTarefa {
       throw new ErroDaAplicacao(CODIGOS_DE_ERRO.limiteDeTarefas, { motivo: 'fila_cheia', limite: this.d.limites.naFilaPorConta });
     }
     await this.publicar(escopo, criada.tarefa.id, criada.jaNaFila);
-    this.uso.registrar(escopo, { evento: 'tarefa_pedida', tarefaId: criada.tarefa.id, documentoId, tipo: entrada.tipo, ...(criada.tarefa.esforco ? { esforco: criada.tarefa.esforco } : {}) });
+    const formulario = briefingDaTarefa({ entrada });
+    this.uso.registrar(escopo, {
+      evento: 'tarefa_pedida',
+      tarefaId: criada.tarefa.id,
+      documentoId,
+      tipo: entrada.tipo,
+      ...(criada.tarefa.esforco ? { esforco: criada.tarefa.esforco } : {}),
+      // do formulário só o que é contagem e escolha de opção: o que foi preenchido é conteúdo
+      ...(formulario ? { porFormulario: true, formatos: formulario.briefing.formatos.length, cuidado: formulario.cuidado, deBriefingSalvo: briefingId !== undefined } : {}),
+    });
     return this.fotografia(escopo, criada.tarefa, { entrada });
+  }
+
+  /**
+   * Cria a tarefa a partir do formulário de briefing (ADR 033). O que fica guardado é o formulário, já com a
+   * marca aplicada e só com referências a arquivos da conta; o material para o ciclo é montado no worker.
+   */
+  async criarPorBriefing(escopo: EscopoDaConta, documentoId: string, pedido: PedidoDeTarefaPorBriefing): Promise<Tarefa> {
+    if (!this.d.briefing) throw new NaoEncontrado();
+    // primeiro "a peça existe nesta conta?": peça de outra conta responde o mesmo, qualquer que seja o formulário
+    await this.exigirPeca(escopo, documentoId);
+    const { entrada, briefingId } = await this.d.briefing.preparar(escopo, pedido);
+    const tarefa = await this.criar(escopo, documentoId, entrada, undefined, briefingId);
+    if (briefingId) await this.d.briefing.usado(escopo, briefingId).catch(() => undefined);
+    return tarefa;
   }
 
   async consultar(escopo: EscopoDaConta, id: string): Promise<Tarefa> {
     let t = await this.exigir(escopo, id);
     // trabalhando: confere se o worker ainda dá sinal, para quem acompanha não ver "rodando" para sempre
     if ((t.estado === 'preparando' || t.estado === 'rodando') && (await this.darBaixaNasParadas(escopo)) > 0) t = await this.exigir(escopo, id);
+    // na fila há tempo demais: o trabalho pode ter se perdido
+    if (t.estado === 'na_fila') await this.devolverAFila(escopo);
     return this.fotografia(escopo, t, { completa: true });
   }
 
   /** As tarefas recentes da peça e qual está viva. É por aqui que o editor retoma ao abrir a peça. */
   async listar(escopo: EscopoDaConta, documentoId: string): Promise<ListaDeTarefas> {
     await this.exigirPeca(escopo, documentoId);
-    await this.darBaixaNasParadas(escopo);
+    await this.varrer(escopo);
     const itens = await this.d.tarefas.listarDoDocumento(escopo, documentoId, TAREFAS_NA_LISTA);
     const viva = await this.d.tarefas.vivaDoDocumento(escopo, documentoId);
     return { itens: await Promise.all(itens.map((t) => this.fotografia(escopo, t))), ...(viva ? { viva: viva.id } : {}) };
@@ -241,7 +298,7 @@ export class CasosDeUsoDeTarefa {
   /** "Ajustar a direção": guarda o texto e manda a primeira parte rodar de novo. A tarefa volta a esperar depois. */
   async ajustar(escopo: EscopoDaConta, id: string, pedido: PedidoDeAjusteDoPlano): Promise<Tarefa> {
     const t = await this.exigir(escopo, id);
-    const devolvida = await this.d.tarefas.pedirAjuste(escopo, id, pedido.texto);
+    const devolvida = await this.d.tarefas.pedirAjuste(escopo, id, pedido.texto, this.agora());
     if (!devolvida) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.tarefaForaDoEstado, { estado: t.estado });
     await this.publicar(escopo, id, devolvida.jaNaFila);
     this.uso.registrar(escopo, { evento: 'tarefa_confirmacao', tarefaId: id, documentoId: t.documentoId, resposta: 'ajustar' });
@@ -403,17 +460,23 @@ export class CasosDeUsoDeTarefa {
       );
       return;
     }
-    const { entrada, ajustes } = guardada;
+    const { ajustes } = guardada;
+    // o que está guardado pode ser o formulário (só referências): o material para o ciclo é montado aqui, sob a conta do trabalho
+    const entrada = this.d.briefing ? await this.d.briefing.paraOCiclo(escopo, guardada.entrada) : guardada.entrada;
     let docAtual = peca.arvore;
     let versaoAtual = peca.versao;
     const bancada = await this.d.bancada.abrir(escopo, { nome: peca.nome, arvore: peca.arvore });
+    const { fontes, texturas } = this.d;
+    const imagens = this.d.imagens ? this.imagensDaTarefa(escopo, this.d.imagens, bancada) : undefined;
     const base = (aberto: { modelo: ModeloDoAgente; modeloDoJulgamento?: ModeloDoAgente; novoId(): string }, contarId: () => void): AmbienteBase => ({
       modelo: this.comTetoDiario(aberto.modelo),
       ...(aberto.modeloDoJulgamento ? { modeloDoJulgamento: this.comTetoDiario(aberto.modeloDoJulgamento) } : {}),
       documento: () => docAtual,
       resumir: (doc, prancheta) => bancada.resumir(doc, prancheta),
       previaDeArquivo: (arquivo, ladoMaximo) => bancada.previaDeArquivo(arquivo, ladoMaximo),
-      fontes: { daConta: () => bancada.fontes },
+      fontes: { daConta: () => bancada.fontes, ...(fontes ? { buscar: (consulta: string, categoria?: string) => fontes.buscar(consulta, categoria) } : {}) },
+      ...(imagens ? { imagens } : {}),
+      ...(texturas ? { texturas: () => texturas.paraOOtto(escopo) } : {}),
       relogio: { agora: () => this.agora().getTime() },
       novoId: () => {
         contarId();
@@ -562,7 +625,42 @@ export class CasosDeUsoDeTarefa {
   private async registrarChamada(escopo: EscopoDaConta, id: string, chamada: ChamadaRegistrada): Promise<void> {
     const agora = this.agora();
     await this.d.tarefas.registrarChamada(escopo, id, chamada, agora);
-    await this.d.consumo.somar(agora, totalDeTokensDaChamada(chamada));
+    if (this.contaConsumo) await this.d.consumo.somar(agora, totalDeTokensDaChamada(chamada));
+  }
+
+  /**
+   * O banco de imagens como o ciclo o vê, dentro de UMA parte da tarefa: as mesmas regras da busca do editor
+   * (cache, origem guardada, download para o armazenamento da conta), mais os tetos da tarefa. O id que o
+   * Otto manda em trazerImagem tem de ter vindo de uma busca desta tarefa.
+   * As mensagens de erro são lidas pelo modelo, como resultado da ferramenta.
+   */
+  private imagensDaTarefa(
+    escopo: EscopoDaConta,
+    imagens: ImagensDoOtto,
+    bancada: { previaDeArquivo(arquivo: string, ladoMaximo: number): Promise<ImagemParaOModelo | undefined> },
+  ): BancoDeImagensDoCiclo {
+    const vistas = new Map<string, string>();
+    let [buscas, trazidas] = [0, 0];
+    const tetoDeBuscas = this.d.limites.buscasPorTarefa ?? BUSCAS_POR_TAREFA;
+    const tetoDeImagens = this.d.limites.imagensPorTarefa ?? IMAGENS_POR_TAREFA;
+    return {
+      buscar: async (consulta, orientacao) => {
+        if (buscas >= tetoDeBuscas) throw new Error(`limite de ${tetoDeBuscas} buscas por tarefa atingido: escolha entre as imagens que já apareceram`);
+        buscas++;
+        const r = await imagens.buscar(escopo, consulta, orientacao ?? 'todas');
+        for (const i of r.itens) vistas.set(i.id, r.banco);
+        return r.itens.map((i) => ({ id: i.id, descricao: i.descricao, largura: i.largura, altura: i.altura, autor: i.autor }));
+      },
+      trazer: async (id) => {
+        const banco = vistas.get(id);
+        if (!banco) throw new Error('esse id não veio de uma busca desta tarefa: use buscarImagens e escolha um dos resultados');
+        if (trazidas >= tetoDeImagens) throw new Error(`limite de ${tetoDeImagens} imagens trazidas por tarefa atingido: use as que já estão na biblioteca`);
+        trazidas++;
+        const t = await imagens.trazer(escopo, banco, id);
+        const previa = await bancada.previaDeArquivo(t.sha256, 768).catch(() => undefined);
+        return { no: t.no, largura: t.largura, altura: t.altura, ...(previa ? { previa } : {}) };
+      },
+    };
   }
 
   /** O teto diário é conferido antes de CADA chamada: estourou, o ciclo recebe o erro com código e fecha a tarefa com o que já fez. */
@@ -581,6 +679,7 @@ export class CasosDeUsoDeTarefa {
   // ---------------------------------------------------------------- apoio
 
   private async plataformaSemTeto(agora: Date): Promise<boolean> {
+    if (!this.contaConsumo) return false;
     const hoje = await this.d.consumo.hoje(agora);
     return hoje.tokens >= this.d.limites.tetoDiarioDeTokens || (hoje.restanteNoFornecedor !== undefined && hoje.restanteNoFornecedor < this.d.limites.restoMinimoNoFornecedor);
   }
@@ -594,6 +693,23 @@ export class CasosDeUsoDeTarefa {
       await this.d.tarefas.pedirCancelamento(escopo, id, this.agora());
       this.d.aoFalhar?.({ tarefaId: id, etapa: 'fila', erro });
       throw new ErroDaAplicacao(CODIGOS_DE_ERRO.filaIndisponivel);
+    }
+  }
+
+  /** O que toda leitura da conta confere: a tarefa cujo worker caiu, e a que ficou parada na fila. */
+  private async varrer(escopo: EscopoDaConta): Promise<void> {
+    await this.darBaixaNasParadas(escopo);
+    await this.devolverAFila(escopo);
+  }
+
+  /** Publica de novo o trabalho da tarefa parada na fila. Nunca lança: é reparo, não é o pedido de quem está lendo. */
+  private async devolverAFila(escopo: EscopoDaConta): Promise<void> {
+    const agora = this.agora();
+    try {
+      const paradas = await this.d.tarefas.devolverAFila(escopo, new Date(agora.getTime() - NA_FILA_SEM_TRABALHO_MS), agora);
+      for (const parada of paradas) await this.d.fila.publicar(FILAS.tarefaDoOtto, { contaId: escopo.contaId, id: parada.id }, { jaNaFilaDaConta: parada.jaNaFila });
+    } catch (erro) {
+      this.d.aoFalhar?.({ tarefaId: '', etapa: 'fila', erro });
     }
   }
 

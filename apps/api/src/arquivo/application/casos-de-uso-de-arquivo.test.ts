@@ -148,3 +148,57 @@ describe('importar vetor (SVG)', () => {
     expect((await arquivos.importarVetor(contaA, LOGO, 'x'.repeat(500))).no.origem.nome).toHaveLength(120);
   });
 });
+
+describe('retorno útil do que foi enviado', () => {
+  const LOGO =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><rect width="100" height="50" fill="#0037A6"/><path d="M10 10 L90 10 L50 40 Z" fill="none" stroke="#ffffff" stroke-width="3"/><text>Marca</text></svg>';
+
+  it('o vetor importado volta com a miniatura do que o Otto entendeu: um SVG só de caminhos e cores', async () => {
+    const r = await arquivos.importarVetor(contaA, LOGO, 'logo.svg');
+    // a moldura é a do desenho lido (o traço alarga a caixa)
+    expect(r.miniatura?.startsWith(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r.no.moldura[0]} ${r.no.moldura[1]}">`)).toBe(true);
+    expect(r.miniatura).toContain('fill="#0037a6"');
+    expect(r.miniatura).toContain('stroke="#ffffff"');
+    // o que não foi entendido (o texto) não está na miniatura; e nada além de <svg> e <path> sai dali
+    expect(r.miniatura).not.toMatch(/<text|Marca|<script|<style|href|<image|<foreignObject|on[a-z]+=/i);
+    expect([...(r.miniatura ?? '').matchAll(/<([a-zA-Z]+)/g)].map((m) => m[1])).toEqual(['svg', 'path', 'path']);
+  });
+
+  it('a miniatura não repassa nada do SVG de origem que não seja caminho validado', async () => {
+    const hostil = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" onload="alert(1)"><script>alert(1)</script><path d="M0 0 L10 0 L10 10 Z" fill="#ff0000" onclick="alert(2)"/></svg>';
+    const r = await arquivos.importarVetor(contaA, hostil, 'x.svg').catch(() => undefined);
+    // o importador pode recusar o arquivo inteiro; se aceitar, a miniatura só tem o caminho
+    if (r) expect(r.miniatura).not.toMatch(/script|onload|onclick|alert/i);
+  });
+
+  it('o vetor já enviado é lido de novo pelo hash, com a mesma miniatura; de outra conta, não existe', async () => {
+    const enviado = await arquivos.importarVetor(contaA, LOGO, 'logo do cliente.svg');
+    const lido = await arquivos.vetor(contaA, enviado.no.origem.arquivo);
+    expect(lido).toEqual(enviado);
+    expect((await erroDe(arquivos.vetor(contaB, enviado.no.origem.arquivo))).codigo).toBe(CODIGOS_DE_ERRO.naoEncontrado);
+    // imagem não é vetor
+    const png = await arquivos.enviarImagem(contaA, PNG);
+    expect((await erroDe(arquivos.vetor(contaA, png.sha256))).codigo).toBe(CODIGOS_DE_ERRO.naoEncontrado);
+    expect((await erroDe(arquivos.vetor(contaA, 'torto'))).codigo).toBe(CODIGOS_DE_ERRO.naoEncontrado);
+  });
+
+  it('os dados de um arquivo dizem espécie, medidas, nome e origem, sem os bytes; de outra conta, não existe', async () => {
+    const png = await arquivos.enviarImagem(contaA, PNG, { nome: 'produto.png' });
+    expect(await arquivos.dados(contaA, png.sha256)).toEqual({
+      sha256: png.sha256,
+      especie: 'imagem',
+      tipo: 'image/png',
+      bytes: PNG.byteLength,
+      largura: png.largura,
+      altura: png.altura,
+      nome: 'produto.png',
+    });
+    const doBanco = await arquivos.enviarImagem(contaA, JPEG, {
+      origem: { banco: 'Banco de fotos', idExterno: '1', autor: 'alguém', licenca: 'Licença do banco', url: 'https://banco.exemplo.com/fotos/1/' },
+    });
+    expect((await arquivos.dados(contaA, doBanco.sha256)).origem).toEqual({ banco: 'Banco de fotos', autor: 'alguém', licenca: 'Licença do banco', pagina: 'https://banco.exemplo.com/fotos/1/' });
+    const vetor = await arquivos.importarVetor(contaA, LOGO, 'logo.svg');
+    expect(await arquivos.dados(contaA, vetor.no.origem.arquivo)).toMatchObject({ especie: 'vetor', tipo: 'image/svg+xml', nome: 'logo.svg' });
+    expect((await erroDe(arquivos.dados(contaB, png.sha256))).codigo).toBe(CODIGOS_DE_ERRO.naoEncontrado);
+  });
+});

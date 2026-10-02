@@ -16,8 +16,15 @@ import { ControladorDeArquivos, ControladorDeVetores } from './arquivo/presentat
 import { ControladorDeLinks } from './arquivo/presentation/controlador-de-links';
 import { BibliotecaDeFontes } from './biblioteca/application/biblioteca-de-fontes';
 import { CasosDeUsoDeFontes } from './biblioteca/application/casos-de-uso-de-fontes';
+import { CatalogoDeFontes } from './biblioteca/application/catalogo-de-fontes';
+import { criarCatalogoDeFontes } from './biblioteca/infrastructure/adaptadores/criar-catalogo-de-fontes';
 import { BibliotecaDeFontesNoBanco } from './biblioteca/infrastructure/biblioteca-de-fontes-no-banco';
 import { ControladorDeFontes } from './biblioteca/presentation/controlador-de-fontes';
+import { BriefingParaOOtto } from './briefing/application/briefing-para-o-otto';
+import { CasosDeUsoDeCadastro } from './briefing/application/casos-de-uso-de-cadastro';
+import { RepositorioDeCadastros } from './briefing/application/repositorio-de-cadastros';
+import { RepositorioDeCadastrosNoBanco } from './briefing/infrastructure/prisma/repositorio-de-cadastros-no-banco';
+import { ControladorDeBriefings, ControladorDeMarcas } from './briefing/presentation/controlador-de-cadastros';
 import { CicloDeVida } from './ciclo-de-vida';
 import { CasosDeUsoDeDocumento } from './documento/application/casos-de-uso-de-documento';
 import { MedidorDeTexto } from './documento/application/medidor-de-texto';
@@ -31,6 +38,12 @@ import { RepositorioDeExportacoes } from './exportacao/application/repositorio-d
 import { RepositorioDeExportacoesNoBanco } from './exportacao/infrastructure/prisma/repositorio-de-exportacoes-no-banco';
 import { MotorDeExportacaoEmThread } from './exportacao/infrastructure/render/motor-em-thread';
 import { ControladorDeExportacoes } from './exportacao/presentation/controlador-de-exportacoes';
+import { BancoDeImagens } from './imagem/application/banco-de-imagens';
+import { CacheDeBuscas } from './imagem/application/cache-de-buscas';
+import { CasosDeUsoDeImagens } from './imagem/application/casos-de-uso-de-imagens';
+import { criarBancoDeImagens } from './imagem/infrastructure/adaptadores/criar-banco-de-imagens';
+import { CacheDeBuscasNoBanco } from './imagem/infrastructure/prisma/cache-de-buscas-no-banco';
+import { ControladorDeImagens } from './imagem/presentation/controlador-de-imagens';
 import { type Configuracao, type ConfiguracaoDoArmazenamento, ConfiguracaoInvalida, lerConfiguracao } from './plataforma/config/configuracao';
 import { FiltroDeErros } from './plataforma/erros/filtro-de-erros';
 import { ResolvedorDeContaFixa } from './plataforma/escopo/adaptadores/resolvedor-de-conta-fixa';
@@ -50,6 +63,7 @@ import { CONFIGURACAO, SERVICO, type Servico } from './plataforma/servico';
 import { RegistroDeUso } from './plataforma/uso/registro-de-uso';
 import { RegistroDeUsoNoLog } from './plataforma/uso/registro-de-uso-no-log';
 import { BancadaDoOtto } from './tarefa/application/bancada-do-otto';
+import { BriefingDaTarefa } from './tarefa/application/briefing-da-tarefa';
 import { CasosDeUsoDeTarefa, type FalhaDaTarefa } from './tarefa/application/casos-de-uso-de-tarefa';
 import { ConsumoDoModelo } from './tarefa/application/consumo-do-modelo';
 import { ModelosDoOtto } from './tarefa/application/modelos-do-otto';
@@ -58,9 +72,14 @@ import { ModelosComClaude } from './tarefa/infrastructure/adaptadores/claude/mod
 import { ModelosRoteirizados } from './tarefa/infrastructure/adaptadores/roteirizado/modelos-roteirizados';
 import { ConsumoDoModeloNoBanco } from './tarefa/infrastructure/prisma/consumo-do-modelo-no-banco';
 import { RepositorioDeTarefasNoBanco } from './tarefa/infrastructure/prisma/repositorio-de-tarefas-no-banco';
+import { fontesDoOtto, imagensDoOtto } from './tarefa/infrastructure/recursos-do-otto';
 import { BancadaComRender } from './tarefa/infrastructure/render/bancada-com-render';
 import { tarefasDaPeca } from './tarefa/infrastructure/tarefas-da-peca';
 import { ControladorDeTarefas } from './tarefa/presentation/controlador-de-tarefas';
+import { CasosDeUsoDeTexturas } from './textura/application/casos-de-uso-de-texturas';
+import { GeradorDeTexturas } from './textura/application/texturas';
+import { GeradorComCanvasKit } from './textura/infrastructure/render/gerador-com-canvaskit';
+import { ControladorDeTexturas } from './textura/presentation/controlador-de-texturas';
 
 class SemModelo extends ModelosDoOtto {
   abrir(): never {
@@ -81,7 +100,20 @@ export class ModuloRaiz {
       // o worker só responde saúde; as rotas de negócio são da API
       controllers:
         servico === 'api'
-          ? [ControladorDeSaude, ControladorDeDocumentos, ControladorDeArquivos, ControladorDeVetores, ControladorDeLinks, ControladorDeFontes, ControladorDeExportacoes, ControladorDeTarefas]
+          ? [
+              ControladorDeSaude,
+              ControladorDeDocumentos,
+              ControladorDeArquivos,
+              ControladorDeVetores,
+              ControladorDeLinks,
+              ControladorDeFontes,
+              ControladorDeExportacoes,
+              ControladorDeTarefas,
+              ControladorDeMarcas,
+              ControladorDeBriefings,
+              ControladorDeImagens,
+              ControladorDeTexturas,
+            ]
           : [ControladorDeSaude],
       providers: [
         { provide: SERVICO, useValue: servico },
@@ -103,6 +135,17 @@ export class ModuloRaiz {
           inject: [PrismaComEscopo, ArmazenamentoDeArquivo],
         },
         { provide: RepositorioDeExportacoes, useFactory: (prisma: PrismaComEscopo) => new RepositorioDeExportacoesNoBanco(prisma), inject: [PrismaComEscopo] },
+        { provide: RepositorioDeCadastros, useFactory: (prisma: PrismaComEscopo) => new RepositorioDeCadastrosNoBanco(prisma), inject: [PrismaComEscopo] },
+        { provide: CacheDeBuscas, useFactory: (prisma: PrismaComEscopo) => new CacheDeBuscasNoBanco(prisma), inject: [PrismaComEscopo] },
+        // Banco de imagens e catálogo de fontes: adaptador escolhido pela configuração (ADR 020). Nulo: não configurado.
+        { provide: BancoDeImagens, useFactory: () => criarBancoDeImagens(config.bancoDeImagens) ?? null },
+        { provide: CatalogoDeFontes, useFactory: (armazenamento: ArmazenamentoDeArquivo) => criarCatalogoDeFontes(config.catalogoDeFontes, armazenamento) ?? null, inject: [ArmazenamentoDeArquivo] },
+        // Quem desenha textura é o worker (é render); a API só entrega a que já está guardada.
+        {
+          provide: GeradorDeTexturas,
+          useFactory: (bancada: BancadaDoOtto) => (servico === 'worker' ? new GeradorComCanvasKit(bancada instanceof BancadaComRender ? () => bancada.motorDoProcesso() : undefined) : null),
+          inject: [BancadaDoOtto],
+        },
         { provide: RepositorioDeTarefas, useFactory: (prisma: PrismaComEscopo) => new RepositorioDeTarefasNoBanco(prisma), inject: [PrismaComEscopo] },
         { provide: ConsumoDoModelo, useFactory: (prisma: PrismaComEscopo) => new ConsumoDoModeloNoBanco(prisma), inject: [PrismaComEscopo] },
         // O motor da bancada só é carregado na primeira tarefa: na API, nunca.
@@ -137,9 +180,16 @@ export class ModuloRaiz {
         // casos de uso: classes puras, montadas aqui
         {
           provide: CasosDeUsoDeDocumento,
-          useFactory: (documentos: RepositorioDeDocumentos, arquivos: RepositorioDeArquivos, medidor: MedidorDeTexto, uso: RegistroDeUso, fontes: BibliotecaDeFontes, tarefas: RepositorioDeTarefas) =>
-            new CasosDeUsoDeDocumento(documentos, arquivos, medidor, uuidV7, uso, fontes, tarefasDaPeca(tarefas)),
-          inject: [RepositorioDeDocumentos, RepositorioDeArquivos, MedidorDeTexto, RegistroDeUso, BibliotecaDeFontes, RepositorioDeTarefas],
+          useFactory: (
+            documentos: RepositorioDeDocumentos,
+            arquivos: RepositorioDeArquivos,
+            medidor: MedidorDeTexto,
+            uso: RegistroDeUso,
+            fontes: BibliotecaDeFontes,
+            tarefas: RepositorioDeTarefas,
+            sobDemanda: CasosDeUsoDeFontes,
+          ) => new CasosDeUsoDeDocumento(documentos, arquivos, medidor, uuidV7, uso, fontes, tarefasDaPeca(tarefas), sobDemanda),
+          inject: [RepositorioDeDocumentos, RepositorioDeArquivos, MedidorDeTexto, RegistroDeUso, BibliotecaDeFontes, RepositorioDeTarefas, CasosDeUsoDeFontes],
         },
         {
           provide: CasosDeUsoDeArquivo,
@@ -195,6 +245,12 @@ export class ModuloRaiz {
             consumo: ConsumoDoModelo,
             uso: RegistroDeUso,
             registro: Registro,
+            briefing: BriefingDaTarefa,
+            imagens: CasosDeUsoDeImagens,
+            banco: BancoDeImagens | null,
+            texturas: CasosDeUsoDeTexturas,
+            fontes: CasosDeUsoDeFontes,
+            catalogo: CatalogoDeFontes | null,
           ) =>
             new CasosDeUsoDeTarefa({
               tarefas,
@@ -204,15 +260,76 @@ export class ModuloRaiz {
               bancada,
               modelos,
               consumo,
-              limites: config.agente,
+              // com o modelo roteirizado não há consumo de verdade: o teto diário de tokens não recusa nem conta
+              limites: { ...config.agente, contarConsumo: config.agente.modeloDeVerdade },
               gerarId: uuidV7,
               uso,
+              briefing,
+              // as ferramentas que o Otto recebe dependem do que este servidor tem configurado
+              ...(banco ? { imagens: imagensDoOtto(imagens) } : {}),
+              texturas,
+              ...(catalogo ? { fontes: fontesDoOtto(fontes) } : {}),
               // só o tipo do erro: a mensagem pode citar a peça
               aoFalhar: (falha: FalhaDaTarefa) => registro.warn({ evento: 'falha_na_tarefa', tarefaId: falha.tarefaId, etapa: falha.etapa, ...semConteudo(falha.erro) }),
             }),
-          inject: [RepositorioDeTarefas, RepositorioDeDocumentos, CasosDeUsoDeDocumento, BarramentoDeEventos, BancadaDoOtto, ModelosDoOtto, ConsumoDoModelo, RegistroDeUso, Registro],
+          inject: [
+            RepositorioDeTarefas,
+            RepositorioDeDocumentos,
+            CasosDeUsoDeDocumento,
+            BarramentoDeEventos,
+            BancadaDoOtto,
+            ModelosDoOtto,
+            ConsumoDoModelo,
+            RegistroDeUso,
+            Registro,
+            BriefingDaTarefa,
+            CasosDeUsoDeImagens,
+            BancoDeImagens,
+            CasosDeUsoDeTexturas,
+            CasosDeUsoDeFontes,
+            CatalogoDeFontes,
+          ],
         },
-        { provide: CasosDeUsoDeFontes, useFactory: (fontes: BibliotecaDeFontes) => new CasosDeUsoDeFontes(fontes), inject: [BibliotecaDeFontes] },
+        {
+          provide: CasosDeUsoDeFontes,
+          useFactory: (fontes: BibliotecaDeFontes, catalogo: CatalogoDeFontes | null, registro: Registro) =>
+            new CasosDeUsoDeFontes(fontes, catalogo ?? undefined, {
+              // só contagens: qual fonte uma peça usa é conteúdo (ADR 031)
+              aoBaixar: (b) => registro.log({ evento: 'fonte_baixada', pesos: b.pesos, bytes: b.bytes, duracaoMs: b.duracaoMs }),
+              aoFalhar: (motivo) => registro.warn({ evento: 'catalogo_de_fontes_indisponivel', erro: motivo }),
+            }),
+          inject: [BibliotecaDeFontes, CatalogoDeFontes, Registro],
+        },
+        {
+          provide: CasosDeUsoDeCadastro,
+          useFactory: (cadastros: RepositorioDeCadastros, arquivos: RepositorioDeArquivos, uso: RegistroDeUso) => new CasosDeUsoDeCadastro({ cadastros, arquivos, gerarId: uuidV7, uso }),
+          inject: [RepositorioDeCadastros, RepositorioDeArquivos, RegistroDeUso],
+        },
+        {
+          provide: CasosDeUsoDeImagens,
+          useFactory: (banco: BancoDeImagens | null, cache: CacheDeBuscas, arquivos: CasosDeUsoDeArquivo, registros: RepositorioDeArquivos, uso: RegistroDeUso, registro: Registro) =>
+            new CasosDeUsoDeImagens({
+              ...(banco ? { banco } : {}),
+              cache,
+              arquivos,
+              registros,
+              limites: config.imagens,
+              uso,
+              aoFalhar: (motivo) => registro.warn({ evento: 'banco_de_imagens_indisponivel', erro: motivo }),
+            }),
+          inject: [BancoDeImagens, CacheDeBuscas, CasosDeUsoDeArquivo, RepositorioDeArquivos, RegistroDeUso, Registro],
+        },
+        {
+          provide: CasosDeUsoDeTexturas,
+          useFactory: (armazenamento: ArmazenamentoDeArquivo, arquivos: CasosDeUsoDeArquivo, gerador: GeradorDeTexturas | null, uso: RegistroDeUso) =>
+            new CasosDeUsoDeTexturas({ armazenamento, arquivos, uso, ...(gerador ? { gerador } : {}) }),
+          inject: [ArmazenamentoDeArquivo, CasosDeUsoDeArquivo, GeradorDeTexturas, RegistroDeUso],
+        },
+        {
+          provide: BriefingDaTarefa,
+          useFactory: (cadastros: RepositorioDeCadastros, registros: RepositorioDeArquivos, arquivos: CasosDeUsoDeArquivo) => new BriefingParaOOtto({ cadastros, registros, arquivos }),
+          inject: [RepositorioDeCadastros, RepositorioDeArquivos, CasosDeUsoDeArquivo],
+        },
         {
           provide: CicloDeVida,
           useFactory: (prisma: PrismaComEscopo, fila: BarramentoDeEventos, exportacoes: CasosDeUsoDeExportacao, registro: Registro, motor: MotorDeExportacao, tarefas: CasosDeUsoDeTarefa) =>

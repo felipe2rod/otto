@@ -1,10 +1,10 @@
 // Regras da tarefa do Otto, sem NestJS, sem banco, sem fila e sem modelo: o ciclo de @otto/agente de
 // verdade, com o modelo roteirizado, repositórios em memória e uma bancada de mentira.
 import { randomUUID } from 'node:crypto';
-import { criarModeloRoteirizado, type EntradaDaTarefa, type ModeloDoAgente, type Passo, type PedidoAoModelo } from '@otto/agente';
+import { type AmbienteDaTarefa, criarModeloRoteirizado, type EntradaDaTarefa, type ModeloDoAgente, type Passo, type PedidoAoModelo } from '@otto/agente';
 import roteiroDoBriefing from '@otto/agente/roteiros/briefing-dois-formatos.json' with { type: 'json' };
 import { type Aviso, type Documento, resumirDocumento } from '@otto/documento';
-import { CODIGOS_DE_ERRO, lerContaId, Tarefa } from '@otto/shared';
+import { briefingDaTarefa, CODIGOS_DE_ERRO, type FormularioDeBriefing, lerContaId, PedidoDeTarefaPorBriefing, Tarefa } from '@otto/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RepositorioDeArquivosEmMemoria } from '../../arquivo/infrastructure/memoria/repositorio-de-arquivos-em-memoria';
 import { CasosDeUsoDeDocumento } from '../../documento/application/casos-de-uso-de-documento';
@@ -18,9 +18,11 @@ import { FILAS } from '../../plataforma/fila/barramento-de-eventos';
 import { type EventoDeUso, RegistroDeUso } from '../../plataforma/uso/registro-de-uso';
 import { RepositorioDeTarefasEmMemoria } from '../infrastructure/memoria/repositorio-de-tarefas-em-memoria';
 import { type BancadaAberta, BancadaDoOtto } from './bancada-do-otto';
-import { CasosDeUsoDeTarefa, type DependenciasDaTarefa, SEM_SINAL_DA_TAREFA_MS } from './casos-de-uso-de-tarefa';
+import { BriefingDaTarefa } from './briefing-da-tarefa';
+import { CasosDeUsoDeTarefa, type DependenciasDaTarefa, NA_FILA_SEM_TRABALHO_MS, SEM_SINAL_DA_TAREFA_MS } from './casos-de-uso-de-tarefa';
 import { ConsumoDoModeloEmMemoria } from './consumo-do-modelo';
 import { type ModeloAberto, ModelosDoOtto, type PedidoDeModelo } from './modelos-do-otto';
+import type { ImagensDoOtto } from './recursos-do-otto';
 
 const contaA = EscopoDaConta.abrir(lerContaId('01990000-0000-7000-8000-00000000000a'));
 const contaB = EscopoDaConta.abrir(lerContaId('01990000-0000-7000-8000-00000000000b'));
@@ -688,5 +690,271 @@ describe('isolamento entre contas', () => {
       expect((await erroDe(tentar())).codigo).toBe(CODIGOS_DE_ERRO.naoEncontrado);
     }
     expect(await casos.consultar(contaA, pedida.id)).toEqual(antes);
+  });
+});
+
+describe('fatia 4: tarefa pelo formulário de briefing', () => {
+  const FORMULARIO: FormularioDeBriefing = {
+    versao: 1,
+    nome: `Novo horário ${SENTINELA}`,
+    formatos: [{ nome: 'Feed', largura: 1080, altura: 1350 }],
+    textos: { titulo: 'Abrimos às 7h' },
+    imagens: { fonte: 'nenhuma' },
+  };
+  const pedido = (extra: object = {}) => PedidoDeTarefaPorBriefing.parse({ tipo: 'briefing', briefing: FORMULARIO, cuidado: 'direto', ...extra });
+
+  class BriefingDeMentira extends BriefingDaTarefa {
+    usados: string[] = [];
+    recusa: ErroDaAplicacao | undefined;
+    async preparar(_escopo: EscopoDaConta, p: PedidoDeTarefaPorBriefing): Promise<{ entrada: EntradaDaTarefa; briefingId?: string }> {
+      if (this.recusa) throw this.recusa;
+      return { entrada: { tipo: 'briefing', briefing: p.briefing, esforco: 'STANDARD', cuidado: p.cuidado } as unknown as EntradaDaTarefa, ...(p.briefingId ? { briefingId: p.briefingId } : {}) };
+    }
+    async paraOCiclo(_escopo: EscopoDaConta, entrada: EntradaDaTarefa): Promise<EntradaDaTarefa> {
+      return entrada.tipo === 'briefing' ? ({ ...entrada, briefing: { ...entrada.briefing, material: 'montado para o ciclo' } } as EntradaDaTarefa) : entrada;
+    }
+    async usado(_escopo: EscopoDaConta, briefingId: string): Promise<void> {
+      this.usados.push(briefingId);
+    }
+  }
+
+  let briefing: BriefingDeMentira;
+  beforeEach(() => {
+    briefing = new BriefingDeMentira();
+    montar({ briefing });
+  });
+  const pecaVazia = async () => (await pecas.criar(contaA, { nome: 'Nova' })).id;
+
+  it('guarda o formulário como foi preparado, e o editor o lê de volta com o cuidado escolhido', async () => {
+    const id = await pecaVazia();
+    const t = Tarefa.parse(await casos.criarPorBriefing(contaA, id, pedido()));
+    expect(t).toMatchObject({ tipo: 'briefing', estado: 'na_fila' });
+    expect(briefingDaTarefa(t)).toEqual({ briefing: FORMULARIO, cuidado: 'direto' });
+    expect(briefingDaTarefa(await casos.consultar(contaA, t.id))).toEqual({ briefing: FORMULARIO, cuidado: 'direto' });
+  });
+
+  it('o evento de uso diz que veio do formulário, quantos formatos e o cuidado; nada do que foi preenchido', async () => {
+    const t = await casos.criarPorBriefing(contaA, await pecaVazia(), pedido());
+    expect(uso.eventos.at(-1)).toEqual({
+      evento: 'tarefa_pedida',
+      tarefaId: t.id,
+      documentoId: t.documentoId,
+      tipo: 'briefing',
+      esforco: 'STANDARD',
+      porFormulario: true,
+      formatos: 1,
+      cuidado: 'direto',
+      deBriefingSalvo: false,
+    });
+    expect(JSON.stringify(uso.eventos)).not.toMatch(/SENTINELA|Abrimos/);
+  });
+
+  it('o briefing salvo de origem fica ligado à tarefa e ganha um uso, só depois de a tarefa existir', async () => {
+    const briefingId = randomUUID();
+    const id = await pecaVazia();
+    const t = await casos.criarPorBriefing(contaA, id, pedido({ briefingId }));
+    expect((await tarefas.buscar(contaA, t.id))?.briefingId).toBe(briefingId);
+    expect(briefing.usados).toEqual([briefingId]);
+    // a peça já tem tarefa viva: a segunda é recusada e não conta uso
+    expect((await erroDe(casos.criarPorBriefing(contaA, id, pedido({ briefingId })))).codigo).toBe(CODIGOS_DE_ERRO.tarefaEmAndamento);
+    expect(briefing.usados).toEqual([briefingId]);
+  });
+
+  it('formulário que cita o que a conta não tem é recusado antes de qualquer coisa: nada é criado nem vai para a fila', async () => {
+    briefing.recusa = new ErroDaAplicacao(CODIGOS_DE_ERRO.marcaDesconhecida);
+    const id = await pecaVazia();
+    expect((await erroDe(casos.criarPorBriefing(contaA, id, pedido()))).codigo).toBe(CODIGOS_DE_ERRO.marcaDesconhecida);
+    expect(await tarefas.vivaDoDocumento(contaA, id)).toBeUndefined();
+    expect(fila.publicados).toEqual([]);
+  });
+
+  it('sem o módulo de briefing ligado, a rota do formulário não existe para o caso de uso', async () => {
+    montar();
+    expect((await erroDe(casos.criarPorBriefing(contaA, await pecaVazia(), pedido()))).codigo).toBe(CODIGOS_DE_ERRO.naoEncontrado);
+  });
+
+  it('o worker entrega ao ciclo o material montado, não o formulário; o que fica guardado continua sendo o formulário', async () => {
+    const vistas: unknown[] = [];
+    const ciclo = await import('@otto/agente');
+    montar({
+      briefing,
+      ciclo: {
+        preparar: async (_amb, entrada) => {
+          vistas.push(entrada);
+          return {
+            versao: 1,
+            direcao: null,
+            cartao: null,
+            plano: { resumo: '', criar: [], alterar: [], remover: [], pontual: false },
+            pedeConfirmacao: false,
+            motivos: [],
+            custo: ciclo.custoVazio('x'),
+          };
+        },
+        executar: async (_amb, entrada) => {
+          vistas.push(entrada);
+          return { fim: 'entregue', entrega: { resumo: 'ok', pendencias: [] }, conferida: true, lotes: 0, custo: ciclo.custoVazio('x') };
+        },
+      },
+    });
+    const t = await casos.criarPorBriefing(contaA, await pecaVazia(), pedido());
+    await casos.trabalhar(contaA, t.id);
+    expect(vistas).toHaveLength(2);
+    for (const vista of vistas) expect(vista).toMatchObject({ tipo: 'briefing', esforco: 'STANDARD', briefing: { material: 'montado para o ciclo' } });
+    expect(briefingDaTarefa(await casos.consultar(contaA, t.id))?.briefing).toEqual(FORMULARIO);
+  });
+
+  it('"tentar de novo" de uma tarefa do formulário recomeça com o mesmo formulário', async () => {
+    const t = await casos.criarPorBriefing(contaA, await pecaVazia(), pedido());
+    await casos.cancelar(contaA, t.id);
+    const nova = await casos.tentarDeNovo(contaA, t.id);
+    expect(briefingDaTarefa(nova)).toEqual({ briefing: FORMULARIO, cuidado: 'direto' });
+  });
+});
+
+describe('fatia 4: o que o Otto alcança durante a tarefa', () => {
+  const ciclo = () => import('@otto/agente');
+  /** Roda uma tarefa cujo "ciclo" é a função dada: é como o teste alcança o ambiente que o worker monta. */
+  async function comAmbiente(extras: Partial<DependenciasDaTarefa>, usar: (amb: AmbienteDaTarefa) => Promise<void>): Promise<Tarefa> {
+    const agente = await ciclo();
+    montar({
+      ...extras,
+      ciclo: {
+        preparar: async () => ({
+          versao: 1,
+          direcao: null,
+          cartao: null,
+          plano: { resumo: '', criar: [], alterar: [], remover: [], pontual: true },
+          pedeConfirmacao: false,
+          motivos: [],
+          custo: agente.custoVazio('x'),
+        }),
+        executar: async (amb) => {
+          await usar(amb);
+          return { fim: 'entregue', entrega: { resumo: 'ok', pendencias: [] }, conferida: true, lotes: 0, custo: agente.custoVazio('x') };
+        },
+      },
+    });
+    const pedida = await casos.criar(contaA, await peca(), AJUSTE);
+    await casos.trabalhar(contaA, pedida.id);
+    return casos.consultar(contaA, pedida.id);
+  }
+
+  const imagensDeMentira = () => {
+    const chamadas: unknown[] = [];
+    const imagens: ImagensDoOtto = {
+      buscar: async (escopo, consulta, orientacao) => {
+        chamadas.push(['buscar', escopo.contaId, consulta, orientacao]);
+        return { banco: 'banco-x', itens: [{ id: '11', descricao: 'café', largura: 1280, altura: 853, autor: 'fulana' }] };
+      },
+      trazer: async (escopo, banco, id) => {
+        chamadas.push(['trazer', escopo.contaId, banco, id]);
+        return { sha256: 'a'.repeat(64), largura: 1280, altura: 853, no: { tipo: 'imagem', arquivo: 'a'.repeat(64), larguraOriginal: 1280, alturaOriginal: 853 } };
+      },
+    };
+    return { chamadas, imagens };
+  };
+
+  it('sem banco de imagens, texturas ou catálogo de fontes ligados, o ciclo nem recebe essas ferramentas', async () => {
+    await comAmbiente({}, async (amb) => {
+      expect(amb.imagens).toBeUndefined();
+      expect(amb.texturas).toBeUndefined();
+      expect(amb.fontes.buscar).toBeUndefined();
+      expect(amb.fontes.daConta().map((f) => f.familia)).toContain('Anton');
+    });
+  });
+
+  it('a busca e o trazer do Otto passam pela conta da tarefa, e o resultado volta no formato do ciclo, com a prévia para ele ver', async () => {
+    const { chamadas, imagens } = imagensDeMentira();
+    await comAmbiente({ imagens }, async (amb) => {
+      expect(await amb.imagens?.buscar('café coado', 'vertical')).toEqual([{ id: '11', descricao: 'café', largura: 1280, altura: 853, autor: 'fulana' }]);
+      const trazida = await amb.imagens?.trazer('11');
+      expect(trazida).toMatchObject({ largura: 1280, altura: 853, no: { tipo: 'imagem', arquivo: 'a'.repeat(64) } });
+    });
+    expect(chamadas).toEqual([
+      ['buscar', contaA.contaId, 'café coado', 'vertical'],
+      ['trazer', contaA.contaId, 'banco-x', '11'],
+    ]);
+  });
+
+  it('trazer um id que não veio de busca DESTA tarefa é recusado sem chegar ao banco', async () => {
+    const { chamadas, imagens } = imagensDeMentira();
+    await comAmbiente({ imagens }, async (amb) => {
+      await expect(amb.imagens?.trazer('999')).rejects.toThrow(/busca/);
+    });
+    expect(chamadas).toEqual([]);
+  });
+
+  it('nada de download em massa: a tarefa tem teto de buscas e de imagens trazidas', async () => {
+    const { chamadas, imagens } = imagensDeMentira();
+    await comAmbiente({ imagens, limites: { tarefasPorDia: 6, naFilaPorConta: 3, tetoDiarioDeTokens: 1e9, restoMinimoNoFornecedor: 0, buscasPorTarefa: 2, imagensPorTarefa: 1 } }, async (amb) => {
+      await amb.imagens?.buscar('um');
+      await amb.imagens?.buscar('dois');
+      await expect(amb.imagens?.buscar('três')).rejects.toThrow(/limite/);
+      await amb.imagens?.trazer('11');
+      await expect(amb.imagens?.trazer('11')).rejects.toThrow(/limite/);
+    });
+    expect(chamadas.map((c) => (c as string[])[0])).toEqual(['buscar', 'buscar', 'trazer']);
+  });
+
+  it('as texturas chegam já como arquivos da conta, e a busca de fontes vai ao catálogo', async () => {
+    const texturas = {
+      paraOOtto: async (escopo: EscopoDaConta) => [{ nome: 'papel', descricao: `da conta ${escopo.contaId}`, modoDeMesclagem: 'multiplicacao', opacidade: 0.6, no: { tipo: 'imagem' } }],
+    };
+    const fontes = { buscar: async (consulta: string, categoria?: string) => [{ familia: `${consulta}|${categoria}`, pesos: [400] }] };
+    await comAmbiente({ texturas, fontes }, async (amb) => {
+      expect(await amb.texturas?.()).toEqual([{ nome: 'papel', descricao: `da conta ${contaA.contaId}`, modoDeMesclagem: 'multiplicacao', opacidade: 0.6, no: { tipo: 'imagem' } }]);
+      expect(await amb.fontes.buscar?.('pop', 'display')).toEqual([{ familia: 'pop|display', pesos: [400] }]);
+    });
+  });
+});
+
+describe('fatia 4: limites por ambiente e a tarefa parada na fila', () => {
+  it('com o modelo roteirizado (sem consumo de verdade), o teto de tokens e o resto do fornecedor não recusam nem são somados', async () => {
+    montar({ limites: { tarefasPorDia: 6, naFilaPorConta: 3, tetoDiarioDeTokens: 1000, restoMinimoNoFornecedor: 3_000_000, contarConsumo: false } });
+    await consumo.somar(relogio, 5000);
+    await consumo.anotarRestante(relogio, 10);
+    expect((await casos.limites(contaA)).podeEnviar).toBe(true);
+    const id = await peca();
+    modelos.roteiro([aplicar(TITULO_MAIOR), entregar()]);
+    const t = await casos.criar(contaA, id, AJUSTE);
+    await casos.trabalhar(contaA, t.id);
+    expect((await casos.consultar(contaA, t.id)).estado).toBe('em_revisao');
+    // as linhas de custo da tarefa continuam sendo gravadas; o contador do dia da plataforma, não
+    expect(tarefas.chamadas).toHaveLength(2);
+    expect((await consumo.hoje(relogio)).tokens).toBe(5000);
+  });
+
+  it('com o modelo de verdade, os dois tetos continuam recusando', async () => {
+    montar({ limites: { tarefasPorDia: 6, naFilaPorConta: 3, tetoDiarioDeTokens: 1000, restoMinimoNoFornecedor: 0, contarConsumo: true } });
+    await consumo.somar(relogio, 5000);
+    expect((await erroDe(casos.criar(contaA, await peca(), AJUSTE))).codigo).toBe(CODIGOS_DE_ERRO.limiteDiario);
+  });
+
+  it('a tarefa parada na fila além do prazo tem o trabalho publicado de novo, uma vez por prazo; a que acabou de entrar, não', async () => {
+    const t = await casos.criar(contaA, await peca(), AJUSTE);
+    expect(fila.publicados).toHaveLength(1);
+    await casos.consultar(contaA, t.id);
+    expect(fila.publicados).toHaveLength(1);
+    relogio = new Date(relogio.getTime() + NA_FILA_SEM_TRABALHO_MS + 1000);
+    await casos.consultar(contaA, t.id);
+    expect(fila.publicados).toHaveLength(2);
+    expect(fila.publicados[1]).toEqual({ fila: FILAS.tarefaDoOtto, trabalho: { contaId: contaA.contaId, id: t.id } });
+    await casos.listar(contaA, t.documentoId);
+    await casos.limites(contaA);
+    expect(fila.publicados).toHaveLength(2);
+    // o trabalho publicado de novo roda a tarefa uma vez só
+    modelos.roteiro([aplicar(TITULO_MAIOR), entregar()]);
+    expect(await casos.trabalhar(contaA, t.id)).toBe('feita');
+    expect(await casos.trabalhar(contaA, t.id)).toBe('ignorada');
+  });
+
+  it('se a fila estiver fora do ar na hora de publicar de novo, a consulta não falha e a tarefa continua na fila', async () => {
+    const t = await casos.criar(contaA, await peca(), AJUSTE);
+    relogio = new Date(relogio.getTime() + NA_FILA_SEM_TRABALHO_MS + 1000);
+    fila.publicar = async () => {
+      throw new Error('fila fora do ar');
+    };
+    expect((await casos.consultar(contaA, t.id)).estado).toBe('na_fila');
   });
 });

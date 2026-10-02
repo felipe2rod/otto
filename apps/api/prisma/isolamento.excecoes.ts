@@ -13,6 +13,11 @@ export interface ExcecaoDeIsolamento {
 }
 
 export const TABELAS_SEM_CONTA_ID: Record<string, ExcecaoDeIsolamento> = {
+  buscas_de_imagens: {
+    motivo: 'catalogo-global',
+    justificativa:
+      'Cache de 24 h das buscas no banco de imagens (ADR 032): o resultado de uma busca é o mesmo para qualquer conta e a chave do Otto é uma só. Não guarda o texto da busca (a chave é um hash) nem dado de conta. Só cresce.',
+  },
   contas: { motivo: 'propria-conta', justificativa: 'É a própria conta: participa do RLS pela chave primária (id = app.conta_id).' },
   consumo_diario_do_modelo: {
     motivo: 'contador-global',

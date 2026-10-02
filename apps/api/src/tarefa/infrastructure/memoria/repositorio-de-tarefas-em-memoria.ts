@@ -1,6 +1,6 @@
 // Adaptador falso de RepositorioDeTarefas, para os testes de caso de uso. Passa pelo mesmo contrato do banco.
 import type { ChamadaRegistrada, EntradaDaTarefa, EtapaPrevista, EventoDaTarefa, Pendencia, Preparo } from '@otto/agente';
-import { ESTADOS_VIVOS_DA_TAREFA, type EstadoDaPendencia, type EstadoDaTarefa } from '@otto/shared';
+import { ESTADOS_VIVOS_DA_TAREFA, type EstadoDaPendencia, type EstadoDaTarefa, type FimDaTarefa } from '@otto/shared';
 import type { RepositorioDeDocumentos } from '../../../documento/application/repositorio-de-documentos';
 import type { EscopoDaConta } from '../../../plataforma/escopo/escopo-da-conta';
 import {
@@ -70,6 +70,8 @@ export class RepositorioDeTarefasEmMemoria extends RepositorioDeTarefas {
       tocados: [],
       idsDoPreparo: 0,
       ...(nova.origemId ? { origemId: nova.origemId } : {}),
+      ...(nova.briefingId ? { briefingId: nova.briefingId } : {}),
+      enfileiradaEm: nova.criadaEm,
       ultimoEvento: -1,
       chamadas: 0,
       duracaoMs: 0,
@@ -94,11 +96,11 @@ export class RepositorioDeTarefasEmMemoria extends RepositorioDeTarefas {
     return g ? copia(g.tarefa) : undefined;
   }
 
-  async vivasDaConta(escopo: EscopoDaConta): Promise<Map<string, { id: string; estado: EstadoDaTarefa }>> {
+  async vivasDaConta(escopo: EscopoDaConta): Promise<Map<string, { id: string; estado: EstadoDaTarefa; fim?: FimDaTarefa }>> {
     return new Map(
       this.daConta(escopo)
         .filter((g) => ESTADOS_VIVOS_DA_TAREFA.includes(g.tarefa.estado))
-        .map((g) => [g.tarefa.documentoId, { id: g.tarefa.id, estado: g.tarefa.estado }]),
+        .map((g) => [g.tarefa.documentoId, { id: g.tarefa.id, estado: g.tarefa.estado, ...(g.tarefa.fim ? { fim: g.tarefa.fim } : {}) }]),
     );
   }
 
@@ -153,17 +155,25 @@ export class RepositorioDeTarefasEmMemoria extends RepositorioDeTarefas {
     const g = this.achar(escopo, id);
     if (g?.tarefa.estado !== 'aguardando_confirmacao') return undefined;
     const jaNaFila = this.naFila(escopo);
-    g.tarefa = { ...g.tarefa, estado: 'na_fila', fase: 'execucao', aprovadaEm: agora };
+    g.tarefa = { ...g.tarefa, estado: 'na_fila', fase: 'execucao', aprovadaEm: agora, enfileiradaEm: agora };
     return { jaNaFila };
   }
 
-  async pedirAjuste(escopo: EscopoDaConta, id: string, texto: string): Promise<{ jaNaFila: number } | undefined> {
+  async pedirAjuste(escopo: EscopoDaConta, id: string, texto: string, agora: Date): Promise<{ jaNaFila: number } | undefined> {
     const g = this.achar(escopo, id);
     if (g?.tarefa.estado !== 'aguardando_confirmacao') return undefined;
     const jaNaFila = this.naFila(escopo);
-    g.tarefa = { ...g.tarefa, estado: 'na_fila', fase: 'preparo' };
+    g.tarefa = { ...g.tarefa, estado: 'na_fila', fase: 'preparo', enfileiradaEm: agora };
     g.ajustes.push(texto);
     return { jaNaFila };
+  }
+
+  async devolverAFila(escopo: EscopoDaConta, antesDe: Date, agora: Date): Promise<{ id: string; jaNaFila: number }[]> {
+    const paradas = this.daConta(escopo).filter((g) => g.tarefa.estado === 'na_fila' && g.tarefa.enfileiradaEm < antesDe);
+    return paradas.map((g, i) => {
+      g.tarefa = { ...g.tarefa, enfileiradaEm: agora };
+      return { id: g.tarefa.id, jaNaFila: i };
+    });
   }
 
   async pedirCancelamento(escopo: EscopoDaConta, id: string, agora: Date): Promise<'cancelada' | 'pedido' | 'fora' | undefined> {

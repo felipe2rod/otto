@@ -19,6 +19,7 @@ import type { ArmazenamentoDeArquivo } from '../../../arquivo/application/armaze
 import type { RepositorioDeArquivos } from '../../../arquivo/application/repositorio-de-arquivos';
 import type { BibliotecaDeFontes } from '../../../biblioteca/application/biblioteca-de-fontes';
 import { arquivosDaArvore } from '../../../documento/domain/arquivos-da-arvore';
+import { familiasCitadas } from '../../../documento/domain/familias-citadas';
 import type { EscopoDaConta } from '../../../plataforma/escopo/escopo-da-conta';
 import { type BancadaAberta, BancadaDoOtto } from '../../application/bancada-do-otto';
 
@@ -83,6 +84,11 @@ export class BancadaComRender extends BancadaDoOtto {
     super();
   }
 
+  /** O motor deste processo, para quem mais precisa dele no worker (as texturas): o WebAssembly é carregado uma vez só. */
+  motorDoProcesso(): Promise<Motor> {
+    return this.carregar();
+  }
+
   private carregar(): Promise<Motor> {
     if (!this.motor) {
       this.cargasDoMotor++;
@@ -135,6 +141,20 @@ export class BancadaComRender extends BancadaDoOtto {
       }
     };
     await garantirImagens(peca.arvore);
+    // A biblioteca cresce durante a tarefa (fonte trazida do catálogo sob demanda): a família que o documento
+    // cita e a sessão ainda não tem é lida da biblioteca na hora.
+    const familiasNaSessao = new Set(biblioteca.arquivos.map((f) => f.familia));
+    const garantirFontes = async (doc: Documento): Promise<void> => {
+      for (const familia of familiasCitadas(doc)) {
+        if (familiasNaSessao.has(familia)) continue;
+        familiasNaSessao.add(familia);
+        for (const registro of await this.fontes.pesosDa(familia)) {
+          const bytes = await this.fontes.bytes(registro);
+          if (bytes) sessao.adicionarFonte({ familia: registro.familia, peso: registro.peso, bytes });
+        }
+      }
+    };
+    await garantirFontes(peca.arvore);
 
     return {
       fontes: biblioteca.familias,
@@ -143,6 +163,7 @@ export class BancadaComRender extends BancadaDoOtto {
         const p = doc.pranchetas.find((x) => x.id === pedido.prancheta);
         if (!p) throw new Error('prancheta desconhecida');
         await garantirImagens(doc);
+        await garantirFontes(doc);
         const [x, y, w, h] = pedido.regiao ?? [0, 0, p.largura, p.altura];
         const regiao = { x: Math.max(0, x), y: Math.max(0, y), w: Math.max(1, Math.min(w, p.largura - Math.max(0, x))), h: Math.max(1, Math.min(h, p.altura - Math.max(0, y))) };
         const escala = Math.min(1, pedido.ladoMaximo / Math.max(regiao.w, regiao.h));
@@ -151,6 +172,7 @@ export class BancadaComRender extends BancadaDoOtto {
       },
       async verificar(doc, prancheta) {
         await garantirImagens(doc);
+        await garantirFontes(doc);
         return verificarDocumento(doc, criarMeiosDeVerificacao(sessao), prancheta);
       },
       async previaDeArquivo(arquivo, ladoMaximo) {

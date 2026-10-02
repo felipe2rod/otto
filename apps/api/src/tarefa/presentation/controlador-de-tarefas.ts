@@ -7,21 +7,25 @@ import {
   type AntesDaTarefa,
   EstadoDaPendencia,
   type EventosDaTarefa,
+  FORMATOS_POR_TAREFA,
   type LimitesDeTarefa,
   type ListaDePendencias,
   type ListaDeTarefas,
   PedidoDeAjusteDoPlano,
   PedidoDeDescartar,
   PedidoDeDesfazerTarefa,
+  PedidoDeTarefaPorBriefing,
   type PendenciaDaPeca,
   type RespostaDeDesfazerTarefa,
   type Tarefa,
 } from '@otto/shared';
 import type { Request, Response } from 'express';
-import { NaoEncontrado } from '../../plataforma/erros/erro-da-aplicacao';
+import type { Configuracao } from '../../plataforma/config/configuracao';
+import { NaoEncontrado, PedidoInvalido } from '../../plataforma/erros/erro-da-aplicacao';
 import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
 import { Escopo } from '../../plataforma/http/escopo';
 import { validar } from '../../plataforma/http/validar';
+import { CONFIGURACAO } from '../../plataforma/servico';
 import { CasosDeUsoDeTarefa } from '../application/casos-de-uso-de-tarefa';
 import { cursorDe, transmitir } from './fluxo-de-eventos';
 
@@ -32,9 +36,22 @@ function id(valor: string): string {
   return valor;
 }
 
+/** O corpo é o formulário de briefing? Quem diz é a versão declarada: o que tem versão é validado como formulário, com erro por campo. */
+function ehFormularioDeBriefing(corpo: unknown): boolean {
+  const c = corpo as { tipo?: unknown; briefing?: { versao?: unknown } } | null;
+  return typeof c === 'object' && c !== null && c.tipo === 'briefing' && typeof c.briefing === 'object' && c.briefing !== null && c.briefing.versao !== undefined;
+}
+
 @Controller()
 export class ControladorDeTarefas {
-  constructor(@Inject(CasosDeUsoDeTarefa) private readonly tarefas: CasosDeUsoDeTarefa) {}
+  private readonly briefingSolto: boolean;
+
+  constructor(
+    @Inject(CasosDeUsoDeTarefa) private readonly tarefas: CasosDeUsoDeTarefa,
+    @Inject(CONFIGURACAO) config: Configuracao,
+  ) {
+    this.briefingSolto = config.ambiente !== 'producao';
+  }
 
   /** O que dizer antes de enviar. Declarada antes de tarefas/:id, para "limites" não ser lido como id. */
   @Get('tarefas/limites')
@@ -47,7 +64,13 @@ export class ControladorDeTarefas {
   @Post('documentos/:id/tarefas')
   @HttpCode(202)
   criar(@Escopo() escopo: EscopoDaConta, @Param('id') documentoId: string, @Body() corpo: unknown): Promise<Tarefa> {
-    return this.tarefas.criar(escopo, id(documentoId), validar(EntradaDaTarefa, corpo));
+    // o formulário de briefing (versão 1) é fechado e validado campo a campo
+    if (ehFormularioDeBriefing(corpo)) return this.tarefas.criarPorBriefing(escopo, id(documentoId), validar(PedidoDeTarefaPorBriefing, corpo));
+    const entrada = validar(EntradaDaTarefa, corpo);
+    // Briefing solto (sem o formulário) é como os roteiros gravados do treinador chegam: serve ao desenvolvimento.
+    // Em produção só entra briefing pelo formulário, e o teto de formatos vale nos dois caminhos.
+    if (entrada.tipo === 'briefing' && (!this.briefingSolto || entrada.briefing.formatos.length > FORMATOS_POR_TAREFA)) throw new PedidoInvalido(['briefing']);
+    return this.tarefas.criar(escopo, id(documentoId), entrada);
   }
 
   @Get('documentos/:id/tarefas')

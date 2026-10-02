@@ -70,6 +70,16 @@ const Esquema = z
     // Uma tarefa de briefing de dois formatos consome 2,2 a 2,6 milhões: com menos que isto sobrando no
     // fornecedor, não começa nem continua.
     RESTO_MINIMO_NO_FORNECEDOR: z.coerce.number().int().min(0).default(3_000_000),
+    // ---- banco de imagens e catálogo de fontes (fatia 4) ----
+    // A chave do banco de imagens de fábrica (ADR 032). É segredo. Ausente: a busca responde "indisponível" e
+    // o Otto não recebe as ferramentas de imagem.
+    PIXABAY_API_KEY: z.string().min(8).optional(),
+    // Nada de trazer em massa: imagens de banco que uma conta traz por dia, e buscas novas por minuto.
+    IMAGENS_TRAZIDAS_POR_DIA_POR_CONTA: z.coerce.number().int().min(1).max(10_000).default(100),
+    BUSCAS_DE_IMAGEM_POR_MINUTO_POR_CONTA: z.coerce.number().int().min(1).max(100).default(20),
+    // De onde a biblioteca traz família de fonte que ainda não tem. 'nenhum' (o padrão) não vai à rede: só as
+    // fontes semeadas existem.
+    CATALOGO_DE_FONTES: z.enum(['nenhum', 'google']).default('nenhum'),
   })
   .superRefine((env, ctx) => {
     const exigidas =
@@ -103,6 +113,10 @@ export interface Configuracao {
   readonly limites: { readonly bytesPorArquivo: number; readonly ladoMaximoDeImagem: number; readonly megapixelsNoMaximo: number };
   readonly worker: { readonly exportacoesAoMesmoTempo: number; readonly tarefasAoMesmoTempo: number };
   readonly agente: ConfiguracaoDoAgente;
+  /** A chave é segredo: não vai para log, evento nem resposta. */
+  readonly bancoDeImagens: { readonly adaptador: 'nenhum' } | { readonly adaptador: 'pixabay'; readonly chave: string };
+  readonly imagens: { readonly trazidasPorDia: number; readonly buscasNovasPorMinuto: number };
+  readonly catalogoDeFontes: 'nenhum' | 'google';
 }
 
 export interface ConfiguracaoDoAgente {
@@ -111,6 +125,11 @@ export interface ConfiguracaoDoAgente {
     | { readonly adaptador: 'nenhum' }
     | { readonly adaptador: 'roteirizado'; readonly velocidade: number }
     | { readonly adaptador: 'claude'; readonly chave: string; readonly endereco?: string; readonly nome?: string };
+  /**
+   * O modelo que roda as tarefas é o de verdade? A API não chama o modelo, mas precisa saber: com o roteirizado
+   * não há consumo, e o teto diário de tokens não recusa tarefa.
+   */
+  readonly modeloDeVerdade: boolean;
   readonly tarefasPorDia: number;
   readonly naFilaPorConta: number;
   readonly tetoDiarioDeTokens: number;
@@ -160,11 +179,15 @@ export function lerConfiguracao(env: Record<string, string | undefined>, servico
             ? { adaptador: 'claude' as const, chave: e.MODELO_CHAVE as string, ...(e.MODELO_ENDERECO ? { endereco: e.MODELO_ENDERECO } : {}), ...(e.MODELO_NOME ? { nome: e.MODELO_NOME } : {}) }
             : { adaptador: 'roteirizado' as const, velocidade: e.VELOCIDADE_DO_ROTEIRO },
       ),
+      modeloDeVerdade: e.MODELO_DO_AGENTE === 'claude',
       tarefasPorDia: e.TAREFAS_POR_DIA_POR_CONTA,
       naFilaPorConta: e.TAREFAS_NA_FILA_POR_CONTA,
       tetoDiarioDeTokens: e.TETO_DIARIO_DE_TOKENS,
       restoMinimoNoFornecedor: e.RESTO_MINIMO_NO_FORNECEDOR,
     }),
+    bancoDeImagens: Object.freeze(e.PIXABAY_API_KEY ? { adaptador: 'pixabay' as const, chave: e.PIXABAY_API_KEY } : { adaptador: 'nenhum' as const }),
+    imagens: Object.freeze({ trazidasPorDia: e.IMAGENS_TRAZIDAS_POR_DIA_POR_CONTA, buscasNovasPorMinuto: e.BUSCAS_DE_IMAGEM_POR_MINUTO_POR_CONTA }),
+    catalogoDeFontes: e.CATALOGO_DE_FONTES,
     limites: Object.freeze({ bytesPorArquivo: e.BYTES_MAXIMOS_POR_ARQUIVO, ladoMaximoDeImagem: e.LADO_MAXIMO_DE_IMAGEM, megapixelsNoMaximo: e.MEGAPIXELS_MAXIMOS_DE_IMAGEM }),
     armazenamento: Object.freeze(
       e.ARMAZENAMENTO_ADAPTADOR === 'disco-local'

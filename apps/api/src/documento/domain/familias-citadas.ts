@@ -15,6 +15,13 @@ export function familiasCitadas(doc: Documento, operacoes: readonly unknown[] = 
       for (const trecho of no.trechos ?? []) if (trecho.fonte) familias.add(trecho.fonte);
     }
   }
+  for (const familia of familiasNasOperacoes(operacoes)) familias.add(familia);
+  return familias;
+}
+
+/** As famílias que um lote cita (em `fonte`, a qualquer profundidade), sem olhar o documento. */
+export function familiasNasOperacoes(operacoes: readonly unknown[]): Set<string> {
+  const familias = new Set<string>();
   const varrer = (valor: unknown, profundidade: number): void => {
     if (profundidade > 12 || typeof valor !== 'object' || valor === null) return;
     if (Array.isArray(valor)) {

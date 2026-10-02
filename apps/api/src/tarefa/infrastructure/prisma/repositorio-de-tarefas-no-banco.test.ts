@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { documentoVazio } from '@otto/documento';
 import { afterAll, describe, expect, it } from 'vitest';
 import { criarContaDeTeste, urlDoAppDeTeste } from '../../../../testes/banco/conexoes';
+import { RepositorioDeCadastrosNoBanco } from '../../../briefing/infrastructure/prisma/repositorio-de-cadastros-no-banco';
 import { RepositorioDeDocumentosNoBanco } from '../../../documento/infrastructure/prisma/repositorio-de-documentos-no-banco';
 import { PrismaComEscopo } from '../../../plataforma/persistencia/prisma-com-escopo';
 import { contratoDoRepositorioDeTarefas } from '../../application/repositorio-de-tarefas.contrato';
@@ -24,6 +25,11 @@ contratoDoRepositorioDeTarefas('PostgreSQL com RLS', async () => ({
       );
     }
     return doc.id;
+  },
+  criarBriefing: async (escopo) => {
+    const criado = await new RepositorioDeCadastrosNoBanco(prisma).criarBriefing(escopo, { id: randomUUID(), dados: { nome: 'salvo', dados: { versao: 1 } }, agora: new Date() }, 100);
+    if (typeof criado === 'string') throw new Error('o briefing de teste não foi criado');
+    return criado.id;
   },
 }));
 

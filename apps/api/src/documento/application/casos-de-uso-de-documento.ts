@@ -13,6 +13,7 @@ import {
   type DocumentoAberto,
   type DocumentoRenomeado,
   type EstadoDaTarefa,
+  type FimDaTarefa,
   type Historico,
   type ListaDeDocumentos,
   type LoteDoHistorico,
@@ -31,10 +32,11 @@ import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
 import { CursorInvalido } from '../../plataforma/paginacao/cursor';
 import { type RegistroDeUso, RegistroDeUsoMudo } from '../../plataforma/uso/registro-de-uso';
 import { arquivosDaArvore } from '../domain/arquivos-da-arvore';
-import { familiasCitadas } from '../domain/familias-citadas';
+import { familiasCitadas, familiasNasOperacoes } from '../domain/familias-citadas';
 import { conteudoDe, type LoteNoHistorico, planejarDesfazer, planejarRefazer } from '../domain/historico';
 import { NOME_PADRAO_DE_DOCUMENTO, nomeDaCopia } from '../textos';
 import type { MedidorDeTexto } from './medidor-de-texto';
+import { DESCRICAO_DO_LOTE_DE_EXEMPLO, NOME_DA_PECA_DE_EXEMPLO, OPERACOES_DA_PECA_DE_EXEMPLO } from './peca-de-exemplo';
 import type { DocumentoGuardado, DocumentoTravado, LoteGravado, RegistroDeDocumento, RepositorioDeDocumentos } from './repositorio-de-documentos';
 
 /** Tamanho máximo da árvore, em JSON. As peças da POC medem de 7 a 18 KB. */
@@ -74,13 +76,23 @@ function doHistorico(l: LoteGravado): LoteDoHistorico {
 export interface TarefaVivaDaPeca {
   id: string;
   estado: EstadoDaTarefa;
+  /** Como o trabalho parou, quando parou. */
+  fim?: FimDaTarefa;
   versaoInicial: number;
   tocados: string[];
 }
 export interface TarefasDaPeca {
   viva(escopo: EscopoDaConta, documentoId: string): Promise<TarefaVivaDaPeca | undefined>;
   /** As vivas da conta, por peça: para a lista de peças. */
-  vivas(escopo: EscopoDaConta): Promise<Map<string, { id: string; estado: EstadoDaTarefa }>>;
+  vivas(escopo: EscopoDaConta): Promise<Map<string, { id: string; estado: EstadoDaTarefa; fim?: FimDaTarefa }>>;
+}
+
+/**
+ * Traz para a biblioteca as famílias de fonte que ainda não estão nela (quem responde é a biblioteca de
+ * fontes). É rede: é chamado ANTES de travar a peça, nunca dentro da transação do lote.
+ */
+export interface FontesSobDemanda {
+  garantir(familias: Iterable<string>): Promise<void>;
 }
 
 /** O lote que o Otto manda: o id é dele (os ids dos nós novos derivam do id do lote). */
@@ -104,6 +116,7 @@ export class CasosDeUsoDeDocumento {
     private readonly uso: RegistroDeUso = new RegistroDeUsoMudo(),
     private readonly fontes?: BibliotecaDeFontes,
     private readonly tarefas?: TarefasDaPeca,
+    private readonly fontesSobDemanda?: FontesSobDemanda,
   ) {}
 
   /** O documento como a rota o devolve: com as possibilidades do histórico e os pesos de fonte que existem. */
@@ -120,7 +133,7 @@ export class CasosDeUsoDeDocumento {
       arvore: d.arvore,
       ...historico,
       fontes,
-      ...(viva ? { tarefaAtiva: { id: viva.id, estado: viva.estado } } : {}),
+      ...(viva ? { tarefaAtiva: { id: viva.id, estado: viva.estado, ...(viva.fim ? { fim: viva.fim } : {}) } } : {}),
       ...(viva?.estado === 'em_revisao' ? { conjuntoPendente: { tarefaId: viva.id, versaoInicial: viva.versaoInicial, tocados: viva.tocados } } : {}),
     };
   }
@@ -135,9 +148,27 @@ export class CasosDeUsoDeDocumento {
     return this.aberto(escopo, await this.documentos.criar(escopo, { id: this.gerarId(), nome: pedido.nome ?? NOME_PADRAO_DE_DOCUMENTO, arvore: documentoVazio() }), SEM_HISTORICO);
   }
 
+  private async garantirFontes(operacoes: readonly unknown[]): Promise<void> {
+    if (!this.fontesSobDemanda) return;
+    const familias = familiasNasOperacoes(operacoes);
+    if (familias.size > 0) await this.fontesSobDemanda.garantir(familias);
+  }
+
+  /**
+   * A peça de exemplo da conta nova. Uma vez por conta: se a conta já teve (mesmo arquivada), não faz nada.
+   * Devolve o id da peça criada. É a mesma peça que qualquer um faria no editor: um lote de operações do catálogo.
+   */
+  async semearExemplo(escopo: EscopoDaConta): Promise<string | undefined> {
+    if (await this.documentos.temExemplo(escopo)) return undefined;
+    const criado = await this.documentos.criar(escopo, { id: this.gerarId(), nome: NOME_DA_PECA_DE_EXEMPLO, arvore: documentoVazio(), deExemplo: true });
+    await this.aplicarLote(escopo, criado.id, { id: this.gerarId(), versaoBase: 0, descricao: DESCRICAO_DO_LOTE_DE_EXEMPLO, operacoes: [...OPERACOES_DA_PECA_DE_EXEMPLO] } as PedidoDeLote);
+    this.uso.registrar(escopo, { evento: 'peca_de_exemplo_semeada', documentoId: criado.id });
+    return criado.id;
+  }
+
   async listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number }): Promise<ListaDeDocumentos> {
     const lista = await this.paginar(() => this.documentos.listar(escopo, pagina));
-    const vivas = (await this.tarefas?.vivas(escopo)) ?? new Map<string, { id: string; estado: EstadoDaTarefa }>();
+    const vivas = (await this.tarefas?.vivas(escopo)) ?? new Map<string, { id: string; estado: EstadoDaTarefa; fim?: FimDaTarefa }>();
     const item = (r: RegistroDeDocumento) => ({
       id: r.id,
       nome: r.nome,
@@ -182,6 +213,8 @@ export class CasosDeUsoDeDocumento {
   }
 
   async aplicarLote(escopo: EscopoDaConta, id: string, pedido: PedidoDeLote): Promise<RespostaDeLote> {
+    // fonte que o lote cita e ainda não está na biblioteca: trazida antes, fora da transação (é rede)
+    await this.garantirFontes(pedido.operacoes);
     return this.comTrava(escopo, id, async (doc) => {
       await this.exigirPecaLivre(escopo, id);
       // reenvio do mesmo lote: devolve o que já foi gravado, sem olhar a versão base
@@ -267,6 +300,7 @@ export class CasosDeUsoDeDocumento {
    * @param conferir a regra de quem chama (o plano aprovado), sobre a árvore de antes e a de depois
    */
   async aplicarLoteDoAgente(escopo: EscopoDaConta, id: string, tarefaId: string, lote: LoteDoOtto, conferir?: ConferenciaDoLote): Promise<ResultadoDoLoteDoOtto> {
+    await this.garantirFontes(lote.operacoes);
     const resultado = await this.documentos.comTrava(escopo, id, async (doc): Promise<ResultadoDoLoteDoOtto> => {
       const viva = await this.tarefas?.viva(escopo, id);
       if (viva?.id !== tarefaId || viva.estado !== 'rodando') return recusa('a tarefa não está rodando nesta peça');

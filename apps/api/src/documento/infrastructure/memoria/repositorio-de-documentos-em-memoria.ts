@@ -39,7 +39,14 @@ export class RepositorioDeDocumentosEmMemoria extends RepositorioDeDocumentos {
     return g && g.contaId === escopo.contaId && !g.arquivado ? g : undefined;
   }
 
-  async criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento }): Promise<DocumentoGuardado> {
+  private readonly comExemplo = new Set<string>();
+
+  async temExemplo(escopo: EscopoDaConta): Promise<boolean> {
+    return this.comExemplo.has(escopo.contaId);
+  }
+
+  async criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento; deExemplo?: boolean }): Promise<DocumentoGuardado> {
+    if (novo.deExemplo) this.comExemplo.add(escopo.contaId);
     const registro: RegistroDeDocumento = { id: novo.id, nome: novo.nome, versao: 0, pranchetas: novo.arvore.pranchetas.length, alteradoEm: this.agora() };
     this.docs.set(novo.id, { contaId: escopo.contaId, registro, arquivado: false, arvores: new Map([[0, novo.arvore]]), lotes: [] });
     return { ...registro, arvore: novo.arvore };

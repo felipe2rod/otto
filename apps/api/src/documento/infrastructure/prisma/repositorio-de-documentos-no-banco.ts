@@ -56,10 +56,22 @@ export class RepositorioDeDocumentosNoBanco extends RepositorioDeDocumentos {
     super();
   }
 
-  async criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento }): Promise<DocumentoGuardado> {
+  temExemplo(escopo: EscopoDaConta): Promise<boolean> {
+    return this.prisma.executar(escopo, async (tx) => (await tx.documento.count({ where: { contaId: escopo.contaId, deExemplo: true } })) > 0);
+  }
+
+  async criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento; deExemplo?: boolean }): Promise<DocumentoGuardado> {
     return this.prisma.executar(escopo, async (tx) => {
       const linha = await tx.documento.create({
-        data: { id: novo.id, contaId: escopo.contaId, nome: novo.nome, versaoAtual: 0, versaoDoFormato: novo.arvore.versaoDoFormato, pranchetas: novo.arvore.pranchetas.length },
+        data: {
+          id: novo.id,
+          contaId: escopo.contaId,
+          nome: novo.nome,
+          versaoAtual: 0,
+          versaoDoFormato: novo.arvore.versaoDoFormato,
+          pranchetas: novo.arvore.pranchetas.length,
+          deExemplo: novo.deExemplo ?? false,
+        },
       });
       await tx.versaoDeDocumento.create({ data: { contaId: escopo.contaId, documentoId: novo.id, versao: 0, arvore: emJson(novo.arvore), bytes: bytesDe(novo.arvore) } });
       return { ...registro(linha), arvore: novo.arvore };

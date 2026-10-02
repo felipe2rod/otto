@@ -83,7 +83,10 @@ export interface ResumoDoHistorico {
 }
 
 export abstract class RepositorioDeDocumentos {
-  abstract criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento }): Promise<DocumentoGuardado>;
+  /** `deExemplo`: a peça de exemplo semeada na conta nova. */
+  abstract criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento; deExemplo?: boolean }): Promise<DocumentoGuardado>;
+  /** A conta já teve a peça de exemplo? Conta também a arquivada: o exemplo não volta sozinho. */
+  abstract temExemplo(escopo: EscopoDaConta): Promise<boolean>;
   /** Não arquivados, do alterado mais recentemente para o mais antigo. */
   abstract listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number }): Promise<Pagina<RegistroDeDocumento>>;
   /** undefined se não existe, se foi arquivado ou se é de outra conta. */

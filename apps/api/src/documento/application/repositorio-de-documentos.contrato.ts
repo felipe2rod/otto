@@ -88,6 +88,18 @@ export function contratoDoRepositorioDeDocumentos(nome: string, criar: () => Pro
       expect(p2.itens[0]?.id).toBe(dois.id);
     });
 
+    it('peça de exemplo: a conta sabe se já teve uma, mesmo depois de arquivada; a de outra conta não conta', async () => {
+      const { contaA: nova, contaB: outra } = await criar();
+      expect(await r.temExemplo(nova)).toBe(false);
+      await r.criar(nova, { id: randomUUID(), nome: 'comum', arvore: documentoVazio() });
+      expect(await r.temExemplo(nova)).toBe(false);
+      const exemplo = await r.criar(nova, { id: randomUUID(), nome: 'exemplo', arvore: documentoVazio(), deExemplo: true });
+      expect(await r.temExemplo(nova)).toBe(true);
+      expect(await r.temExemplo(outra)).toBe(false);
+      await r.arquivar(nova, exemplo.id);
+      expect(await r.temExemplo(nova)).toBe(true);
+    });
+
     it('arquivar: some de abrir e da lista; arquivar de novo devolve false', async () => {
       const d = await novo(A);
       expect(await r.arquivar(A, d.id)).toBe(true);

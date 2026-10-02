@@ -2,7 +2,7 @@
 // todas as contas e de licença aberta: o cache pode ser público. O endereço é por família e peso,
 // não por conteúdo, então o cache dura um dia e revalida pelo ETag (o hash do arquivo).
 import { Controller, Get, Inject, Param, Query, Req, Res } from '@nestjs/common';
-import type { FonteDaBiblioteca, ListaDeFontes } from '@otto/shared';
+import { CATEGORIAS_DE_FONTE, type FonteDaBiblioteca, type ListaDeFontes } from '@otto/shared';
 import type { Request, Response } from 'express';
 import { CasosDeUsoDeFontes } from '../application/casos-de-uso-de-fontes';
 
@@ -11,8 +11,10 @@ export class ControladorDeFontes {
   constructor(@Inject(CasosDeUsoDeFontes) private readonly fontes: CasosDeUsoDeFontes) {}
 
   @Get()
-  listar(@Query('q') busca: unknown): Promise<ListaDeFontes> {
-    return this.fontes.listar(typeof busca === 'string' ? busca.slice(0, 80) : undefined);
+  listar(@Query('q') busca: unknown, @Query('categoria') categoria: unknown, @Query('catalogo') catalogo: unknown): Promise<ListaDeFontes> {
+    // `catalogo=1` inclui as famílias que ainda não foram baixadas; categoria desconhecida é ignorada
+    const daLista = CATEGORIAS_DE_FONTE.find((c) => c === categoria);
+    return this.fontes.listar(typeof busca === 'string' ? busca.slice(0, 80) : undefined, { ...(daLista ? { categoria: daLista } : {}), catalogo: catalogo === '1' || catalogo === 'true' });
   }
 
   @Get(':familia/:peso')
