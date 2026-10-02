@@ -130,3 +130,33 @@ describe('lerConfiguracao', () => {
     for (const ruim of ['0', '9', 'muitas', '1.5']) expect(erroDe({ ...valida, EXPORTACOES_AO_MESMO_TEMPO: ruim }).variaveis).toEqual(['EXPORTACOES_AO_MESMO_TEMPO']);
   });
 });
+
+describe('configuração da tarefa do Otto', () => {
+  it('fora de produção o padrão é o modelo roteirizado, sem chave e sem custo', () => {
+    const c = lerConfiguracao(valida);
+    expect(c.agente.modelo).toEqual({ adaptador: 'roteirizado', velocidade: 0.05 });
+    expect(c.agente).toMatchObject({ tarefasPorDia: 30, naFilaPorConta: 3, tetoDiarioDeTokens: 40_000_000, restoMinimoNoFornecedor: 3_000_000 });
+    expect(c.worker.tarefasAoMesmoTempo).toBe(2);
+  });
+
+  it('o modelo de verdade exige a chave, e o erro cita o nome da variável, nunca o valor', () => {
+    expect(erroDe({ ...valida, MODELO_DO_AGENTE: 'claude' }).variaveis).toEqual(['MODELO_CHAVE']);
+    const c = lerConfiguracao({ ...valida, MODELO_DO_AGENTE: 'claude', MODELO_CHAVE: 'chave-de-mentira-123', MODELO_NOME: 'anthropic-claude-5-sonnet' });
+    expect(c.agente.modelo).toEqual({ adaptador: 'claude', chave: 'chave-de-mentira-123', nome: 'anthropic-claude-5-sonnet' });
+    const erro = erroDe({ ...valida, MODELO_DO_AGENTE: 'claude', MODELO_CHAVE: 'chave-de-mentira-123', MODELO_ENDERECO: 'http://sem-tls.example' });
+    expect(erro.variaveis).toEqual(['MODELO_ENDERECO']);
+    expect(erro.message).not.toContain('chave-de-mentira');
+  });
+
+  it('a API não recebe o modelo: não exige a chave, e ignora a que vier no ambiente', () => {
+    expect(lerConfiguracao({ ...valida, AMBIENTE: 'producao' }, 'api').agente.modelo).toEqual({ adaptador: 'nenhum' });
+    expect(lerConfiguracao({ ...valida, MODELO_DO_AGENTE: 'claude' }, 'api').agente.modelo).toEqual({ adaptador: 'nenhum' });
+    const comChave = lerConfiguracao({ ...valida, MODELO_DO_AGENTE: 'claude', MODELO_CHAVE: 'chave-de-mentira-123' }, 'api');
+    expect(JSON.stringify(comChave)).not.toContain('chave-de-mentira');
+  });
+
+  it('produção não sobe com o modelo roteirizado', () => {
+    expect(erroDe({ ...valida, AMBIENTE: 'producao' }).variaveis).toEqual(['MODELO_DO_AGENTE']);
+    expect(lerConfiguracao({ ...valida, AMBIENTE: 'producao', MODELO_DO_AGENTE: 'claude', MODELO_CHAVE: 'chave-de-mentira-123' }).agente.modelo.adaptador).toBe('claude');
+  });
+});

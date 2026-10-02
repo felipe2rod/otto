@@ -7,11 +7,12 @@
 // - lote com versão base desatualizada é recusado com a versão atual;
 // - o histórico só cresce: desfazer e refazer gravam um lote de reversão;
 // - o hash de um arquivo não é autorização: arquivo novo num lote precisa existir na conta.
-import { aplicarLote, type Documento, documentoVazio, loteDependeDeMedida } from '@otto/documento';
+import { aplicarLote, type Documento, documentoVazio, type ErroDeOperacao, loteDependeDeMedida } from '@otto/documento';
 import {
   CODIGOS_DE_ERRO,
   type DocumentoAberto,
   type DocumentoRenomeado,
+  type EstadoDaTarefa,
   type Historico,
   type ListaDeDocumentos,
   type LoteDoHistorico,
@@ -69,6 +70,31 @@ function doHistorico(l: LoteGravado): LoteDoHistorico {
   };
 }
 
+/** O que a peça precisa saber da tarefa do Otto: se há uma viva, e em que estado. Quem responde é o módulo de tarefa. */
+export interface TarefaVivaDaPeca {
+  id: string;
+  estado: EstadoDaTarefa;
+  versaoInicial: number;
+  tocados: string[];
+}
+export interface TarefasDaPeca {
+  viva(escopo: EscopoDaConta, documentoId: string): Promise<TarefaVivaDaPeca | undefined>;
+  /** As vivas da conta, por peça: para a lista de peças. */
+  vivas(escopo: EscopoDaConta): Promise<Map<string, { id: string; estado: EstadoDaTarefa }>>;
+}
+
+/** O lote que o Otto manda: o id é dele (os ids dos nós novos derivam do id do lote). */
+export interface LoteDoOtto {
+  id: string;
+  descricao: string;
+  operacoes: readonly unknown[];
+}
+export type ResultadoDoLoteDoOtto = { ok: true; tocados: string[]; versao: number; arvore: Documento } | { ok: false; erro: ErroDeOperacao };
+/** Quem chama confere o lote contra o que a tarefa pode fazer (o plano aprovado), com a árvore de antes e a de depois. */
+export type ConferenciaDoLote = (antes: Documento, depois: Documento) => { ok: true } | { ok: false; erro: ErroDeOperacao };
+
+const recusa = (mensagem: string, op = 'lote'): { ok: false; erro: ErroDeOperacao } => ({ ok: false, erro: { indice: 0, op, mensagem } });
+
 export class CasosDeUsoDeDocumento {
   constructor(
     private readonly documentos: RepositorioDeDocumentos,
@@ -77,15 +103,26 @@ export class CasosDeUsoDeDocumento {
     private readonly gerarId: () => string,
     private readonly uso: RegistroDeUso = new RegistroDeUsoMudo(),
     private readonly fontes?: BibliotecaDeFontes,
+    private readonly tarefas?: TarefasDaPeca,
   ) {}
 
   /** O documento como a rota o devolve: com as possibilidades do histórico e os pesos de fonte que existem. */
-  private async aberto(d: DocumentoGuardado, historico: Possibilidades): Promise<DocumentoAberto> {
+  private async aberto(escopo: EscopoDaConta, d: DocumentoGuardado, historico: Possibilidades): Promise<DocumentoAberto> {
     const fontes: DocumentoAberto['fontes'] = [];
     if (this.fontes) {
       for (const familia of [...familiasCitadas(d.arvore)].sort()) fontes.push({ familia, pesos: (await this.fontes.pesosDa(familia)).map((f) => f.peso) });
     }
-    return { id: d.id, nome: d.nome, versao: d.versao, arvore: d.arvore, ...historico, fontes };
+    const viva = await this.tarefas?.viva(escopo, d.id);
+    return {
+      id: d.id,
+      nome: d.nome,
+      versao: d.versao,
+      arvore: d.arvore,
+      ...historico,
+      fontes,
+      ...(viva ? { tarefaAtiva: { id: viva.id, estado: viva.estado } } : {}),
+      ...(viva?.estado === 'em_revisao' ? { conjuntoPendente: { tarefaId: viva.id, versaoInicial: viva.versaoInicial, tocados: viva.tocados } } : {}),
+    };
   }
 
   private async possibilidadesDe(doc: DocumentoTravado): Promise<Possibilidades> {
@@ -95,12 +132,21 @@ export class CasosDeUsoDeDocumento {
   }
 
   async criar(escopo: EscopoDaConta, pedido: PedidoDeCriarDocumento): Promise<DocumentoAberto> {
-    return this.aberto(await this.documentos.criar(escopo, { id: this.gerarId(), nome: pedido.nome ?? NOME_PADRAO_DE_DOCUMENTO, arvore: documentoVazio() }), SEM_HISTORICO);
+    return this.aberto(escopo, await this.documentos.criar(escopo, { id: this.gerarId(), nome: pedido.nome ?? NOME_PADRAO_DE_DOCUMENTO, arvore: documentoVazio() }), SEM_HISTORICO);
   }
 
   async listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number }): Promise<ListaDeDocumentos> {
     const lista = await this.paginar(() => this.documentos.listar(escopo, pagina));
-    const item = (r: RegistroDeDocumento) => ({ id: r.id, nome: r.nome, pranchetas: r.pranchetas, versao: r.versao, alteradoEm: r.alteradoEm.toISOString(), miniatura: null });
+    const vivas = (await this.tarefas?.vivas(escopo)) ?? new Map<string, { id: string; estado: EstadoDaTarefa }>();
+    const item = (r: RegistroDeDocumento) => ({
+      id: r.id,
+      nome: r.nome,
+      pranchetas: r.pranchetas,
+      versao: r.versao,
+      alteradoEm: r.alteradoEm.toISOString(),
+      ...(vivas.has(r.id) ? { tarefa: vivas.get(r.id) } : {}),
+      miniatura: null,
+    });
     return { itens: lista.itens.map(item), proximoCursor: lista.proximoCursor };
   }
 
@@ -108,7 +154,7 @@ export class CasosDeUsoDeDocumento {
     const doc = await this.documentos.abrir(escopo, id);
     if (!doc) throw new NaoEncontrado();
     const resumo = await this.documentos.resumoDoHistorico(escopo, id);
-    return this.aberto(doc, resumo ? possibilidades(resumo.atual, resumo.cauda, resumo.antesDaCauda) : SEM_HISTORICO);
+    return this.aberto(escopo, doc, resumo ? possibilidades(resumo.atual, resumo.cauda, resumo.antesDaCauda) : SEM_HISTORICO);
   }
 
   /** Renomear não é operação do catálogo nem passo do histórico: o nome é do registro. */
@@ -122,7 +168,7 @@ export class CasosDeUsoDeDocumento {
   async duplicar(escopo: EscopoDaConta, id: string, pedido: PedidoDeDuplicarDocumento): Promise<DocumentoAberto> {
     const original = await this.documentos.abrir(escopo, id);
     if (!original) throw new NaoEncontrado();
-    return this.aberto(await this.documentos.criar(escopo, { id: this.gerarId(), nome: pedido.nome ?? nomeDaCopia(original.nome), arvore: original.arvore }), SEM_HISTORICO);
+    return this.aberto(escopo, await this.documentos.criar(escopo, { id: this.gerarId(), nome: pedido.nome ?? nomeDaCopia(original.nome), arvore: original.arvore }), SEM_HISTORICO);
   }
 
   async arquivar(escopo: EscopoDaConta, id: string): Promise<void> {
@@ -137,6 +183,7 @@ export class CasosDeUsoDeDocumento {
 
   async aplicarLote(escopo: EscopoDaConta, id: string, pedido: PedidoDeLote): Promise<RespostaDeLote> {
     return this.comTrava(escopo, id, async (doc) => {
+      await this.exigirPecaLivre(escopo, id);
       // reenvio do mesmo lote: devolve o que já foi gravado, sem olhar a versão base
       const repetido = await doc.lotePorChaveDoCliente(pedido.id);
       if (repetido) {
@@ -183,10 +230,15 @@ export class CasosDeUsoDeDocumento {
 
   async desfazer(escopo: EscopoDaConta, id: string, pedido: PedidoDeDesfazer): Promise<RespostaDeDesfazer> {
     return this.comTrava(escopo, id, async (doc) => {
+      await this.exigirPecaLivre(escopo, id);
       this.conferirVersao(doc, pedido.versaoBase);
       const atual = await doc.lote(doc.registro.versao);
       const conteudo = conteudoDe(atual);
-      const anterior = conteudo > 1 ? await doc.lote(conteudo - 1) : undefined;
+      // A tarefa do Otto é uma unidade do histórico: se o passo de pé é um lote dela, desfazer volta para
+      // antes do PRIMEIRO lote da tarefa. (Os lotes de uma tarefa são seguidos: a peça fica somente leitura enquanto ela roda.)
+      const deTarefa = conteudo > 0 ? (conteudo === atual?.versao ? atual : await doc.lote(conteudo))?.tarefaId : undefined;
+      const inicio = (deTarefa ? await doc.primeiraVersaoDaTarefa(deTarefa) : undefined) ?? conteudo;
+      const anterior = inicio > 1 ? await doc.lote(inicio - 1) : undefined;
       const plano = planejarDesfazer(atual, () => anterior);
       if (!plano) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.nadaParaDesfazer);
       const resposta = await this.reverter(doc, plano.restaurar);
@@ -197,6 +249,7 @@ export class CasosDeUsoDeDocumento {
 
   async refazer(escopo: EscopoDaConta, id: string, pedido: PedidoDeDesfazer): Promise<RespostaDeDesfazer> {
     return this.comTrava(escopo, id, async (doc) => {
+      await this.exigirPecaLivre(escopo, id);
       this.conferirVersao(doc, pedido.versaoBase);
       const cauda = await doc.caudaDeReversoes();
       const antesDaCauda = doc.registro.versao - cauda.length;
@@ -208,13 +261,114 @@ export class CasosDeUsoDeDocumento {
     });
   }
 
+  /**
+   * O lote do Otto: transação curta, autoria do agente, ligado à tarefa. Só entra enquanto ESSA tarefa é a
+   * viva da peça e está rodando. Não lança por recusa: devolve o erro, que o ciclo mostra ao modelo.
+   * @param conferir a regra de quem chama (o plano aprovado), sobre a árvore de antes e a de depois
+   */
+  async aplicarLoteDoAgente(escopo: EscopoDaConta, id: string, tarefaId: string, lote: LoteDoOtto, conferir?: ConferenciaDoLote): Promise<ResultadoDoLoteDoOtto> {
+    const resultado = await this.documentos.comTrava(escopo, id, async (doc): Promise<ResultadoDoLoteDoOtto> => {
+      const viva = await this.tarefas?.viva(escopo, id);
+      if (viva?.id !== tarefaId || viva.estado !== 'rodando') return recusa('a tarefa não está rodando nesta peça');
+      // reenvio do mesmo lote: devolve o que já foi gravado
+      const repetido = await doc.lotePorChaveDoCliente(lote.id);
+      if (repetido) return { ok: true, tocados: repetido.tocados, versao: repetido.versao, arvore: (await doc.arvoreDaVersao(repetido.versao)) as Documento };
+
+      const atual = await doc.arvore();
+      const sessao = loteDependeDeMedida(lote.operacoes) ? await this.medidores.abrir(atual, lote.operacoes) : undefined;
+      let aplicado: ReturnType<typeof aplicarLote>;
+      try {
+        aplicado = aplicarLote(atual, lote.operacoes, { autoria: { tipo: 'agente', tarefaId }, idDoLote: lote.id, ...(sessao ? { medidor: sessao.medidor } : {}) });
+      } finally {
+        sessao?.liberar();
+      }
+      if (!aplicado.ok) return { ok: false, erro: aplicado.erro };
+      const veredito = conferir?.(atual, aplicado.doc);
+      if (veredito && !veredito.ok) return veredito;
+      // o hash não é autorização: imagem que a conta não tem não entra, venha de quem vier
+      const jaCitados = arquivosDaArvore(atual);
+      const novos = [...arquivosDaArvore(aplicado.doc)].filter((sha256) => !jaCitados.has(sha256));
+      if (novos.length > 0 && (await this.arquivos.quaisExistem(escopo, novos)).size < novos.length) return recusa('o lote usa um arquivo de imagem que não está na conta', 'criarNo');
+      if (bytesDe(aplicado.doc) > LIMITE_DE_BYTES_DA_ARVORE) return recusa('o documento passaria do tamanho máximo');
+
+      const versao = doc.registro.versao + 1;
+      await doc.gravarLote({
+        id: this.gerarId(),
+        chaveDoCliente: lote.id,
+        versao,
+        autoria: 'agente',
+        tarefaId,
+        tipo: 'edicao',
+        descricao: lote.descricao,
+        operacoes: lote.operacoes,
+        tocados: aplicado.tocados,
+        arvore: aplicado.doc,
+      });
+      const operacoesPorTipo: Record<string, number> = {};
+      for (const o of lote.operacoes) {
+        const op = String((o as { op: unknown }).op);
+        operacoesPorTipo[op] = (operacoesPorTipo[op] ?? 0) + 1;
+      }
+      this.uso.registrar(escopo, { evento: 'lote_aplicado', documentoId: id, autoria: 'agente', operacoesPorTipo, nosTocados: aplicado.tocados.length, mediuTexto: sessao !== undefined, versao });
+      return { ok: true, tocados: aplicado.tocados, versao, arvore: aplicado.doc };
+    });
+    return resultado ?? recusa('a peça não existe mais');
+  }
+
+  /**
+   * "Desfazer tudo" e "voltar para antes desta tarefa": um lote de reversão, ligado à tarefa, que devolve a
+   * peça ao conteúdo da versão em que a tarefa começou. Quem decide se pode é o caso de uso da tarefa.
+   */
+  async voltarParaAntesDaTarefa(escopo: EscopoDaConta, id: string, tarefa: { id: string; versaoInicial: number }): Promise<{ versao: number; arvore: Documento }> {
+    return this.comTrava(escopo, id, async (doc) => {
+      const ateVersao = conteudoDe(tarefa.versaoInicial > 0 ? await doc.lote(tarefa.versaoInicial) : undefined);
+      const ultimoDaTarefa = conteudoDe(await doc.lote(doc.registro.versao));
+      const r = await this.reverter(doc, ateVersao, tarefa.id);
+      // marca o passo de pé como desfeito, como faz o desfazer comum: refazer continua possível
+      if (ultimoDaTarefa > ateVersao) await doc.marcarDesfeito(ultimoDaTarefa, r.loteId);
+      return { versao: r.versao, arvore: r.arvore };
+    });
+  }
+
+  /** Descartar uma prancheta que a tarefa criou: uma operação comum do catálogo, num lote ligado à tarefa. */
+  async removerPranchetaDaTarefa(escopo: EscopoDaConta, id: string, tarefaId: string, pranchetaId: string): Promise<{ versao: number; arvore: Documento }> {
+    return this.comTrava(escopo, id, async (doc) => {
+      const operacoes = [{ op: 'removerPrancheta', prancheta: pranchetaId }];
+      const loteId = this.gerarId();
+      const aplicado = aplicarLote(await doc.arvore(), operacoes, { autoria: { tipo: 'designer' }, idDoLote: loteId });
+      if (!aplicado.ok) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.loteInvalido, { ...aplicado.erro });
+      const versao = doc.registro.versao + 1;
+      await doc.gravarLote({ id: loteId, versao, autoria: 'designer', tarefaId, tipo: 'edicao', descricao: '', operacoes, tocados: aplicado.tocados, arvore: aplicado.doc });
+      return { versao, arvore: aplicado.doc };
+    });
+  }
+
+  /** A peça com tarefa viva do Otto é somente leitura para o designer. Em revisão, o código é outro: aceitar libera. */
+  private async exigirPecaLivre(escopo: EscopoDaConta, id: string): Promise<void> {
+    const viva = await this.tarefas?.viva(escopo, id);
+    if (!viva) return;
+    if (viva.estado === 'em_revisao') throw new ErroDaAplicacao(CODIGOS_DE_ERRO.revisaoPendente, { tarefaId: viva.id });
+    throw new ErroDaAplicacao(CODIGOS_DE_ERRO.documentoEmTarefa, { tarefaId: viva.id, estado: viva.estado });
+  }
+
   /** Grava o lote de reversão que leva o documento à árvore de uma versão de conteúdo. */
-  private async reverter(doc: DocumentoTravado, ateVersao: number): Promise<{ versao: number; arvore: Documento; loteId: string }> {
+  private async reverter(doc: DocumentoTravado, ateVersao: number, tarefaId?: string): Promise<{ versao: number; arvore: Documento; loteId: string }> {
     const arvore = await doc.arvoreDaVersao(ateVersao);
     if (!arvore) throw new Error(`a versão ${ateVersao} do documento não tem árvore guardada`);
     const versao = doc.registro.versao + 1;
     const loteId = this.gerarId();
-    await doc.gravarLote({ id: loteId, versao, autoria: 'designer', tipo: 'reversao', reverteAteVersao: ateVersao, descricao: '', operacoes: [], tocados: [], arvore });
+    await doc.gravarLote({
+      id: loteId,
+      versao,
+      autoria: 'designer',
+      ...(tarefaId ? { tarefaId } : {}),
+      tipo: 'reversao',
+      reverteAteVersao: ateVersao,
+      descricao: '',
+      operacoes: [],
+      tocados: [],
+      arvore,
+    });
     return { versao, arvore, loteId };
   }
 

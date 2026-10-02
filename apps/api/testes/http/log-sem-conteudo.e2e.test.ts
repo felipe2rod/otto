@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { ArquivoEnviado } from '@otto/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type ApiDeTeste, type ClienteDeTeste, PNG, subirApi } from './subir';
+import { type ApiDeTeste, type ClienteDeTeste, ENTRADA_DE_BRIEFING, PNG, subirApi } from './subir';
 
 const SENTINELAS = {
   nomeDoDocumento: 'SENTINELA-NOME-DO-DOCUMENTO-7f3a',
@@ -17,6 +17,16 @@ const SENTINELAS = {
   busca: 'SENTINELA-BUSCA-DE-FONTE-3e3e',
   alvoQueNaoExiste: 'SENTINELA-ALVO-ERRADO-0d0d',
   corDaMarca: '#a1b2c3',
+  // a tarefa do Otto: o pedido é dado de uso (vai para a tabela de acesso restrito), mas NÃO para o log
+  pedidoAoOtto: 'SENTINELA-PEDIDO-AO-OTTO-6b6b',
+  nomeDoBriefing: 'SENTINELA-NOME-DO-BRIEFING-19ad',
+  tituloDoBriefing: 'SENTINELA-TITULO-DO-BRIEFING-77c0',
+  observacoesDoBriefing: 'SENTINELA-OBSERVACOES-e4e4',
+  ajusteDoPlano: 'SENTINELA-AJUSTE-DO-PLANO-0a1b',
+  // o que o Otto escreveu na peça e disse ao designer (vem do roteiro gravado): conteúdo também
+  textoQueOOttoEscreveu: 'Abrimos às 7h',
+  camadaQueOOttoCriou: 'Subtítulo',
+  fonteQueOOttoUsou: 'DM Serif Display',
 } as const;
 
 let api: ApiDeTeste;
@@ -24,6 +34,8 @@ let A: ClienteDeTeste;
 let documentoId: string;
 let exportacaoId: string;
 let tokenDoLink: string;
+let tarefaId: string;
+let tarefaRecusadaId: string;
 
 beforeAll(async () => {
   api = await subirApi();
@@ -75,7 +87,31 @@ beforeAll(async () => {
   await A.post(`/api/documentos/${doc.id}/desfazer`).send({ versaoBase: 1 });
   await A.post(`/api/documentos/${doc.id}/duplicar`).send({ nome: S.nomeNovo });
   await A.get(`/api/rota-que-nao-existe/${S.nomeDoDocumento}?q=${S.busca}`);
-});
+
+  // a tarefa do Otto, do pedido ao desfazer: briefing com sentinelas, o "pode" com ajuste, revisão, fluxo de eventos
+  const peca = (await A.post('/api/documentos').send({ nome: S.nomeDoDocumento })).body as { id: string };
+  const briefing = { ...ENTRADA_DE_BRIEFING.briefing, nome: S.nomeDoBriefing, textos: { ...ENTRADA_DE_BRIEFING.briefing.textos, titulo: S.tituloDoBriefing }, observacoes: S.observacoesDoBriefing };
+  const tarefa = (await A.post(`/api/documentos/${peca.id}/tarefas`).send({ ...ENTRADA_DE_BRIEFING, briefing })).body as { id: string };
+  tarefaId = tarefa.id;
+  await api.fila.ociosa();
+  await A.post(`/api/tarefas/${tarefa.id}/ajustar`).send({ texto: S.ajusteDoPlano });
+  await api.fila.ociosa();
+  await A.post(`/api/tarefas/${tarefa.id}/aprovar`).send({});
+  await api.fila.ociosa();
+  await A.get(`/api/tarefas/${tarefa.id}`);
+  await A.get(`/api/tarefas/${tarefa.id}/eventos?depoisDe=2`);
+  await A.get(`/api/tarefas/${tarefa.id}/eventos`).set('Accept', 'text/event-stream').set('Last-Event-ID', '1');
+  await A.get(`/api/tarefas/${tarefa.id}/antes`);
+  await A.get(`/api/documentos/${peca.id}/tarefas`);
+  await A.get(`/api/documentos/${peca.id}/pendencias`);
+  await A.post(`/api/tarefas/${tarefa.id}/aceitar`).send({});
+  await A.post(`/api/tarefas/${tarefa.id}/desfazer`).send({});
+  // e a que dá errado: pedido livre numa peça em que o roteiro não se aplica (o lote é recusado, e a recusa cita a camada)
+  const recusada = (await A.post(`/api/documentos/${documentoId}/tarefas`).send({ tipo: 'ajuste', pedido: S.pedidoAoOtto })).body as { id: string };
+  tarefaRecusadaId = recusada.id;
+  await api.fila.ociosa();
+  await A.post(`/api/documentos/${documentoId}/tarefas`).send({ tipo: 'tipo-que-nao-existe', pedido: S.pedidoAoOtto });
+}, 120_000);
 afterAll(async () => {
   await api?.fechar();
 });
@@ -155,5 +191,54 @@ describe('o log carrega o que precisa', () => {
 
   it('o envio de arquivo registra tipo, bytes e medidas', () => {
     expect(api.log.find((l) => l.evento === 'arquivo_enviado')).toMatchObject({ contaId: api.contaA.contaId, tipo: 'image/png', bytes: PNG.byteLength, largura: 600, altura: 800 });
+  });
+});
+
+describe('a tarefa do Otto no log: uso sim, conteúdo não (ADR 031)', () => {
+  const linhasDaTarefa = (id: string) => api.log.filter((l) => l.tarefaId === id);
+
+  it('o pedido registra tipo e identificadores; o texto do pedido e o briefing não', () => {
+    const pedida = api.log.find((l) => l.evento === 'tarefa_pedida' && l.tarefaId === tarefaId);
+    expect(pedida).toMatchObject({ contaId: api.contaA.contaId, tipo: 'briefing' });
+    expect(Object.keys(pedida ?? {}).sort()).toEqual(expect.arrayContaining(['documentoId', 'evento', 'tarefaId', 'tipo']));
+    expect(JSON.stringify(pedida)).not.toMatch(/"(pedido|briefing|entrada|selecao)":/);
+  });
+
+  it('o fim da tarefa registra estado, contagens, tokens, duração e custo: só números e códigos', () => {
+    const terminada = api.log.find((l) => l.evento === 'tarefa_terminada' && l.tarefaId === tarefaId && l.estado === 'em_revisao');
+    // 2 chamadas do diretor (a direção foi refeita no ajuste) e 12 da execução
+    expect(terminada).toMatchObject({ tipo: 'briefing', fim: 'entregue', lotes: 5, chamadas: 14, conferida: true });
+    for (const [chave, valor] of Object.entries(terminada ?? {})) expect(['string', 'number', 'boolean'], chave).toContain(typeof valor);
+    for (const campo of ['tokensDeEntrada', 'tokensDeCacheLidos', 'tokensDeCacheCriados', 'tokensDeSaida', 'imagens', 'voltasDeConferencia', 'duracaoMs', 'lotesRecusados'])
+      expect(typeof terminada?.[campo]).toBe('number');
+    // resumo da entrega, pendências, plano e direção não entram em evento de uso
+    expect(Object.keys(terminada ?? {})).not.toEqual(expect.arrayContaining(['resumo']));
+    expect(JSON.stringify(linhasDaTarefa(tarefaId))).not.toMatch(/"(resumo|pendencias|plano|cartao|direcao|entrega|operacoes|arvore|mensagem)"/);
+  });
+
+  it('as respostas ao "pode" e a decisão da revisão registram só o que foi escolhido', () => {
+    expect(
+      linhasDaTarefa(tarefaId)
+        .filter((l) => l.evento === 'tarefa_confirmacao')
+        .map((l) => l.resposta),
+    ).toEqual(['ajustar', 'pode']);
+    expect(
+      linhasDaTarefa(tarefaId)
+        .filter((l) => l.evento === 'tarefa_decidida')
+        .map((l) => l.resultado),
+    ).toEqual(['aceita', 'desfeita']);
+  });
+
+  it('a tarefa que deu errado registra o código do fim, e não a mensagem da recusa (que cita a camada)', () => {
+    const terminada = api.log.find((l) => l.evento === 'tarefa_terminada' && l.tarefaId === tarefaRecusadaId);
+    expect(terminada).toMatchObject({ lotes: 0 });
+    expect(terminada?.lotesRecusados).toBeGreaterThan(0);
+    expect(JSON.stringify(linhasDaTarefa(tarefaRecusadaId))).not.toMatch(/Título|Feed|destaque/);
+  });
+
+  it('o fluxo de eventos aparece no log como rota modelo, sem o corpo que ele transmitiu', () => {
+    const fluxos = api.log.filter((l) => l.evento === 'requisicao' && l.rota === '/api/tarefas/:id/eventos');
+    expect(fluxos).toHaveLength(2);
+    expect(fluxos.every((l) => l.status === 200)).toBe(true);
   });
 });

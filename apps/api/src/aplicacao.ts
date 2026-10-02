@@ -49,6 +49,24 @@ import { SondaDoBanco } from './plataforma/saude/sonda-do-banco';
 import { CONFIGURACAO, SERVICO, type Servico } from './plataforma/servico';
 import { RegistroDeUso } from './plataforma/uso/registro-de-uso';
 import { RegistroDeUsoNoLog } from './plataforma/uso/registro-de-uso-no-log';
+import { BancadaDoOtto } from './tarefa/application/bancada-do-otto';
+import { CasosDeUsoDeTarefa, type FalhaDaTarefa } from './tarefa/application/casos-de-uso-de-tarefa';
+import { ConsumoDoModelo } from './tarefa/application/consumo-do-modelo';
+import { ModelosDoOtto } from './tarefa/application/modelos-do-otto';
+import { RepositorioDeTarefas } from './tarefa/application/repositorio-de-tarefas';
+import { ModelosComClaude } from './tarefa/infrastructure/adaptadores/claude/modelos-com-claude';
+import { ModelosRoteirizados } from './tarefa/infrastructure/adaptadores/roteirizado/modelos-roteirizados';
+import { ConsumoDoModeloNoBanco } from './tarefa/infrastructure/prisma/consumo-do-modelo-no-banco';
+import { RepositorioDeTarefasNoBanco } from './tarefa/infrastructure/prisma/repositorio-de-tarefas-no-banco';
+import { BancadaComRender } from './tarefa/infrastructure/render/bancada-com-render';
+import { tarefasDaPeca } from './tarefa/infrastructure/tarefas-da-peca';
+import { ControladorDeTarefas } from './tarefa/presentation/controlador-de-tarefas';
+
+class SemModelo extends ModelosDoOtto {
+  abrir(): never {
+    throw new Error('este processo não chama o modelo: a tarefa do Otto roda no worker');
+  }
+}
 
 function criarArmazenamento(config: ConfiguracaoDoArmazenamento): ArmazenamentoDeArquivo {
   return config.adaptador === 's3' ? new ArmazenamentoS3(config) : new ArmazenamentoEmDiscoLocal(config.pasta, config.segredoDeAssinatura);
@@ -63,7 +81,7 @@ export class ModuloRaiz {
       // o worker só responde saúde; as rotas de negócio são da API
       controllers:
         servico === 'api'
-          ? [ControladorDeSaude, ControladorDeDocumentos, ControladorDeArquivos, ControladorDeVetores, ControladorDeLinks, ControladorDeFontes, ControladorDeExportacoes]
+          ? [ControladorDeSaude, ControladorDeDocumentos, ControladorDeArquivos, ControladorDeVetores, ControladorDeLinks, ControladorDeFontes, ControladorDeExportacoes, ControladorDeTarefas]
           : [ControladorDeSaude],
       providers: [
         { provide: SERVICO, useValue: servico },
@@ -85,6 +103,26 @@ export class ModuloRaiz {
           inject: [PrismaComEscopo, ArmazenamentoDeArquivo],
         },
         { provide: RepositorioDeExportacoes, useFactory: (prisma: PrismaComEscopo) => new RepositorioDeExportacoesNoBanco(prisma), inject: [PrismaComEscopo] },
+        { provide: RepositorioDeTarefas, useFactory: (prisma: PrismaComEscopo) => new RepositorioDeTarefasNoBanco(prisma), inject: [PrismaComEscopo] },
+        { provide: ConsumoDoModelo, useFactory: (prisma: PrismaComEscopo) => new ConsumoDoModeloNoBanco(prisma), inject: [PrismaComEscopo] },
+        // O motor da bancada só é carregado na primeira tarefa: na API, nunca.
+        {
+          provide: BancadaDoOtto,
+          useFactory: (fontes: BibliotecaDeFontes, arquivos: RepositorioDeArquivos, armazenamento: ArmazenamentoDeArquivo) => new BancadaComRender(fontes, arquivos, armazenamento),
+          inject: [BibliotecaDeFontes, RepositorioDeArquivos, ArmazenamentoDeArquivo],
+        },
+        // Qual modelo responde é configuração (ADR 020): o de verdade, ou o roteirizado, que não gasta token.
+        {
+          provide: ModelosDoOtto,
+          useFactory: (consumo: ConsumoDoModelo): ModelosDoOtto => {
+            const modelo = config.agente.modelo;
+            if (modelo.adaptador === 'claude') return new ModelosComClaude(modelo, consumo);
+            if (modelo.adaptador === 'roteirizado') return new ModelosRoteirizados({ velocidade: modelo.velocidade });
+            // a API não chama modelo, e não recebe a chave: quem roda a tarefa é o worker
+            return new SemModelo();
+          },
+          inject: [ConsumoDoModelo],
+        },
         // a fila mora no mesmo PostgreSQL; só o worker consome e faz a manutenção dela
         {
           provide: BarramentoDeEventos,
@@ -99,9 +137,9 @@ export class ModuloRaiz {
         // casos de uso: classes puras, montadas aqui
         {
           provide: CasosDeUsoDeDocumento,
-          useFactory: (documentos: RepositorioDeDocumentos, arquivos: RepositorioDeArquivos, medidor: MedidorDeTexto, uso: RegistroDeUso, fontes: BibliotecaDeFontes) =>
-            new CasosDeUsoDeDocumento(documentos, arquivos, medidor, uuidV7, uso, fontes),
-          inject: [RepositorioDeDocumentos, RepositorioDeArquivos, MedidorDeTexto, RegistroDeUso, BibliotecaDeFontes],
+          useFactory: (documentos: RepositorioDeDocumentos, arquivos: RepositorioDeArquivos, medidor: MedidorDeTexto, uso: RegistroDeUso, fontes: BibliotecaDeFontes, tarefas: RepositorioDeTarefas) =>
+            new CasosDeUsoDeDocumento(documentos, arquivos, medidor, uuidV7, uso, fontes, tarefasDaPeca(tarefas)),
+          inject: [RepositorioDeDocumentos, RepositorioDeArquivos, MedidorDeTexto, RegistroDeUso, BibliotecaDeFontes, RepositorioDeTarefas],
         },
         {
           provide: CasosDeUsoDeArquivo,
@@ -145,12 +183,49 @@ export class ModuloRaiz {
             Registro,
           ],
         },
+        {
+          provide: CasosDeUsoDeTarefa,
+          useFactory: (
+            tarefas: RepositorioDeTarefas,
+            documentos: RepositorioDeDocumentos,
+            pecas: CasosDeUsoDeDocumento,
+            fila: BarramentoDeEventos,
+            bancada: BancadaDoOtto,
+            modelos: ModelosDoOtto,
+            consumo: ConsumoDoModelo,
+            uso: RegistroDeUso,
+            registro: Registro,
+          ) =>
+            new CasosDeUsoDeTarefa({
+              tarefas,
+              documentos,
+              pecas,
+              fila,
+              bancada,
+              modelos,
+              consumo,
+              limites: config.agente,
+              gerarId: uuidV7,
+              uso,
+              // só o tipo do erro: a mensagem pode citar a peça
+              aoFalhar: (falha: FalhaDaTarefa) => registro.warn({ evento: 'falha_na_tarefa', tarefaId: falha.tarefaId, etapa: falha.etapa, ...semConteudo(falha.erro) }),
+            }),
+          inject: [RepositorioDeTarefas, RepositorioDeDocumentos, CasosDeUsoDeDocumento, BarramentoDeEventos, BancadaDoOtto, ModelosDoOtto, ConsumoDoModelo, RegistroDeUso, Registro],
+        },
         { provide: CasosDeUsoDeFontes, useFactory: (fontes: BibliotecaDeFontes) => new CasosDeUsoDeFontes(fontes), inject: [BibliotecaDeFontes] },
         {
           provide: CicloDeVida,
-          useFactory: (prisma: PrismaComEscopo, fila: BarramentoDeEventos, exportacoes: CasosDeUsoDeExportacao, registro: Registro, motor: MotorDeExportacao) =>
-            new CicloDeVida(servico, prisma, fila, exportacoes, registro, { exportacoesAoMesmoTempo: config.worker.exportacoesAoMesmoTempo, motor }),
-          inject: [PrismaComEscopo, BarramentoDeEventos, CasosDeUsoDeExportacao, Registro, MotorDeExportacao],
+          useFactory: (prisma: PrismaComEscopo, fila: BarramentoDeEventos, exportacoes: CasosDeUsoDeExportacao, registro: Registro, motor: MotorDeExportacao, tarefas: CasosDeUsoDeTarefa) =>
+            new CicloDeVida(
+              servico,
+              prisma,
+              fila,
+              exportacoes,
+              registro,
+              { exportacoesAoMesmoTempo: config.worker.exportacoesAoMesmoTempo, tarefasAoMesmoTempo: config.worker.tarefasAoMesmoTempo, motor },
+              tarefas,
+            ),
+          inject: [PrismaComEscopo, BarramentoDeEventos, CasosDeUsoDeExportacao, Registro, MotorDeExportacao, CasosDeUsoDeTarefa],
         },
       ],
     };
@@ -187,7 +262,7 @@ export async function criarAplicacao(servico: Servico, config: Configuracao): Pr
 export async function iniciar(servico: Servico, env: Record<string, string | undefined>): Promise<void> {
   let config: Configuracao;
   try {
-    config = lerConfiguracao(env);
+    config = lerConfiguracao(env, servico);
   } catch (e) {
     if (!(e instanceof ConfiguracaoInvalida)) throw e;
     process.stderr.write(`[${servico}] ${e.message}\n`);

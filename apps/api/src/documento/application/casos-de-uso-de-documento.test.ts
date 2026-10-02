@@ -1,14 +1,14 @@
 // Regras de documento, sem NestJS e sem banco: caso de uso de verdade, repositórios em memória.
 import { randomUUID } from 'node:crypto';
 import { aplicarLote, caixaDe, type Documento, documentoVazio } from '@otto/documento';
-import { CODIGOS_DE_ERRO, lerContaId } from '@otto/shared';
+import { CODIGOS_DE_ERRO, type EstadoDaTarefa, lerContaId } from '@otto/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RepositorioDeArquivosEmMemoria } from '../../arquivo/infrastructure/memoria/repositorio-de-arquivos-em-memoria';
 import { BibliotecaDeFontesEmMemoria } from '../../biblioteca/infrastructure/memoria/biblioteca-de-fontes-em-memoria';
 import { ErroDaAplicacao } from '../../plataforma/erros/erro-da-aplicacao';
 import { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
 import { RepositorioDeDocumentosEmMemoria } from '../infrastructure/memoria/repositorio-de-documentos-em-memoria';
-import { CasosDeUsoDeDocumento, LIMITE_DE_BYTES_DA_ARVORE } from './casos-de-uso-de-documento';
+import { CasosDeUsoDeDocumento, LIMITE_DE_BYTES_DA_ARVORE, type TarefasDaPeca } from './casos-de-uso-de-documento';
 import { type MedidorAberto, MedidorDeTexto } from './medidor-de-texto';
 
 const contaA = EscopoDaConta.abrir(lerContaId('01990000-0000-7000-8000-00000000000a'));
@@ -424,5 +424,144 @@ describe('fontes do documento aberto', () => {
       { familia: 'IBM Plex Sans', pesos: [400, 700] },
       { familia: 'Sumida', pesos: [] },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Fatia 3: a peça durante uma tarefa do Otto, o lote do agente e a tarefa como unidade do histórico.
+// ---------------------------------------------------------------------------------------------
+describe('a peça e a tarefa do Otto', () => {
+  const TAREFA = '0199a3f0-0000-7000-8000-0000000000f1';
+  let viva: { id: string; estado: EstadoDaTarefa; versaoInicial?: number; tocados?: string[] } | undefined;
+  let comTarefa: CasosDeUsoDeDocumento;
+
+  beforeEach(() => {
+    viva = undefined;
+    const completa = () => (viva ? { versaoInicial: 1, tocados: ['n1'], ...viva } : undefined);
+    const tarefas: TarefasDaPeca = { viva: async () => completa(), vivas: async () => new Map() };
+    comTarefa = new CasosDeUsoDeDocumento(new RepositorioDeDocumentosEmMemoria(), arquivos, medidor, randomUUID, undefined, fontes, tarefas);
+  });
+
+  async function pecaComBotao() {
+    const d = await comTarefa.criar(contaA, { nome: 'Peça' });
+    await comTarefa.aplicarLote(contaA, d.id, lote(0, [criarPrancheta(), criarForma('Botão')]));
+    return d.id;
+  }
+  const loteDoOtto = (operacoes: unknown[]) => ({ id: randomUUID(), descricao: 'do Otto', operacoes });
+
+  it.each([
+    ['na_fila', CODIGOS_DE_ERRO.documentoEmTarefa],
+    ['preparando', CODIGOS_DE_ERRO.documentoEmTarefa],
+    ['aguardando_confirmacao', CODIGOS_DE_ERRO.documentoEmTarefa],
+    ['rodando', CODIGOS_DE_ERRO.documentoEmTarefa],
+    ['em_revisao', CODIGOS_DE_ERRO.revisaoPendente],
+  ] as const)('com tarefa %s, a peça é somente leitura para o designer: editar, desfazer e refazer respondem %s, e nada muda', async (estado, codigo) => {
+    const id = await pecaComBotao();
+    viva = { id: TAREFA, estado };
+    for (const tentar of [
+      () => comTarefa.aplicarLote(contaA, id, lote(1, [criarForma('Outra')])),
+      () => comTarefa.desfazer(contaA, id, { versaoBase: 1 }),
+      () => comTarefa.refazer(contaA, id, { versaoBase: 1 }),
+    ]) {
+      const erro = await erroDe(tentar());
+      expect(erro.codigo).toBe(codigo);
+      expect(erro.detalhe).toMatchObject({ tarefaId: TAREFA });
+    }
+    expect((await comTarefa.abrir(contaA, id)).versao).toBe(1);
+    // abrir e listar continuam, e dizem qual tarefa está viva
+    const aberta = await comTarefa.abrir(contaA, id);
+    expect(aberta.tarefaAtiva).toEqual({ id: TAREFA, estado });
+    // em revisão, a peça diz de que versão partiu o conjunto de alterações e o que ele tocou
+    expect(aberta.conjuntoPendente).toEqual(estado === 'em_revisao' ? { tarefaId: TAREFA, versaoInicial: 1, tocados: ['n1'] } : undefined);
+  });
+
+  it('sem tarefa viva, tudo como antes, e abrir não traz tarefa', async () => {
+    const id = await pecaComBotao();
+    expect((await comTarefa.aplicarLote(contaA, id, lote(1, [criarForma('Outra')]))).versao).toBe(2);
+    expect((await comTarefa.abrir(contaA, id)).tarefaAtiva).toBeUndefined();
+  });
+
+  it('o lote do Otto entra com autoria do agente e o id da tarefa, só enquanto essa tarefa está rodando', async () => {
+    const id = await pecaComBotao();
+    viva = { id: TAREFA, estado: 'rodando' };
+    const pedido = loteDoOtto([criarForma('Selo')]);
+    const r = await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, pedido);
+    expect(r).toMatchObject({ ok: true, versao: 2 });
+    expect(r.ok && r.arvore.pranchetas[0]?.filhos.map((n) => n.nome)).toEqual(['Botão', 'Selo']);
+    const ultimo = (await comTarefa.historico(contaA, id, { limite: 1 })).itens[0];
+    expect(ultimo).toMatchObject({ versao: 2, autoria: 'agente', tarefaId: TAREFA, descricao: 'do Otto', id: pedido.id });
+
+    // de outra tarefa, ou com a tarefa fora de "rodando": recusado, sem gravar
+    expect(await comTarefa.aplicarLoteDoAgente(contaA, id, randomUUID(), loteDoOtto([criarForma('X')]))).toMatchObject({ ok: false });
+    viva = { id: TAREFA, estado: 'aguardando_confirmacao' };
+    expect(await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, loteDoOtto([criarForma('X')]))).toMatchObject({ ok: false });
+    viva = undefined;
+    expect(await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, loteDoOtto([criarForma('X')]))).toMatchObject({ ok: false });
+    expect((await comTarefa.abrir(contaA, id)).versao).toBe(2);
+  });
+
+  it('lote do Otto que o catálogo recusa, ou que a conferência de quem chama recusa, volta como erro e nada é gravado', async () => {
+    const id = await pecaComBotao();
+    viva = { id: TAREFA, estado: 'rodando' };
+    const invalido = await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, loteDoOtto([{ op: 'mover', alvo: 'Feed/Não existe', x: 0, y: 0 }]));
+    expect(invalido).toMatchObject({ ok: false, erro: { indice: 0, op: 'mover' } });
+    const vetado = await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, loteDoOtto([criarPrancheta('Story')]), () => ({
+      ok: false,
+      erro: { indice: 0, op: 'criarPrancheta', mensagem: 'fora do plano' },
+    }));
+    expect(vetado).toEqual({ ok: false, erro: { indice: 0, op: 'criarPrancheta', mensagem: 'fora do plano' } });
+    const comArquivoAlheio = await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, loteDoOtto([criarImagem(SHA)]));
+    expect(comArquivoAlheio).toMatchObject({ ok: false, erro: { op: 'criarNo' } });
+    expect((await comTarefa.abrir(contaA, id)).versao).toBe(1);
+  });
+
+  it('reenvio do mesmo lote do Otto (mesmo id) não aplica duas vezes', async () => {
+    const id = await pecaComBotao();
+    viva = { id: TAREFA, estado: 'rodando' };
+    const pedido = loteDoOtto([criarForma('Selo')]);
+    await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, pedido);
+    expect(await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, pedido)).toMatchObject({ ok: true, versao: 2 });
+    expect((await comTarefa.abrir(contaA, id)).versao).toBe(2);
+  });
+
+  it('a tarefa é uma unidade do histórico: desfazer tira os lotes dela de uma vez, e refazer os devolve de uma vez', async () => {
+    const id = await pecaComBotao();
+    viva = { id: TAREFA, estado: 'rodando' };
+    for (const nome of ['Um', 'Dois', 'Três']) await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, loteDoOtto([criarForma(nome)]));
+    viva = undefined; // aceita
+    const nomes = (a: { pranchetas: { filhos: { nome: string }[] }[] }) => a.pranchetas[0]?.filhos.map((n) => n.nome);
+
+    const desfeito = await comTarefa.desfazer(contaA, id, { versaoBase: 4 });
+    expect(nomes(desfeito.arvore)).toEqual(['Botão']);
+    expect(desfeito).toMatchObject({ versao: 5, podeDesfazer: true, podeRefazer: true });
+    const refeito = await comTarefa.refazer(contaA, id, { versaoBase: 5 });
+    expect(nomes(refeito.arvore)).toEqual(['Botão', 'Um', 'Dois', 'Três']);
+    // e o passo seguinte de desfazer tira a tarefa inteira de novo, não o último lote dela
+    expect(nomes((await comTarefa.desfazer(contaA, id, { versaoBase: 6 })).arvore)).toEqual(['Botão']);
+    // mais um desfazer: o lote do designer que veio antes
+    expect((await comTarefa.desfazer(contaA, id, { versaoBase: 7 })).arvore.pranchetas).toEqual([]);
+  });
+
+  it('voltar para antes da tarefa: restaura a versão inicial num lote de reversão, ligado à tarefa; sem lote da tarefa, não grava nada', async () => {
+    const id = await pecaComBotao();
+    viva = { id: TAREFA, estado: 'rodando' };
+    await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, loteDoOtto([criarForma('Um')]));
+    await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, loteDoOtto([criarPrancheta('Story')]));
+    viva = { id: TAREFA, estado: 'em_revisao' };
+    const r = await comTarefa.voltarParaAntesDaTarefa(contaA, id, { id: TAREFA, versaoInicial: 1 });
+    expect(r.versao).toBe(4);
+    expect(r.arvore.pranchetas.map((p) => [p.nome, p.filhos.map((n) => n.nome)])).toEqual([['Feed', ['Botão']]]);
+    expect((await comTarefa.historico(contaA, id, { limite: 1 })).itens[0]).toMatchObject({ tipo: 'reversao', tarefaId: TAREFA, reverteAteVersao: 1 });
+  });
+
+  it('descartar uma prancheta da tarefa é um lote comum de remover prancheta, ligado à tarefa', async () => {
+    const id = await pecaComBotao();
+    viva = { id: TAREFA, estado: 'rodando' };
+    await comTarefa.aplicarLoteDoAgente(contaA, id, TAREFA, loteDoOtto([criarPrancheta('Story')]));
+    viva = { id: TAREFA, estado: 'em_revisao' };
+    const story = (await comTarefa.abrir(contaA, id)).arvore.pranchetas[1]?.id as string;
+    const r = await comTarefa.removerPranchetaDaTarefa(contaA, id, TAREFA, story);
+    expect(r.arvore.pranchetas.map((p) => p.nome)).toEqual(['Feed']);
+    expect((await comTarefa.historico(contaA, id, { limite: 1 })).itens[0]).toMatchObject({ versao: 3, autoria: 'designer', tarefaId: TAREFA });
   });
 });

@@ -140,3 +140,68 @@ describe('CicloDeVida', () => {
     expect(ordem).toEqual(['fila', 'motor', 'banco']);
   });
 });
+
+describe('CicloDeVida e a tarefa do Otto', () => {
+  function montarComTarefas(servico: 'api' | 'worker', fila: BarramentoEmMemoria, trabalhar: (conta: string, id: string) => Promise<'feita' | 'ignorada' | 'ocupada'>) {
+    const ordem: string[] = [];
+    const tarefas = {
+      trabalhar: (escopo: { contaId: string }, id: string) => trabalhar(escopo.contaId, id),
+      interromperTudo: async () => void ordem.push('tarefas'),
+    } as unknown as import('./tarefa/application/casos-de-uso-de-tarefa').CasosDeUsoDeTarefa;
+    const paradaOriginal = fila.parar.bind(fila);
+    fila.parar = async () => {
+      ordem.push('fila');
+      await paradaOriginal();
+    };
+    const ciclo = new CicloDeVida(
+      servico,
+      { fechar: async () => void ordem.push('banco') },
+      fila,
+      { executar: async () => undefined, limpar: async () => undefined } as unknown as CasosDeUsoDeExportacao,
+      { error: () => undefined },
+      { exportacoesAoMesmoTempo: 1, tarefasAoMesmoTempo: 2, motor: { fechar: async () => void ordem.push('motor') } },
+      tarefas,
+    );
+    return { ciclo, ordem };
+  }
+
+  it('no worker, o trabalho da fila de tarefas roda com o escopo da conta do trabalho; a API não consome', async () => {
+    for (const [servico, esperado] of [
+      ['worker', [`${CONTA}:${ID}`]],
+      ['api', []],
+    ] as const) {
+      const fila = new BarramentoEmMemoria();
+      const feitas: string[] = [];
+      const { ciclo } = montarComTarefas(servico, fila, async (conta, id) => {
+        feitas.push(`${conta}:${id}`);
+        return 'feita';
+      });
+      await ciclo.onApplicationBootstrap();
+      await fila.publicar('tarefa-do-otto', { contaId: CONTA, id: ID });
+      await esperar(20);
+      expect(feitas).toEqual(esperado);
+      await ciclo.onApplicationShutdown();
+    }
+  });
+
+  it('conta ocupada com outra tarefa: o trabalho é adiado e entregue de novo, sem se perder', async () => {
+    const fila = new BarramentoEmMemoria();
+    let vezes = 0;
+    const { ciclo } = montarComTarefas('worker', fila, async () => (++vezes === 1 ? 'ocupada' : 'feita'));
+    await ciclo.onApplicationBootstrap();
+    await fila.publicar('tarefa-do-otto', { contaId: CONTA, id: ID });
+    await fila.ociosa();
+    fila.adiantar();
+    await fila.ociosa();
+    expect(vezes).toBe(2);
+    await ciclo.onApplicationShutdown();
+  });
+
+  it('no desligamento, as tarefas em curso são interrompidas ANTES de a fila parar: a espera da fila não segura uma tarefa de meia hora', async () => {
+    const fila = new BarramentoEmMemoria();
+    const { ciclo, ordem } = montarComTarefas('worker', fila, async () => 'feita');
+    await ciclo.onApplicationBootstrap();
+    await ciclo.onApplicationShutdown();
+    expect(ordem).toEqual(['tarefas', 'fila', 'motor', 'banco']);
+  });
+});

@@ -248,3 +248,153 @@ model ArquivoDeExportacao {
   @@id([exportacaoId, indice])
   @@map("arquivos_de_exportacao")
 }
+
+enum EstadoDaTarefa {
+  na_fila
+  preparando
+  aguardando_confirmacao
+  rodando
+  em_revisao
+  aceita
+  desfeita
+  cancelada
+  falhou
+
+  @@map("estado_da_tarefa")
+}
+
+enum EstadoDaPendencia {
+  aberta
+  resolvida
+  dispensada
+
+  @@map("estado_da_pendencia")
+}
+
+/// A tarefa do Otto (ADR 029) e o custo total dela. Uma viva por peça e uma trabalhando por conta:
+/// os dois índices únicos parciais estão na migração.
+model TarefaDoAgente {
+  id                    String         @id @db.Uuid
+  contaId               String         @map("conta_id") @db.Uuid
+  documentoId           String         @map("documento_id") @db.Uuid
+  tipo                  String
+  esforco               String?
+  estado                EstadoDaTarefa @default(na_fila)
+  fase                  String         @default("preparo")
+  fim                   String?
+  erroCodigo            String?        @map("erro_codigo")
+  etapa                 Json?
+  etapas                Json           @default("[]")
+  preparo               Json?
+  aprovadaEm            DateTime?      @map("aprovada_em") @db.Timestamptz(3)
+  versaoInicial         Int            @map("versao_inicial")
+  versaoFinal           Int?           @map("versao_final")
+  lotes                 Int            @default(0)
+  tocados               Json           @default("[]")
+  entrega               Json?
+  conferida             Boolean?
+  modelo                String?
+  chamadas              Int            @default(0)
+  tokensDeEntrada       BigInt         @default(0) @map("tokens_de_entrada")
+  tokensDeCacheLidos    BigInt         @default(0) @map("tokens_de_cache_lidos")
+  tokensDeCacheCriados  BigInt         @default(0) @map("tokens_de_cache_criados")
+  tokensDeSaida         BigInt         @default(0) @map("tokens_de_saida")
+  imagensEnviadas       Int            @default(0) @map("imagens_enviadas")
+  voltasDeConferencia   Int            @default(0) @map("voltas_de_conferencia")
+  lotesRecusados        Int            @default(0) @map("lotes_recusados")
+  duracaoMs             Int            @default(0) @map("duracao_ms")
+  custoEstimadoMicroUsd BigInt?        @map("custo_estimado_micro_usd")
+  resultado             String?
+  idsDoPreparo          Int            @default(0) @map("ids_do_preparo")
+  ultimoEvento          Int            @default(-1) @map("ultimo_evento")
+  origemId              String?        @map("origem_id") @db.Uuid
+  cancelamentoPedidoEm  DateTime?      @map("cancelamento_pedido_em") @db.Timestamptz(3)
+  batimentoEm           DateTime?      @map("batimento_em") @db.Timestamptz(3)
+  criadaEm              DateTime       @default(now()) @map("criada_em") @db.Timestamptz(3)
+  iniciadaEm            DateTime?      @map("iniciada_em") @db.Timestamptz(3)
+  terminadaEm           DateTime?      @map("terminada_em") @db.Timestamptz(3)
+  decididaEm            DateTime?      @map("decidida_em") @db.Timestamptz(3)
+
+  @@unique([id, contaId])
+  @@index([contaId, documentoId, criadaEm(sort: Desc)])
+  @@index([contaId, criadaEm(sort: Desc)])
+  @@map("tarefas_do_agente")
+}
+
+/// O pedido ou o briefing preenchido. Separada de propósito: é o único texto que a equipe pode ler (ADR 031, item 2).
+model EntradaDeTarefa {
+  tarefaId String   @id @map("tarefa_id") @db.Uuid
+  contaId  String   @map("conta_id") @db.Uuid
+  entrada  Json
+  ajustes  Json     @default("[]")
+  criadaEm DateTime @default(now()) @map("criada_em") @db.Timestamptz(3)
+
+  @@map("entradas_de_tarefa")
+}
+
+/// A linha do tempo que o designer vê. A sequência é o id do fluxo de eventos e o ponto de retomada.
+model EventoDeTarefa {
+  tarefaId  String   @map("tarefa_id") @db.Uuid
+  sequencia Int
+  contaId   String   @map("conta_id") @db.Uuid
+  tipo      String
+  dados     Json
+  criadoEm  DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@id([tarefaId, sequencia])
+  @@map("eventos_de_tarefa")
+}
+
+/// Custo por chamada ao modelo (ADR 029, item 5). Gravada a cada chamada, inclusive a que falha.
+model ChamadaAoModelo {
+  tarefaId             String   @map("tarefa_id") @db.Uuid
+  sequencia            Int
+  contaId              String   @map("conta_id") @db.Uuid
+  papel                String
+  modelo               String
+  tokensDeEntrada      Int      @map("tokens_de_entrada")
+  tokensDeCacheLidos   Int      @map("tokens_de_cache_lidos")
+  tokensDeCacheCriados Int      @map("tokens_de_cache_criados")
+  tokensDeSaida        Int      @map("tokens_de_saida")
+  imagens              Int
+  duracaoMs            Int      @map("duracao_ms")
+  resultado            String
+  criadaEm             DateTime @default(now()) @map("criada_em") @db.Timestamptz(3)
+
+  @@id([tarefaId, sequencia])
+  @@map("chamadas_ao_modelo")
+}
+
+/// Pendência da peça: o que o Otto disse que não resolveu, com estado. Sobrevive ao aceite.
+model Pendencia {
+  id          String            @id @db.Uuid
+  contaId     String            @map("conta_id") @db.Uuid
+  documentoId String            @map("documento_id") @db.Uuid
+  tarefaId    String            @map("tarefa_id") @db.Uuid
+  tipo        String
+  texto       String
+  camadas     Json              @default("[]")
+  prancheta   String?
+  origem      String
+  regra       String?
+  gravidade   String?
+  estado      EstadoDaPendencia @default(aberta)
+  criadaEm    DateTime          @default(now()) @map("criada_em") @db.Timestamptz(3)
+  fechadaEm   DateTime?         @map("fechada_em") @db.Timestamptz(3)
+
+  @@index([contaId, documentoId, estado])
+  @@index([contaId, tarefaId])
+  @@map("pendencias")
+}
+
+/// Contador da plataforma (o limite diário do fornecedor é um só para todas as contas). Sem conta_id:
+/// exceção declarada em isolamento.excecoes.ts. Só números e data.
+model ConsumoDiarioDoModelo {
+  dia                  DateTime  @id @db.Date
+  tokens               BigInt    @default(0)
+  chamadas             Int       @default(0)
+  restanteNoFornecedor BigInt?   @map("restante_no_fornecedor")
+  vistoEm              DateTime? @map("visto_em") @db.Timestamptz(3)
+
+  @@map("consumo_diario_do_modelo")
+}

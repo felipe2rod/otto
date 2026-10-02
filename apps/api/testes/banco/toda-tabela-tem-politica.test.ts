@@ -4,9 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { TABELAS_SEM_CONTA_ID } from '../../prisma/isolamento.excecoes';
 import { comoMigrador, tabelasDoEsquema } from './conexoes';
 
-const catalogos = Object.entries(TABELAS_SEM_CONTA_ID)
-  .filter(([, e]) => e.motivo === 'catalogo-global')
-  .map(([tabela]) => tabela);
+const doMotivo = (motivo: string) =>
+  Object.entries(TABELAS_SEM_CONTA_ID)
+    .filter(([, e]) => e.motivo === motivo)
+    .map(([tabela]) => tabela);
+const contadores = doMotivo('contador-global');
+// as tabelas sem RLS: catálogos e contadores globais
+const catalogos = [...doMotivo('catalogo-global'), ...contadores];
+const soCatalogos = doMotivo('catalogo-global');
 
 describe('toda tabela tem política', () => {
   it('toda tabela de negócio tem RLS com FORCE', async () => {
@@ -44,10 +49,10 @@ describe('toda tabela tem política', () => {
   });
 
   it('catálogo global: otto_app lê e acrescenta, e não altera, não apaga nem esvazia', async () => {
-    expect(catalogos.length).toBeGreaterThan(0);
+    expect(soCatalogos.length).toBeGreaterThan(0);
     await comoMigrador(async (c) => {
       const existentes = await tabelasDoEsquema(c);
-      for (const tabela of catalogos) {
+      for (const tabela of soCatalogos) {
         expect(existentes, `${tabela} está nas exceções e não existe no banco`).toContain(tabela);
         for (const [privilegio, esperado] of [
           ['SELECT', true],
@@ -58,6 +63,21 @@ describe('toda tabela tem política', () => {
           const r = await c.query<{ pode: boolean }>(`SELECT has_table_privilege('otto_app', $1, $2) AS pode`, [`public.${tabela}`, privilegio]);
           expect(r.rows[0]?.pode, `${privilegio} em ${tabela}`).toBe(esperado);
         }
+      }
+    });
+  });
+
+  it('contador global: só coluna de número e de data (não há onde guardar dado de conta), e otto_app não apaga', async () => {
+    await comoMigrador(async (c) => {
+      for (const tabela of contadores) {
+        const colunas = await c.query<{ nome: string; tipo: string }>(
+          `SELECT column_name AS nome, data_type AS tipo FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`,
+          [tabela],
+        );
+        expect(colunas.rows.length, `${tabela} está nas exceções e não existe no banco`).toBeGreaterThan(0);
+        for (const coluna of colunas.rows) expect(coluna.tipo, `${tabela}.${coluna.nome}`).toMatch(/^(bigint|integer|date|timestamp with time zone)$/);
+        const r = await c.query<{ pode: boolean }>(`SELECT has_table_privilege('otto_app', $1, 'DELETE') AS pode`, [`public.${tabela}`]);
+        expect(r.rows[0]?.pode, `DELETE em ${tabela}`).toBe(false);
       }
     });
   });

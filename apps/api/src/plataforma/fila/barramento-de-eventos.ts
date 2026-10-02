@@ -14,6 +14,8 @@ export const FILAS = {
   exportacao: 'exportacao',
   /** Apaga do armazenamento os arquivos de uma exportação vencida. `id` é o da exportação. Publicado com hora marcada. */
   limpezaDeExportacao: 'limpeza-de-exportacao',
+  /** Roda uma parte da tarefa do Otto (entender e planejar, ou fazer e conferir). `id` é o da tarefa. */
+  tarefaDoOtto: 'tarefa-do-otto',
 } as const;
 export type NomeDaFila = (typeof FILAS)[keyof typeof FILAS];
 
@@ -21,13 +23,9 @@ export type NomeDaFila = (typeof FILAS)[keyof typeof FILAS];
  * Como cada fila se comporta. Fila nova é uma linha aqui, um consumidor e a preparação do esquema
  * (que lê esta tabela): nada mais no adaptador.
  *
- * A fatia 3 traz a tarefa do agente, que é outro tipo de trabalho: longo (14 a 30 minutos), quase só
- * espera de rede, com custo de token a cada volta. O que muda para ela está previsto aqui:
- * - `expiraEmSegundos` na casa de uma hora, com `sinalDeVidaEmSegundos` curto: quem diz que o worker
- *   morreu é a falta de sinal, não o teto;
- * - `tentativas: 0` para falha (repetir uma tarefa gasta token de novo: retomar é decisão do caso de
- *   uso, de onde parou), e `adiar` para esperar a vez da conta sem gastar tentativa;
- * - fila própria, com concorrência própria no worker: tarefa longa não ocupa a vaga de exportação.
+ * A tarefa do agente é outro tipo de trabalho: longo (10 a 30 minutos), quase só espera de rede, com custo
+ * de token a cada volta. Tem fila própria, com concorrência própria no worker (tarefa longa não ocupa a vaga
+ * de exportação), teto de uma hora com sinal de vida curto, e `adiar` para esperar a vez da conta.
  */
 export interface RegrasDaFila {
   /** Teto de um trabalho ativo. Passou disso, a fila o dá como perdido. */
@@ -50,6 +48,12 @@ export const REGRAS_DAS_FILAS: Record<NomeDaFila, RegrasDaFila> = {
   // prancheta pesada. Falha de render não é tentada de novo pela fila: o caso de uso a registra.
   // As 5 tentativas são para falha de infraestrutura (banco ou armazenamento fora).
   [FILAS.exportacao]: { expiraEmSegundos: 900, tentativas: 5, reentregaEmSegundos: 5, adiamentoEmSegundos: 3, sinalDeVidaEmSegundos: 30 },
+  // A tarefa do Otto: trabalho longo (até 40 minutos), quase só espera de rede, com custo de token. Quem diz
+  // que o worker morreu é a falta de sinal de vida, não o teto. Entregar de novo NÃO roda o ciclo de novo: o
+  // estado da tarefa decide (só a que está "na fila" começa), então as tentativas servem só para o trabalho que
+  // falhou antes de começar (banco fora, worker morto ao pegar). A que caiu no meio é fechada como interrompida
+  // pelo caso de uso, com o parcial em revisão. Esperar a vez da conta é adiar, sem gastar tentativa.
+  [FILAS.tarefaDoOtto]: { expiraEmSegundos: 3600, tentativas: 3, reentregaEmSegundos: 5, adiamentoEmSegundos: 5, sinalDeVidaEmSegundos: 60 },
   // apagar objetos é rápido; se o armazenamento estiver fora, tenta de novo a cada 10 minutos por um dia
   [FILAS.limpezaDeExportacao]: { expiraEmSegundos: 300, tentativas: 144, reentregaEmSegundos: 600, adiamentoEmSegundos: 600 },
 };

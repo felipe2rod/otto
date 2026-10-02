@@ -116,6 +116,7 @@ export class RepositorioDeDocumentosEmMemoria extends RepositorioDeDocumentos {
         arvoreDaVersao: async (versao) => copia.arvores.get(versao),
         lote: async (versao) => copia.lotes.find((l) => l.versao === versao),
         lotePorChaveDoCliente: async (chave) => copia.lotes.find((l) => l.chaveDoCliente === chave),
+        primeiraVersaoDaTarefa: async (tarefaId) => copia.lotes.find((l) => l.tarefaId === tarefaId)?.versao,
         caudaDeReversoes: async () => {
           const cauda: LoteGravado[] = [];
           for (let i = copia.lotes.length - 1; i >= 0 && copia.lotes[i]?.tipo === 'reversao'; i--) cauda.push(copia.lotes[i] as LoteGravado);

@@ -464,6 +464,8 @@ Recomendo a entrega pela API **para imagem dentro do editor**, e link assinado p
 
 ### 7.5 Tarefas do Otto
 
+> **Implementado na fatia 3, com diferenças.** O contrato que vale é `packages/shared/src/tarefa.ts`; o que mudou em relação à tabela abaixo está na seção 17.11.
+
 | Rota | Fatia | Pedido | Resposta |
 |---|---|---|---|
 | `POST /api/documentos/:id/tarefas` | 3 (`pedido`, `criar`), 4 (`briefing`) | `{ tipo: "briefing", briefing, briefingId?, esforco? }` ou `{ tipo: "pedido" \| "criar", pedido, esforco? }` | `202 { tarefa }`. `409 tarefa_em_andamento`, `409 revisao_pendente`, `400 pedido_vazio`, `400 esforco_desconhecido`, `429 limite_de_tarefas` |
@@ -554,6 +556,8 @@ O evento `lote` traz as operações e a versão resultante, como o frontend pedi
 10. Fonte: uma rota só, que entrega os bytes.
 
 ## 8. Worker, filas e o ciclo do agente
+
+> **Implementado na fatia 3, com diferenças** (fila `tarefa-do-otto`, duas partes com o "pode" no meio, baixa por falta de sinal em 60 s e sem job de manutenção, fluxo por consulta à tabela em vez de `NOTIFY`): seção 17.11.
 
 ### 8.1 Filas
 
@@ -814,7 +818,7 @@ Li `docs/mvp/frontend.md` depois de fechar o desenho. O que confere, o que respo
 13. Os preços de hospedagem são os de `custos.md` (2026-09-26). Não reconferi.
 14. O tamanho relativo das fatias (P, M, G) é estimativa minha, sem base medida.
 
-## 17. O que mudou na implementação (fatias 0 a 2)
+## 17. O que mudou na implementação (fatias 0 a 3)
 
 O plano acima foi escrito antes do código. Esta seção registra onde a implementação se afastou dele, e por quê. Onde ela e o texto das seções anteriores divergem, vale esta.
 
@@ -1074,3 +1078,108 @@ De onde saiu o 36: uma prancheta de 31 megapixels em PSD levou 21 s e o worker c
 - Objetos órfãos no armazenamento: a tentativa morta pode ter gravado um arquivo que a retomada não regrava (índice maior). Ficam sem linha e sem limpeza agendada.
 - Medidas com ruído: outros agentes rodavam testes e exportações na mesma máquina. Os números de espera (de 36 s para perto de 1 s) não dependem disso; os de duração e de memória são aproximados.
 
+### 17.11 Fatia 3: a tarefa do Otto no worker
+
+O ciclo é o de `packages/agente` (do treinador-do-otto), sem alteração. O que é do backend: rotas, fila, transações, estado, custo, limites, isolamento e o fluxo de eventos.
+
+**Onde está o contrato.** `packages/shared/src/tarefa.ts`: rotas no cabeçalho, esquemas zod de `Tarefa`, eventos, pedidos e respostas, limites e pendências. `EntradaDaTarefa`, `EventoDaTarefa`, plano, cartão da direção e pendência são os tipos de `@otto/agente`, reexportados **só como tipo**: o editor não carrega o ciclo nem o prompt. A API valida a entrada com o esquema zod de verdade, o mesmo que o ciclo usa.
+
+**Rotas** (todas sob o escopo da conta; tarefa, peça ou pendência de outra conta responde o 404 de id inexistente):
+
+| Rota | Resposta | Recusas |
+|---|---|---|
+| `GET /api/tarefas/limites` | `LimitesDeTarefa`: pode enviar, motivo, tarefas hoje e na fila | — |
+| `POST /api/documentos/:id/tarefas` | `202 Tarefa` | `409 tarefa_em_andamento` (com `tarefaId` e `estado`), `429 limite_de_tarefas` (`limite_da_conta` ou `fila_cheia`), `429 limite_diario`, `503 fila_indisponivel`, `400 pedido_invalido` |
+| `GET /api/documentos/:id/tarefas` | `{ itens, viva? }`, as 20 mais recentes | — |
+| `GET /api/tarefas/:id` | `Tarefa`, com `pranchetasNovas` em revisão e `edicoesDepois` depois de aceita | — |
+| `GET /api/tarefas/:id/eventos` | Fluxo (`Accept: text/event-stream`) ou JSON (`?depoisDe=`) | — |
+| `GET /api/tarefas/:id/antes` | `{ versao, arvore }` de antes da tarefa | — |
+| `POST /api/tarefas/:id/aprovar` | `Tarefa` (o "pode") | `409 tarefa_fora_do_estado` |
+| `POST /api/tarefas/:id/ajustar` | `Tarefa`; corpo `{ texto }`; a direção e o plano são refeitos | `409 tarefa_fora_do_estado` |
+| `POST /api/tarefas/:id/cancelar` e `/interromper` | `Tarefa` | `409 tarefa_fora_do_estado` |
+| `POST /api/tarefas/:id/aceitar` | `Tarefa` | `409 tarefa_fora_do_estado` |
+| `POST /api/tarefas/:id/desfazer` | `{ tarefa, versao, arvore }`; corpo `{ incluirEdicoesPosteriores? }` | `409 editado_depois` (com `edicoes`), `409 tarefa_fora_do_estado` |
+| `POST /api/tarefas/:id/descartar` | `{ tarefa, versao, arvore }`; corpo `{ pranchetaId }` | `422 prancheta_nao_descartavel` |
+| `POST /api/tarefas/:id/tentar-de-novo` | `202 Tarefa` nova, com a mesma entrada | `409 tarefa_fora_do_estado` |
+| `GET /api/documentos/:id/pendencias?estado=` | `{ itens }` | — |
+| `POST /api/pendencias/:id/dispensar` e `/reabrir` | `PendenciaDaPeca` | — |
+
+**Estados.** `na_fila`, `preparando`, `aguardando_confirmacao`, `rodando`, `em_revisao`, `aceita`, `desfeita`, `cancelada`, `falhou`. Viva (a peça é somente leitura): os cinco primeiros. "Aceita em parte" não é estado: é o `resultado` gravado (`aceita`, `aceita_em_parte`, `desfeita`, `sem_alteracao`), que fecha o registro de custo do ADR 029. `fim` diz como o trabalho parou: os fins do ciclo mais `interrompida` (queda ou desligamento do worker).
+
+| Como o trabalho parou | Com lote gravado | Sem lote |
+|---|---|---|
+| Entregou | `em_revisao` | `aceita` (nada a revisar) |
+| Cancelada pelo designer | `em_revisao`, `fim: cancelada` | `cancelada` |
+| Erro, teto de tempo, de custo ou de passos, teto diário | `em_revisao`, com o `fim` e o código | `falhou` |
+| Queda ou desligamento do worker | `em_revisao`, `fim: interrompida` | `falhou`, erro `interrompida` |
+
+**Banco** (migração `20261003090000_tarefas_do_otto`, com `down.sql`). `tarefas_do_agente`, `entradas_de_tarefa` (o texto do pedido e o briefing: dado de uso, só `SELECT` e `INSERT`, mais `UPDATE` da coluna de ajustes), `eventos_de_tarefa` e `chamadas_ao_modelo` (só `SELECT` e `INSERT`), `pendencias`, e `consumo_diario_do_modelo` (contador da plataforma: dia, tokens, chamadas, quanto resta no fornecedor; sem conta e sem conteúdo, exceção `contador-global` no teste de isolamento). Todas as outras com `conta_id` e RLS com `FORCE`. Dois índices únicos parciais são a regra de concorrência: **uma tarefa viva por documento** (`documento_id` onde o estado é vivo) e **uma tarefa trabalhando por conta** (`conta_id` onde o estado é `preparando` ou `rodando`). A segunda tarefa na mesma peça é recusada pelo banco, não por contagem.
+
+**Fila.** `tarefa-do-otto`, fila própria com concorrência própria (`TAREFAS_AO_MESMO_TEMPO`, padrão 2 por worker): tarefa longa não ocupa vaga de exportação. O trabalho leva só `{ contaId, id }`. Justiça entre contas como na exportação (quem tem menos na fila passa na frente; `group` do pg-boss por conta). Conta ocupada devolve `'adiar'` e volta em 5 s sem gastar tentativa. Teto de uma hora, sinal de vida de 60 s. **Entregar de novo não roda o ciclo de novo**: só a tarefa em `na_fila` começa (atualização condicional), então as 3 tentativas servem para o trabalho que falhou antes de começar.
+
+**As duas partes e o "pode".** A primeira parte (entender, direção, plano) roda num trabalho. Se o ciclo pede confirmação, a tarefa vai para `aguardando_confirmacao` com o preparo gravado e **nada fica na fila nem rodando**: a espera não tem prazo e não custa. `aprovar` devolve a tarefa à fila na fase de execução; `ajustar` guarda o texto e manda a primeira parte rodar de novo; `cancelar` fecha. Sem pedido de confirmação (o ajuste pontual), a execução segue no mesmo trabalho.
+
+**A regra do "pode" é do servidor.** Além do estado (sem preparo aprovado, a fase de execução não existe: há um `CHECK` no banco), cada lote passa de novo pela guarda do plano (`criarGuarda`, de `@otto/agente`) **na porta `aplicarLote` do worker**, com a árvore de antes e a de depois dentro da transação do lote. Lote que cria prancheta fora do plano, toca uma segunda prancheta num ajuste ou remove o que o plano não lista é recusado mesmo que o ciclo o mande. Há um teste com um ciclo hostil injetado.
+
+**O ciclo no worker.**
+
+- Cada lote é uma transação curta em `CasosDeUsoDeDocumento.aplicarLoteDoAgente`: autoria `agente`, id da tarefa, idempotente pelo id do lote, arquivos conferidos contra a conta. Só entra enquanto **essa** tarefa está `rodando` naquela peça. Nenhuma transação fica aberta durante chamada ao modelo.
+- A tarefa é uma unidade do histórico: o desfazer do editor volta para antes do primeiro lote dela, e "desfazer tudo" é um lote de reversão ligado à tarefa. Nada é apagado.
+- A peça é somente leitura para o designer enquanto a tarefa vive: `409 documento_em_tarefa`, ou `409 revisao_pendente` em revisão. `DocumentoAberto` traz `tarefaAtiva` e, em revisão, `conjuntoPendente`; a lista de peças traz `tarefa`.
+- Cada evento do ciclo é gravado em `eventos_de_tarefa` antes de ser mostrado; etapa e etapas previstas ficam também na linha da tarefa.
+- **Cada chamada ao modelo grava uma linha em `chamadas_ao_modelo`** (papel, modelo, tokens de entrada, de cache lido e criado, de saída, imagens, duração, resultado), inclusive a que falha, e soma no contador do dia. O total fica na tarefa, com o custo em milionésimos de dólar pelo preço que o modelo declara.
+- O worker abre o escopo pela conta do trabalho e relê a tarefa sob RLS. Não achou: `'ignorada'`, e nada roda.
+- Render, resumo e verificação vêm da porta `BancadaDoOtto` (adaptador com CanvasKit, variante completa, que codifica JPEG). Fontes: todas as da biblioteca. Imagens: só as da conta.
+
+**Cancelar, cair e desligar.**
+
+| Caso | O que acontece | Medido em 2026-10-02 |
+|---|---|---|
+| Cancelar na fila ou no "pode" | Fecha na hora, sem alteração | — |
+| Interromper com a tarefa trabalhando | A API grava o pedido; o worker o vê no sinal de vida (a cada 2 s) e aborta a chamada em curso. Com lote: revisão | — |
+| Desligamento (deploy) | `interromperTudo()` antes de parar a fila: aborta as chamadas, cada tarefa grava o próprio fecho como `interrompida` (espera até 8 s) | Worker empacotado (`node dist/worker.mjs`), `docker stop` com 2 lotes gravados: parou em 0,6 s, tarefa em `em_revisao`, `fim: interrompida`, 2 lotes |
+| Queda (worker morto) | Sem sinal de vida por 60 s, a tarefa é fechada como `interrompida` na próxima leitura da conta (abrir a peça, consultar, listar, criar tarefa) | Workers derrubados com 2 lotes: fechada 61 s depois, `em_revisao`, 2 lotes |
+
+Não há job de manutenção: a baixa é feita na leitura, por conta (a varredura global atravessaria o RLS). Em desenvolvimento, `tsx watch` mata o processo sem dar tempo ao desligamento: lá, o que se vê é sempre o caso da queda. "Tentar de novo" desfaz o parcial e cria outra tarefa com a mesma entrada.
+
+**Limites.** Por conta: `TAREFAS_POR_DIA_POR_CONTA` (30) e `TAREFAS_NA_FILA_POR_CONTA` (3). São limites operacionais, não plano comercial. Da plataforma: `TETO_DIARIO_DE_TOKENS` (40 milhões, abaixo dos 45 milhões do fornecedor) e `RESTO_MINIMO_NO_FORNECEDOR` (3 milhões; o adaptador do modelo anota o que o fornecedor diz que resta a cada resposta). Conferidos **antes de aceitar** a tarefa (`429 limite_diario`: parar no meio custa mais que recusar) e **antes de cada chamada** (a tarefa fecha com o que já fez e o código `limite_diario`). O dia é UTC.
+
+**Fluxo de eventos.** `id` = sequência, `event` = tipo, `data` = o evento do ciclo. `event: tarefa` (sem `id`) traz a fotografia quando ela muda. Comentário de batimento a cada 15 s. Quando a tarefa para de andar (inclusive no "pode"), `event: fim` com `{ estado }` e o servidor fecha; depois de aprovar, o editor abre de novo com `Last-Event-ID`. Depois de 30 minutos o servidor fecha sem `fim` e o navegador reconecta sozinho. A leitura é da tabela, por consulta a cada 500 ms (uma leitura leve por volta), e não por `NOTIFY`: trocar é mudança de um arquivo (`fluxo-de-eventos.ts`).
+
+**ADR 031.** O texto do pedido, o briefing e os ajustes do plano ficam em `entradas_de_tarefa`; resumo, pendências e eventos ficam nas tabelas da conta. Nada disso vai para log nem para evento de uso. Eventos de uso: `tarefa_pedida` (tipo, esforço), `tarefa_confirmacao` (pode, ajustar, cancelar), `tarefa_terminada` (estado, fim, código do erro, lotes, recusados, chamadas, tokens, imagens, voltas, duração, custo, conferida) e `tarefa_decidida` (resultado). A suíte `log-sem-conteudo` roda uma tarefa com frases sentinela no briefing, no pedido e no ajuste, mais o que o Otto escreveu na peça, e procura tudo isso no log. O fluxo para o editor leva conteúdo (operações, nomes, texto): é o editor do dono, e passa pelo RLS.
+
+**O modelo.** Porta `ModelosDoOtto` com dois adaptadores e um contrato comum: `claude` (o adaptador de `@otto/agente`, inferência na DigitalOcean) e `roteirizado` (reproduz as tarefas gravadas em `packages/agente/roteiros`, escolhidas pelo **tipo** da entrada: ajuste → `ajuste-titulo`; os demais → `briefing-dois-formatos`). `MODELO_DO_AGENTE` escolhe; produção não sobe com o roteirizado. **Só o worker recebe a chave** (`MODELO_CHAVE`): a API lê a configuração sem o modelo.
+
+**Medições de 2026-10-02.**
+
+| O quê | Resultado |
+|---|---|
+| Tarefa roteirizada de briefing pela API (pg-boss, dois workers, roteiro a 0,05×) | Primeira parte para no "pode" com o plano (Feed e Story); com o "pode", 24 s, 32 eventos, 5 lotes do Otto, `em_revisao`; editar no meio responde 409; "desfazer tudo" deixa a peça vazia na versão 6, com os 6 lotes no histórico |
+| Ajuste pontual com Claude (Sonnet 5) pela API, uma vez | 13,1 s do pedido ao fim do fluxo (10,9 s de ciclo); 3 chamadas; entrada 6 + 24.005 de cache lido + 13.309 de cache criado; saída 542; 2 imagens; US$ 0,0435; 1 lote; conferida |
+| Do pedido ao começo do trabalho | Perto de 2 s (a consulta periódica do pg-boss) |
+| Resto do limite diário no fornecedor depois dessa chamada | 4,33 milhões de tokens (as medições do treinador no mesmo dia gastaram o resto) |
+
+**O que mudou em relação às seções 7.5 e 8.**
+
+| Plano | Implementado |
+|---|---|
+| Fila `tarefa-do-agente`, zero tentativas, job de manutenção com 20 minutos sem sinal | `tarefa-do-otto`, 3 tentativas que não repetem o ciclo, baixa na leitura com 60 s sem sinal |
+| Estados sem `preparando`; `aceita_em_parte` como estado | `preparando` e `aguardando_confirmacao` existem; aceita em parte é `resultado` |
+| `fim` no fluxo leva a `Tarefa` | `event: tarefa` leva a fotografia; `fim` leva só `{ estado }` |
+| `NOTIFY` com uma conexão de escuta | Consulta à tabela a cada 500 ms por conexão aberta |
+| `409 tarefa_fora_de_revisao`, `400 pedido_vazio` | `409 tarefa_fora_do_estado` (com o estado), `400 pedido_invalido` (com os campos) |
+| Decorador da porta `ModeloDoAgente` grava o custo | O ciclo já chama `registrarChamada` por chamada; o decorador do servidor é o do teto diário |
+| Render para o modelo em thread | No laço principal do worker (décimos de segundo por render) |
+
+**Em aberto.**
+
+- O fluxo por consulta custa uma leitura a cada 500 ms por painel aberto. Serve para o MVP; com muitas conexões, `NOTIFY`.
+- Render e verificação da tarefa rodam no laço principal do worker. Uma prancheta grande segura o processo por décimos de segundo; o sinal de vida atrasa, não se perde. Se pesar, vai para thread como a exportação.
+- A baixa da tarefa cujo worker caiu não emite `tarefa_terminada` (as linhas de `chamadas_ao_modelo` existem; o evento de uso, não).
+- Tarefa em `na_fila` cujo trabalho se perdeu depois das 3 tentativas fica na fila até o designer cancelar.
+- `lotes_de_operacoes.tarefa_id` não tem chave estrangeira para `tarefas_do_agente`.
+- Pendência não se resolve sozinha quando o designer corrige a camada: só dispensar e reabrir.
+- A "faixa de tempo típica" que o plano de experiência pede antes de enviar não existe: faltam dados (uma medição por tipo).
+- Com o modelo roteirizado, o resto anotado do fornecedor continua valendo no dia: depois de rodar com Claude perto do fim do limite, o roteirizado também é recusado até virar o dia (UTC). `RESTO_MINIMO_NO_FORNECEDOR=0` desliga.
+- O roteiro de briefing não traz contagem de tokens (o de ajuste traz): rodar o roteirizado não exercita o custo de uma tarefa grande.
+- Sem prova: tarefa de briefing com Claude pela API (proibida nesta rodada por custo; o treinador mediu fora da API), duas tarefas longas de contas diferentes no mesmo worker, e o comportamento do fluxo atrás de um proxy que não seja o Caddy do `compose`.

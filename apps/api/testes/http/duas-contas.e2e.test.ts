@@ -2,9 +2,10 @@
 // de B, tenta-se alcançar o que é de A por cada rota. O esperado é sempre o 404 de "não existe",
 // com corpo idêntico ao de id inexistente (nunca 403, que confirmaria a existência), e nada alterado.
 import { createHash, randomUUID } from 'node:crypto';
-import { ArquivoEnviado, CODIGOS_DE_ERRO, DocumentoAberto, ErroDaApi, Exportacao, Historico, ListaDeDocumentos } from '@otto/shared';
+import { ArquivoEnviado, CODIGOS_DE_ERRO, DocumentoAberto, ErroDaApi, Exportacao, Historico, LimitesDeTarefa, ListaDeDocumentos, ListaDePendencias, Tarefa } from '@otto/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type ApiDeTeste, type ClienteDeTeste, criarForma, criarPrancheta, PNG, subirApi } from './subir';
+import { CasosDeUsoDeTarefa } from '../../src/tarefa/application/casos-de-uso-de-tarefa';
+import { type ApiDeTeste, type ClienteDeTeste, criarForma, criarPrancheta, ENTRADA_DE_BRIEFING, PECA_PARA_O_AJUSTE, PNG, subirApi } from './subir';
 
 let api: ApiDeTeste;
 let A: ClienteDeTeste;
@@ -133,6 +134,80 @@ describe('com a sessão de B, a exportação de A não existe', () => {
 
   it('A, que é dona, baixa', async () => {
     expect((await A.get(`/api/exportacoes/${exportacaoDeA.id}/arquivos/0`)).status).toBe(302);
+  });
+});
+
+describe('com a sessão de B, a tarefa de A não existe', () => {
+  const AJUSTE = { tipo: 'ajuste', pedido: 'deixa o título do Feed na cor de destaque e um pouco maior' };
+  let pecaDeA: DocumentoAberto;
+  let emRevisao: Tarefa;
+  let noPode: Tarefa;
+  let pendenciaDeA: string;
+
+  beforeAll(async () => {
+    // uma tarefa de A em revisão (com alteração na peça e pendência) e outra parada no "pode"
+    const criada = DocumentoAberto.parse((await A.post('/api/documentos').send({ nome: 'Peça de A com tarefa' })).body);
+    await A.post(`/api/documentos/${criada.id}/lotes`).send({ id: randomUUID(), versaoBase: 0, descricao: 'monta', operacoes: PECA_PARA_O_AJUSTE });
+    const pedida = Tarefa.parse((await A.post(`/api/documentos/${criada.id}/tarefas`).send(AJUSTE)).body);
+    const vazia = DocumentoAberto.parse((await A.post('/api/documentos').send({ nome: 'Peça de A no pode' })).body);
+    const outra = Tarefa.parse((await A.post(`/api/documentos/${vazia.id}/tarefas`).send(ENTRADA_DE_BRIEFING)).body);
+    await api.fila.ociosa();
+    emRevisao = Tarefa.parse((await A.get(`/api/tarefas/${pedida.id}`)).body);
+    noPode = Tarefa.parse((await A.get(`/api/tarefas/${outra.id}`)).body);
+    expect([emRevisao.estado, noPode.estado]).toEqual(['em_revisao', 'aguardando_confirmacao']);
+    pecaDeA = DocumentoAberto.parse((await A.get(`/api/documentos/${criada.id}`)).body);
+    pendenciaDeA = ListaDePendencias.parse((await A.get(`/api/documentos/${criada.id}/pendencias`)).body).itens[0]?.id as string;
+    expect(pendenciaDeA).toBeTruthy();
+  }, 60_000);
+
+  it.each([
+    ['POST /api/documentos/:id/tarefas', () => B.post(`/api/documentos/${docDeA.id}/tarefas`).send(AJUSTE)],
+    ['GET /api/documentos/:id/tarefas', () => B.get(`/api/documentos/${pecaDeA.id}/tarefas`)],
+    ['GET /api/documentos/:id/pendencias', () => B.get(`/api/documentos/${pecaDeA.id}/pendencias`)],
+    ['GET /api/tarefas/:id', () => B.get(`/api/tarefas/${emRevisao.id}`)],
+    ['GET /api/tarefas/:id/eventos (JSON)', () => B.get(`/api/tarefas/${emRevisao.id}/eventos`)],
+    ['GET /api/tarefas/:id/eventos (fluxo)', () => B.get(`/api/tarefas/${emRevisao.id}/eventos`).set('Accept', 'text/event-stream')],
+    ['GET /api/tarefas/:id/eventos (fluxo, retomando)', () => B.get(`/api/tarefas/${emRevisao.id}/eventos`).set('Accept', 'text/event-stream').set('Last-Event-ID', '0')],
+    ['GET /api/tarefas/:id/antes', () => B.get(`/api/tarefas/${emRevisao.id}/antes`)],
+    ['POST /api/tarefas/:id/aprovar', () => B.post(`/api/tarefas/${noPode.id}/aprovar`).send({})],
+    ['POST /api/tarefas/:id/ajustar', () => B.post(`/api/tarefas/${noPode.id}/ajustar`).send({ texto: 'faz do jeito de B' })],
+    ['POST /api/tarefas/:id/cancelar', () => B.post(`/api/tarefas/${noPode.id}/cancelar`).send({})],
+    ['POST /api/tarefas/:id/interromper', () => B.post(`/api/tarefas/${noPode.id}/interromper`).send({})],
+    ['POST /api/tarefas/:id/aceitar', () => B.post(`/api/tarefas/${emRevisao.id}/aceitar`).send({})],
+    ['POST /api/tarefas/:id/desfazer', () => B.post(`/api/tarefas/${emRevisao.id}/desfazer`).send({ incluirEdicoesPosteriores: true })],
+    ['POST /api/tarefas/:id/descartar', () => B.post(`/api/tarefas/${emRevisao.id}/descartar`).send({ pranchetaId: pecaDeA.arvore.pranchetas[0]?.id })],
+    ['POST /api/tarefas/:id/tentar-de-novo', () => B.post(`/api/tarefas/${emRevisao.id}/tentar-de-novo`).send({})],
+    ['POST /api/pendencias/:id/dispensar', () => B.post(`/api/pendencias/${pendenciaDeA}/dispensar`).send({})],
+    ['POST /api/pendencias/:id/reabrir', () => B.post(`/api/pendencias/${pendenciaDeA}/reabrir`).send({})],
+  ])('%s responde o mesmo 404 de id inexistente, sem pôr nada na fila, e as tarefas e a peça de A não mudam', async (_rota, chamar) => {
+    const publicados = api.fila.publicados.length;
+    const r = await chamar();
+    expect({ status: r.status, body: r.body }).toEqual(inexistente);
+    expect(api.fila.publicados.length).toBe(publicados);
+    expect(Tarefa.parse((await A.get(`/api/tarefas/${emRevisao.id}`)).body)).toEqual(emRevisao);
+    expect(Tarefa.parse((await A.get(`/api/tarefas/${noPode.id}`)).body)).toEqual(noPode);
+    expect(DocumentoAberto.parse((await A.get(`/api/documentos/${pecaDeA.id}`)).body)).toEqual(pecaDeA);
+    expect(ListaDePendencias.parse((await A.get(`/api/documentos/${pecaDeA.id}/pendencias`)).body).itens[0]).toMatchObject({ id: pendenciaDeA, estado: 'aberta' });
+  });
+
+  it('os limites são por conta: as tarefas de A não contam para B, e a lista de B não mostra tarefa de A', async () => {
+    expect(LimitesDeTarefa.parse((await B.get('/api/tarefas/limites')).body)).toMatchObject({ podeEnviar: true, tarefasHoje: 0, naFila: 0 });
+    expect(LimitesDeTarefa.parse((await A.get('/api/tarefas/limites')).body).tarefasHoje).toBe(2);
+    expect(ListaDeDocumentos.parse((await B.get('/api/documentos')).body).itens.every((d) => d.tarefa === undefined)).toBe(true);
+  });
+
+  it('trabalho na fila com a conta trocada não é processado: o "pode" de A não roda como se fosse de B', async () => {
+    // alguém consegue pôr na fila o id da tarefa de A com a conta de B
+    await api.fila.publicar('tarefa-do-otto', { contaId: api.contaB.contaId, id: noPode.id });
+    await api.fila.ociosa();
+    expect(await api.app.get(CasosDeUsoDeTarefa).trabalhar(api.contaB, emRevisao.id)).toBe('ignorada');
+    expect(Tarefa.parse((await A.get(`/api/tarefas/${noPode.id}`)).body)).toEqual(noPode);
+    expect((await B.get(`/api/tarefas/${noPode.id}`)).status).toBe(404);
+  });
+
+  it('A, que é dona, decide', async () => {
+    expect((await A.post(`/api/tarefas/${emRevisao.id}/aceitar`).send({})).status).toBe(200);
+    expect((await A.post(`/api/tarefas/${noPode.id}/cancelar`).send({})).status).toBe(200);
   });
 });
 

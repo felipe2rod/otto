@@ -12,6 +12,33 @@ export type EventoDeUso =
   | { evento: 'exportacao_pedida'; exportacaoId: string; documentoId: string; formato: FormatoExportado; pacote: boolean; pranchetas: number; juntas: boolean }
   | { evento: 'exportacao_baixada'; exportacaoId: string; documentoId: string; formato: FormatoExportado; pacote: boolean }
   | { evento: 'exportacao_limpa'; exportacaoId: string; arquivos: number; bytes: number }
+  // A tarefa do Otto. O texto do pedido é dado de uso (ADR 031) e mora em entradas_de_tarefa, com acesso
+  // restrito: NÃO entra aqui. Aqui só tipos, códigos e números.
+  | { evento: 'tarefa_pedida'; tarefaId: string; documentoId: string; tipo: string; esforco?: string }
+  | { evento: 'tarefa_confirmacao'; tarefaId: string; documentoId: string; resposta: 'pode' | 'ajustar' | 'cancelar' }
+  | {
+      evento: 'tarefa_terminada';
+      tarefaId: string;
+      documentoId: string;
+      tipo: string;
+      estado: string;
+      fim: string;
+      erro?: string;
+      lotes: number;
+      lotesRecusados: number;
+      chamadas: number;
+      tokensDeEntrada: number;
+      tokensDeCacheLidos: number;
+      tokensDeCacheCriados: number;
+      tokensDeSaida: number;
+      imagens: number;
+      voltasDeConferencia: number;
+      duracaoMs: number;
+      /** Milionésimos de dólar, pelo preço que o modelo declara. Ausente: o modelo não declara preço. */
+      microDolares?: number;
+      conferida: boolean;
+    }
+  | { evento: 'tarefa_decidida'; tarefaId: string; documentoId: string; resultado: 'aceita' | 'aceita_em_parte' | 'desfeita' }
   | {
       evento: 'exportacao_terminada';
       exportacaoId: string;

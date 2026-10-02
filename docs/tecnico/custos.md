@@ -183,7 +183,28 @@ A arquitetura antiga do WhatsApp estimava ~R$ 510/mês de fixo, na mesma ordem.
 
 ## 6. Custo por tarefa do agente **[ESTIMATIVA]**
 
-Nada aqui foi medido. É aritmética sobre os preços da seção 3 e as premissas abaixo, feita para saber a ordem de grandeza e o peso de cada alavanca. O spike substitui tudo isto (seção 9).
+As tabelas de premissas, tokens e custo abaixo são aritmética sobre os preços da seção 3, feita antes de existir o ciclo. **As primeiras medições, de 2026-10-02, estão logo a seguir e mostram que a estimativa da tarefa pesada estava baixa em mais de quatro vezes.**
+
+### Medido em 2026-10-02 (Sonnet 5, inferência na DigitalOcean)
+
+Uma execução de cada. Não é média nem distribuição.
+
+| Tarefa | Onde | Tempo | Chamadas | Entrada | Do que foi lido do cache | Saída | Custo |
+|---|---|---|---|---|---|---|---|
+| Ajuste pontual | Treinador, fora da API (`avaliacao/`) | 13 a 19 s | 2 a 3 | 25 a 39 mil | 64% a 80% | 1 mil | US$ 0,02 a 0,05 (R$ 0,13 a 0,26) |
+| Ajuste pontual | Pela API e pelo worker, uma vez | 13,1 s do pedido ao fim (10,9 s de ciclo) | 3 | 37,3 mil (6 sem cache, 24.005 lidos, 13.309 escritos) | 64% | 542 | US$ 0,0435 (R$ 0,23) |
+| Briefing, Feed e Story, nível REFINED | Treinador, fora da API | 10 min 46 s | 35 | 2,60 milhões | 95% | 50 mil | US$ 1,30 (R$ 6,73) |
+
+O que isso muda:
+
+- **A tarefa de briefing custa R$ 6,73, contra R$ 1,46 da "tarefa pesada" estimada.** A estimativa previa 5 voltas; a medição teve 35 chamadas, com direção, revisor e voltas de conferência. O custo cresce com o número de chamadas porque cada uma relê a conversa inteira, mesmo a preço de cache.
+- **O ajuste pontual ficou dentro da estimativa da tarefa simples** (R$ 0,28 estimado, R$ 0,13 a 0,26 medido).
+- **O limite diário do fornecedor é o gargalo antes do custo.** O contador diário caiu 2,24 milhões de tokens numa tarefa de briefing. Com 45 milhões por dia, são cerca de 17 tarefas de dois formatos por dia **para a plataforma inteira**. O servidor confere um teto próprio (40 milhões) e o resto anotado do fornecedor antes de aceitar e antes de cada chamada (`docs/mvp/backend.md`, seção 17.11). No fim das medições do dia restavam 4,33 milhões.
+- **O custo por tarefa está gravado.** Cada chamada deixa uma linha em `chamadas_ao_modelo` e a tarefa guarda o total e o resultado (aceita, aceita em parte, desfeita). O número que sustenta preço, custo por tarefa aceita (seção 9, item 8), sai dessa tabela quando houver uso; hoje há uma tarefa.
+
+Sem medição: briefing pela API (o ciclo é o mesmo, mas não foi rodado ali por custo), Haiku 4.5 e Opus 5.5, e qualquer distribuição.
+
+### Estimativa anterior ao ciclo
 
 ### Premissas
 

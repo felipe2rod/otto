@@ -8,6 +8,7 @@
 // - recurso de outra conta responde 404 com o mesmo corpo de id inexistente.
 import { CaminhoVetorial, Documento } from '@otto/documento';
 import { z } from 'zod';
+import { EstadoDaTarefa } from './tarefa';
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -84,6 +85,22 @@ export const CODIGOS_DE_ERRO = {
   filaIndisponivel: 'fila_indisponivel',
   /** 422. detalhe: { pranchetaId, megapixels, limite }. A prancheta, na escala pedida, passa do que uma exportação aguenta. */
   exportacaoGrandeDemais: 'exportacao_grande_demais',
+  /** 409. A peça tem uma tarefa do Otto na fila, no "pode" ou rodando: fica somente leitura. detalhe: { tarefaId, estado }. */
+  documentoEmTarefa: 'documento_em_tarefa',
+  /** 409. As alterações do Otto estão em revisão: aceite ou desfaça antes de editar. detalhe: { tarefaId }. */
+  revisaoPendente: 'revisao_pendente',
+  /** 409. A peça já tem uma tarefa viva. detalhe: { tarefaId, estado }. */
+  tarefaEmAndamento: 'tarefa_em_andamento',
+  /** 409. A ação não vale no estado em que a tarefa está. detalhe: { estado }. */
+  tarefaForaDoEstado: 'tarefa_fora_do_estado',
+  /** 409. Há edições depois da tarefa: desfazer leva essas junto. detalhe: { edicoes }. Repita com incluirEdicoesPosteriores. */
+  editadoDepois: 'editado_depois',
+  /** 422. A prancheta não foi criada por esta tarefa (ou não existe mais). */
+  pranchetaNaoDescartavel: 'prancheta_nao_descartavel',
+  /** 429. A conta chegou ao limite de tarefas. detalhe: { motivo: "limite_da_conta" | "fila_cheia", limite }. */
+  limiteDeTarefas: 'limite_de_tarefas',
+  /** 429. O Otto inteiro bateu no limite de hoje. Só amanhã. */
+  limiteDiario: 'limite_diario',
   /** 500. */
   erroInterno: 'erro_interno',
 } as const;
@@ -101,8 +118,6 @@ const Nome = z.string().trim().min(1).max(LIMITES.caracteresDoNome);
 const Cursor = z.string().min(1).nullable();
 
 /** Estados da tarefa do Otto (seção 7.5). Na fatia 1 nenhuma tarefa existe; o campo já está no contrato. */
-export const EstadoDaTarefa = z.enum(['na_fila', 'rodando', 'aguardando_confirmacao', 'em_revisao', 'aceita', 'aceita_em_parte', 'desfeita', 'cancelada', 'falhou']);
-export type EstadoDaTarefa = z.infer<typeof EstadoDaTarefa>;
 
 const TarefaResumida = z.object({ id: Id, estado: EstadoDaTarefa });
 

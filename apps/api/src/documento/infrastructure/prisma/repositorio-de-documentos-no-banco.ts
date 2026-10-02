@@ -215,6 +215,12 @@ class DocumentoTravadoNoBanco implements DocumentoTravado {
     return linha ? loteGravado(linha) : undefined;
   }
 
+  async primeiraVersaoDaTarefa(tarefaId: string): Promise<number | undefined> {
+    // usa o índice (conta_id, tarefa_id) dos lotes
+    const primeiro = await this.tx.loteDeOperacoes.findFirst({ where: { contaId: this.escopo.contaId, tarefaId, documentoId: this.atual.id }, orderBy: { versao: 'asc' }, select: { versao: true } });
+    return primeiro?.versao;
+  }
+
   async caudaDeReversoes(): Promise<LoteGravado[]> {
     // a edição mais recente marca o começo da cauda; tudo depois dela é reversão
     const ultimaEdicao = await this.tx.loteDeOperacoes.findFirst({

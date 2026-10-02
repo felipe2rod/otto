@@ -98,6 +98,41 @@ docker compose run --rm teste pnpm --filter @otto/api medir:fila carga     # as 
 
 Tetos de uma exportação: 36 megapixels por prancheta na escala de saída (`422 exportacao_grande_demais`) e 400 MB por pacote. Números medidos e o desenho em `docs/mvp/backend.md`, seção 17.10.
 
+### Tarefa do Otto
+
+O worker roda a tarefa do Otto. O padrão do desenvolvimento é o **modelo roteirizado**: reproduz uma tarefa gravada, sem falar com modelo nenhum e sem custo. O roteiro sai do tipo da entrada: `ajuste` usa `ajuste-titulo` (pede uma peça com a prancheta "Feed", a camada "Título" e o token "destaque"); os outros tipos usam `briefing-dois-formatos` (parte de uma peça vazia e pede o "pode").
+
+```bash
+H='-H X-Otto-Cliente:editor -H Content-Type:application/json'
+curl -s $H localhost:8080/api/tarefas/limites                                   # pode enviar?
+DOC=$(curl -s $H -X POST localhost:8080/api/documentos -d '{"nome":"Novo horário"}' | jq -r .id)
+jq .entrada packages/agente/roteiros/briefing-dois-formatos.json > /tmp/entrada.json
+T=$(curl -s $H -X POST localhost:8080/api/documentos/$DOC/tarefas -d @/tmp/entrada.json | jq -r .id)
+curl -sN $H -H 'Accept: text/event-stream' localhost:8080/api/tarefas/$T/eventos   # fecha com "fim" no "pode"
+curl -s $H -X POST localhost:8080/api/tarefas/$T/aprovar -d '{}'                  # o "pode"
+curl -sN $H -H 'Accept: text/event-stream' -H 'Last-Event-ID: 4' localhost:8080/api/tarefas/$T/eventos
+curl -s $H localhost:8080/api/tarefas/$T | jq '{estado, fim, lotes, pranchetasNovas}'  # em_revisao
+curl -s $H -X POST localhost:8080/api/tarefas/$T/desfazer -d '{}' | jq '{estado: .tarefa.estado, versao}'
+```
+
+Com o modelo de verdade (cada tarefa custa: `docs/tecnico/custos.md`, seção 6). A chave vem de `LLM_API_KEY_DO`, no `.env` da raiz, e só o worker a recebe:
+
+```bash
+MODELO_DO_AGENTE=claude docker compose up -d worker     # liga
+docker compose up -d worker                             # volta para o roteirizado
+docker compose logs worker | grep tarefa_terminada      # estado, lotes, chamadas, tokens, duração e custo de cada tarefa
+```
+
+| Variável | Padrão | O que é |
+|---|---|---|
+| `MODELO_DO_AGENTE` | `roteirizado` | `claude` chama o modelo. Produção não sobe com o roteirizado |
+| `VELOCIDADE_DO_ROTEIRO` | `0.05` | 1 demora o que demorou na gravação (7 minutos no briefing); 0 responde na hora |
+| `TAREFAS_POR_WORKER` | 2 | Tarefas ao mesmo tempo em cada worker, de contas diferentes |
+| `TAREFAS_POR_DIA_POR_CONTA`, `TAREFAS_NA_FILA_POR_CONTA` | 30 e 3 | Limites operacionais da conta |
+| `TETO_DIARIO_DE_TOKENS`, `RESTO_MINIMO_NO_FORNECEDOR` | 40 milhões e 3 milhões | Teto nosso da plataforma por dia (UTC). Passou: tarefa nova responde 429 e a que roda fecha com o que já fez |
+
+Uma tarefa por vez por peça e por conta. Enquanto ela vive, a peça é somente leitura (`409 documento_em_tarefa`; em revisão, `409 revisao_pendente`). Parar o worker fecha a tarefa em curso como interrompida, com o que já foi feito em revisão. Em desenvolvimento, salvar um arquivo reinicia o worker e a tarefa em curso é fechada por falta de sinal de vida, 60 s depois. O contrato está em `packages/shared/src/tarefa.ts` e o desenho em `docs/mvp/backend.md`, seção 17.11.
+
 Para derrubar: `docker compose down`. Para apagar também os dados e as dependências instaladas: `docker compose down -v`.
 
 ## Testes, tipos e Biome

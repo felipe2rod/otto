@@ -3,11 +3,13 @@
 // o log) e o resolvedor de escopo, que nos testes escolhe a conta pelo cookie. É assim que a suíte
 // "duas-contas" existe antes do login: o ponto único de escopo é o mesmo da produção.
 // A fila roda no próprio processo, com o MESMO consumidor do worker e o motor de exportação de verdade
-// (no laço principal, sem a thread).
+// (no laço principal, sem a thread). A tarefa do Otto roda com o consumidor do worker, a bancada de render de
+// verdade e o modelo roteirizado (sem espera): nenhum teste fala com modelo.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import roteiroDoBriefing from '@otto/agente/roteiros/briefing-dois-formatos.json' with { type: 'json' };
 import { CABECALHOS } from '@otto/shared';
 import request from 'supertest';
 import { configurarAplicacao, ModuloRaiz } from '../../src/aplicacao';
@@ -25,6 +27,8 @@ import { ResolvedorDeEscopo } from '../../src/plataforma/escopo/resolvedor-de-es
 import { BarramentoEmMemoria } from '../../src/plataforma/fila/adaptadores/memoria/barramento-em-memoria';
 import { BarramentoDeEventos } from '../../src/plataforma/fila/barramento-de-eventos';
 import { Registro } from '../../src/plataforma/log/registro';
+import { CasosDeUsoDeTarefa } from '../../src/tarefa/application/casos-de-uso-de-tarefa';
+import { consumirTarefas } from '../../src/tarefa/infrastructure/consumidor-de-tarefas';
 import { criarContaDeTeste, urlDoAppDeTeste } from '../banco/conexoes';
 
 const RECURSOS = path.resolve(import.meta.dirname, '../../../../packages/render/recursos-de-teste');
@@ -71,6 +75,8 @@ export interface ApiDeTeste {
   logCru: string[];
   /** Cliente HTTP de uma conta, já com o cabeçalho de escrita. */
   como(conta: 'A' | 'B'): ClienteDeTeste;
+  /** Liga o consumidor de tarefas do Otto (para quem subiu com `consumirTarefas: false`). */
+  ligarTarefas(): Promise<void>;
   fechar(): Promise<void>;
 }
 
@@ -83,8 +89,11 @@ export interface ClienteDeTeste {
   cru: ReturnType<typeof request>;
 }
 
-/** @param opcoes `consumirFila: false` deixa as exportações paradas na fila (para testar o que acontece antes de ficarem prontas). */
-export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { consumirFila?: boolean } = {}): Promise<ApiDeTeste> {
+/**
+ * @param opcoes `consumirFila: false` deixa as exportações paradas na fila (para testar o que acontece antes de ficarem prontas);
+ *   `consumirTarefas: false` faz o mesmo com as tarefas do Otto, até `ligarTarefas()`.
+ */
+export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { consumirFila?: boolean; consumirTarefas?: boolean } = {}): Promise<ApiDeTeste> {
   const [contaA, contaB] = [await criarContaDeTeste('Conta A'), await criarContaDeTeste('Conta B')];
   const config = lerConfiguracao({
     AMBIENTE: 'teste',
@@ -93,6 +102,8 @@ export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { 
     CONTA_FIXA_ID: contaA.contaId,
     ARMAZENAMENTO_ADAPTADOR: 'disco-local',
     ARMAZENAMENTO_PASTA: '/tmp/otto-nao-usado',
+    // o roteiro responde na hora
+    VELOCIDADE_DO_ROTEIRO: '0',
     ...envExtra,
   });
   const logCru: string[] = [];
@@ -127,13 +138,15 @@ export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { 
   const app = configurarAplicacao(modulo.createNestApplication({ bodyParser: false }));
   await app.init();
   if (opcoes.consumirFila !== false) await consumirExportacoes(fila, app.get(CasosDeUsoDeExportacao));
+  const ligarTarefas = () => consumirTarefas(fila, app.get(CasosDeUsoDeTarefa), 2);
+  if (opcoes.consumirTarefas !== false) await ligarTarefas();
 
   const como = (conta: 'A' | 'B'): ClienteDeTeste => {
     const agente = request(app.getHttpServer());
     const com = (t: request.Test) => t.set('Cookie', `otto_sessao=${conta}`).set(CABECALHOS.cliente.nome, CABECALHOS.cliente.valor);
     return { get: (c) => com(agente.get(c)), post: (c) => com(agente.post(c)), patch: (c) => com(agente.patch(c)), delete: (c) => com(agente.delete(c)), cru: agente };
   };
-  return { app, contaA, contaB, armazenamento, fontes, fila, log, logCru, como, fechar: () => app.close() };
+  return { app, contaA, contaB, armazenamento, fontes, fila, log, logCru, como, ligarTarefas, fechar: () => app.close() };
 }
 
 export const criarPrancheta = (nome = 'Feed') => ({ op: 'criarPrancheta', nome, largura: 1080, altura: 1350, fundo: '#ffffff' });
@@ -142,3 +155,13 @@ export const criarForma = (nome: string, extra: object = {}) => ({
   prancheta: 'Feed',
   no: { tipo: 'forma', nome, forma: 'retangulo', x: 10, y: 10, largura: 100, altura: 50, preenchimento: '#ff0000', ...extra },
 });
+
+/** A entrada que o roteiro de briefing responde (parte de uma peça vazia e pede o "pode"). */
+export const ENTRADA_DE_BRIEFING = roteiroDoBriefing.entrada;
+
+/** Uma peça em que o roteiro de ajuste funciona: prancheta "Feed", camada de texto "Título" e o token "destaque". */
+export const PECA_PARA_O_AJUSTE = [
+  { op: 'definirToken', nome: 'destaque', valor: '#f4c430' },
+  { op: 'criarPrancheta', nome: 'Feed', largura: 1080, altura: 1350, fundo: '#f4efe3' },
+  { op: 'criarNo', prancheta: 'Feed', no: { tipo: 'texto', nome: 'Título', x: 80, y: 120, largura: 900, altura: 300, conteudo: 'Promoção da semana', fonte: 'Anton', tamanho: 120, cor: '#17171c' } },
+];

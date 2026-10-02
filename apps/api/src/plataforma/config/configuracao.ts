@@ -46,6 +46,30 @@ const Esquema = z
     // Quantas exportações cada processo de worker roda ao mesmo tempo. Cada uma ocupa um núcleo e tem a
     // própria memória de render (até 0,9 GB medido): o teto de memória do contêiner sai daqui.
     EXPORTACOES_AO_MESMO_TEMPO: z.coerce.number().int().min(1).max(8).default(2),
+    // ---- a tarefa do Otto ----
+    // Quantas tarefas cada processo de worker roda ao mesmo tempo (de contas diferentes). É quase só espera
+    // de rede; o que pesa é o render de conferência, que roda no laço principal do worker.
+    TAREFAS_AO_MESMO_TEMPO: z.coerce.number().int().min(1).max(16).default(2),
+    // 'roteirizado' reproduz uma tarefa gravada, sem falar com modelo nenhum e sem custo: é o padrão fora de
+    // produção. O valor escolhe o adaptador (ADR 020).
+    MODELO_DO_AGENTE: z.enum(['roteirizado', 'claude']).default('roteirizado'),
+    MODELO_CHAVE: z.string().min(8).optional(),
+    MODELO_ENDERECO: z
+      .string()
+      .regex(/^https:\/\//)
+      .optional(),
+    MODELO_NOME: z.string().min(1).max(120).optional(),
+    // 1: o roteiro demora o que demorou na gravação (7 minutos no de briefing). 0: responde na hora.
+    VELOCIDADE_DO_ROTEIRO: z.coerce.number().min(0).max(1).default(0.05),
+    // Limite operacional, não plano comercial: quantas tarefas uma conta pede por dia e quantas ficam na fila.
+    TAREFAS_POR_DIA_POR_CONTA: z.coerce.number().int().min(1).max(10_000).default(30),
+    TAREFAS_NA_FILA_POR_CONTA: z.coerce.number().int().min(1).max(50).default(3),
+    // Teto nosso de tokens por dia, da plataforma inteira, abaixo do limite do fornecedor (45 milhões medidos em
+    // 2026-10-02): passou, tarefa nova é recusada e a que roda fecha com o que já fez.
+    TETO_DIARIO_DE_TOKENS: z.coerce.number().int().min(0).default(40_000_000),
+    // Uma tarefa de briefing de dois formatos consome 2,2 a 2,6 milhões: com menos que isto sobrando no
+    // fornecedor, não começa nem continua.
+    RESTO_MINIMO_NO_FORNECEDOR: z.coerce.number().int().min(0).default(3_000_000),
   })
   .superRefine((env, ctx) => {
     const exigidas =
@@ -77,7 +101,20 @@ export interface Configuracao {
   readonly contaFixaId: ContaId;
   readonly armazenamento: ConfiguracaoDoArmazenamento;
   readonly limites: { readonly bytesPorArquivo: number; readonly ladoMaximoDeImagem: number; readonly megapixelsNoMaximo: number };
-  readonly worker: { readonly exportacoesAoMesmoTempo: number };
+  readonly worker: { readonly exportacoesAoMesmoTempo: number; readonly tarefasAoMesmoTempo: number };
+  readonly agente: ConfiguracaoDoAgente;
+}
+
+export interface ConfiguracaoDoAgente {
+  /** A chave é segredo: não vai para log, evento nem resposta. */
+  readonly modelo:
+    | { readonly adaptador: 'nenhum' }
+    | { readonly adaptador: 'roteirizado'; readonly velocidade: number }
+    | { readonly adaptador: 'claude'; readonly chave: string; readonly endereco?: string; readonly nome?: string };
+  readonly tarefasPorDia: number;
+  readonly naFilaPorConta: number;
+  readonly tetoDiarioDeTokens: number;
+  readonly restoMinimoNoFornecedor: number;
 }
 
 /** A mensagem cita o NOME das variáveis com problema e nunca o valor: o valor pode ser segredo. */
@@ -88,7 +125,11 @@ export class ConfiguracaoInvalida extends Error {
   }
 }
 
-export function lerConfiguracao(env: Record<string, string | undefined>): Configuracao {
+/**
+ * @param servico Quem chama o modelo é só o worker. A API não recebe a chave do fornecedor: para ela a
+ *   configuração do modelo é ignorada, mesmo que a variável exista no ambiente.
+ */
+export function lerConfiguracao(env: Record<string, string | undefined>, servico: 'api' | 'worker' = 'worker'): Configuracao {
   // variável vazia conta como ausente
   const limpo = Object.fromEntries(Object.entries(env).filter(([, valor]) => valor !== undefined && valor !== ''));
   const lido = Esquema.safeParse(limpo);
@@ -97,13 +138,33 @@ export function lerConfiguracao(env: Record<string, string | undefined>): Config
     throw new ConfiguracaoInvalida(variaveis);
   }
   const e = lido.data;
+  if (servico === 'worker') {
+    const comProblema: string[] = [];
+    if (e.MODELO_DO_AGENTE === 'claude' && !e.MODELO_CHAVE) comProblema.push('MODELO_CHAVE');
+    // produção não sobe respondendo com gravação
+    if (e.AMBIENTE === 'producao' && e.MODELO_DO_AGENTE === 'roteirizado') comProblema.push('MODELO_DO_AGENTE');
+    if (comProblema.length > 0) throw new ConfiguracaoInvalida(comProblema);
+  }
   return Object.freeze({
     ambiente: e.AMBIENTE,
     porta: e.PORTA,
     nivelDeLog: e.NIVEL_DE_LOG,
     banco: Object.freeze({ urlDoApp: e.BANCO_URL_APP }),
     contaFixaId: e.CONTA_FIXA_ID,
-    worker: Object.freeze({ exportacoesAoMesmoTempo: e.EXPORTACOES_AO_MESMO_TEMPO }),
+    worker: Object.freeze({ exportacoesAoMesmoTempo: e.EXPORTACOES_AO_MESMO_TEMPO, tarefasAoMesmoTempo: e.TAREFAS_AO_MESMO_TEMPO }),
+    agente: Object.freeze({
+      modelo: Object.freeze(
+        servico === 'api'
+          ? { adaptador: 'nenhum' as const }
+          : e.MODELO_DO_AGENTE === 'claude'
+            ? { adaptador: 'claude' as const, chave: e.MODELO_CHAVE as string, ...(e.MODELO_ENDERECO ? { endereco: e.MODELO_ENDERECO } : {}), ...(e.MODELO_NOME ? { nome: e.MODELO_NOME } : {}) }
+            : { adaptador: 'roteirizado' as const, velocidade: e.VELOCIDADE_DO_ROTEIRO },
+      ),
+      tarefasPorDia: e.TAREFAS_POR_DIA_POR_CONTA,
+      naFilaPorConta: e.TAREFAS_NA_FILA_POR_CONTA,
+      tetoDiarioDeTokens: e.TETO_DIARIO_DE_TOKENS,
+      restoMinimoNoFornecedor: e.RESTO_MINIMO_NO_FORNECEDOR,
+    }),
     limites: Object.freeze({ bytesPorArquivo: e.BYTES_MAXIMOS_POR_ARQUIVO, ladoMaximoDeImagem: e.LADO_MAXIMO_DE_IMAGEM, megapixelsNoMaximo: e.MEGAPIXELS_MAXIMOS_DE_IMAGEM }),
     armazenamento: Object.freeze(
       e.ARMAZENAMENTO_ADAPTADOR === 'disco-local'

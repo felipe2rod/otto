@@ -44,6 +44,12 @@ x-servidor: &servidor
   ARMAZENAMENTO_CHAVE_SECRETA: ${ARMAZENAMENTO_CHAVE_SECRETA:-segredo-do-armazenamento-dev}
   # Quantas exportações cada worker roda ao mesmo tempo (uma thread e um núcleo para cada). A API ignora.
   EXPORTACOES_AO_MESMO_TEMPO: ${EXPORTACOES_POR_WORKER:-2}
+  # A tarefa do Otto. Limites operacionais (não são plano comercial) e o teto diário nosso de tokens.
+  TAREFAS_POR_DIA_POR_CONTA: ${TAREFAS_POR_DIA_POR_CONTA:-30}
+  TAREFAS_NA_FILA_POR_CONTA: ${TAREFAS_NA_FILA_POR_CONTA:-3}
+  TETO_DIARIO_DE_TOKENS: ${TETO_DIARIO_DE_TOKENS:-40000000}
+  # Com menos que isto sobrando no limite diário do fornecedor, tarefa nova é recusada. 0 desliga a conferência.
+  RESTO_MINIMO_NO_FORNECEDOR: ${RESTO_MINIMO_NO_FORNECEDOR:-3000000}
 
 services:
   # ---------- o que atende ----------
@@ -84,6 +90,19 @@ services:
     environment:
       <<: *servidor
       PORTA: "3001"
+      TAREFAS_AO_MESMO_TEMPO: ${TAREFAS_POR_WORKER:-2}
+      # Só o worker chama o modelo, e só ele recebe a chave. O padrão é o roteirizado: reproduz uma tarefa
+      # gravada, sem custo. Para o modelo de verdade: MODELO_DO_AGENTE=claude docker compose up -d worker
+      # (a chave vem de LLM_API_KEY_DO, no .env da raiz, que não entra no repositório).
+      MODELO_DO_AGENTE: ${MODELO_DO_AGENTE:-roteirizado}
+      MODELO_CHAVE: ${LLM_API_KEY_DO:-}
+      MODELO_NOME: ${MODELO_NOME:-}
+      # 1: o roteiro demora o que demorou na gravação (7 minutos no de briefing). 0.05: vinte vezes mais rápido.
+      VELOCIDADE_DO_ROTEIRO: ${VELOCIDADE_DO_ROTEIRO:-0.05}
+    # No desligamento o worker interrompe as tarefas do Otto em curso e grava o fecho de cada uma (até 8 s);
+    # a exportação em curso tem até 30 s para terminar. Passou disso, o que ficou é retomado ou fechado por
+    # falta de sinal de vida.
+    stop_grace_period: 45s
     # Mais vazão é mais réplica (WORKERS) ou mais exportações por réplica (EXPORTACOES_POR_WORKER).
     # Qualquer réplica pega qualquer trabalho; a regra "uma exportação por vez por conta" é do banco.
     deploy:

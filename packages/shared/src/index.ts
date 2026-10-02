@@ -34,3 +34,4 @@ export type ErroDaApi = z.infer<typeof ErroDaApi>;
 
 export * from './contrato';
 export * from './exportacao';
+export * from './tarefa';

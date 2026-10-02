@@ -64,6 +64,8 @@ export interface DocumentoTravado {
   lotePorChaveDoCliente(chave: string): Promise<LoteGravado | undefined>;
   /** As reversões seguidas no fim do histórico, da mais nova para a mais velha. */
   caudaDeReversoes(): Promise<LoteGravado[]>;
+  /** A versão do primeiro lote que a tarefa gravou nesta peça. undefined se ela não gravou nenhum. */
+  primeiraVersaoDaTarefa(tarefaId: string): Promise<number | undefined>;
   /** Grava o lote e a árvore nova e avança a versão. Tudo ou nada, com o resto da transação. */
   gravarLote(novo: NovoLote): Promise<void>;
   /** Marca (ou desmarca, com null) o lote de edição de uma versão como desfeito. */

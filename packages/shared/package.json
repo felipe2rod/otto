@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@otto/agente": "workspace:*",
     "@otto/documento": "workspace:*",
     "zod": "4.6.5"
   },
