@@ -174,7 +174,7 @@ describe('goldens da exportação em PSD', () => {
       it('toda camada que desenha leva pixel (ADR 028, item 2)', async () => {
         const { bytes } = await exportar(cena);
         const semPixel: string[] = [];
-        const AJUSTES = ['curv', 'levl', 'hue2', 'brit', 'vibA', 'blnc', 'phfl', 'blwh', 'grdm'];
+        const AJUSTES = ['curv', 'levl', 'hue2', 'brit', 'vibA', 'blnc', 'phfl', 'blwh', 'grdm', 'mixr'];
         const ver = (e: Estrutura): void => {
           for (const f of e.filhos ?? []) ver(f);
           if (e.tipo !== 'camada' || e.blocos.some((b) => AJUSTES.includes(b))) return;

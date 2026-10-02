@@ -2,8 +2,8 @@
 // Recursos entram por parâmetro, como bytes: este pacote não lê disco, rede nem armazenamento, e quem confere a conta
 // dona de cada arquivo é quem chama. Grava sempre a composta, o pixel de toda camada, os dados editáveis e o relatório
 // (ADR 028, item 2).
-import type { Documento, No, NoVisual, Prancheta } from '@otto/documento';
-import { codificarPng, criarSessao, limitesDoNo, nomePostScript, renderizarMascara, renderizarPrancheta, type Sessao } from '@otto/render';
+import type { Documento, No, NoTexto, NoVisual, Prancheta } from '@otto/documento';
+import { alturaDaMaiuscula, codificarPng, criarSessao, escolherFonte, limitesDoNo, nomePostScript, renderizarMascara, renderizarPrancheta, type Sessao } from '@otto/render';
 import type { CanvasKit } from 'canvaskit-wasm';
 import { type FonteDePixels, type FonteDisponivel, type ImagemDisponivel, montar, type TipoDeImagem } from './montar';
 import { perfilSrgb } from './perfil-srgb';
@@ -108,8 +108,23 @@ function imagensDisponiveis(sessao: Sessao, imagens: readonly ImagemDaExportacao
 }
 
 /** Os pixels vindos do render de referência em CPU: o mesmo que o agente vê e o lint confere. */
-function pixelsDoRender(sessao: Sessao, doc: Documento): FonteDePixels {
+function pixelsDoRender(sessao: Sessao, doc: Documento, fontes: readonly FonteDaExportacao[]): FonteDePixels {
+  /** altura da maiúscula de cada arquivo de fonte, em fração do corpo. Fonte sem o campo: 0,7, que é o comum. */
+  const maiusculas = new Map(fontes.map((f) => [`${f.familia}#${f.peso}`, alturaDaMaiuscula(f.bytes) ?? 0.7]));
   return {
+    primeiraLinha(no: NoTexto) {
+      const d = sessao.texto.diagramar(no);
+      const linha = d.linhas[0];
+      const [inicio, fim] = d.intervalos[0] ?? [0, 0];
+      if (!d.fonteEncontrada || !linha) return undefined;
+      let maiuscula = 0;
+      for (let i = inicio; i < Math.max(fim, inicio + 1); i++) {
+        const t = [...(no.trechos ?? [])].reverse().find((x) => i >= x.inicio && i < x.fim);
+        const fonte = escolherFonte(fontes, t?.fonte ?? no.fonte, t?.peso ?? no.peso);
+        maiuscula = Math.max(maiuscula, (maiusculas.get(`${fonte?.familia}#${fonte?.peso}`) ?? 0.7) * (t?.tamanho ?? no.tamanho));
+      }
+      return { base: linha.base, alturaUsada: d.alturaUsada, maiuscula };
+    },
     camada(p: Prancheta, no: NoVisual): PixelsDoArquivo | undefined {
       // só a área que a camada ocupa dentro da prancheta, em pixel inteiro
       const limites = limitesDoNo(sessao, no);
@@ -146,7 +161,7 @@ export async function exportarPsd(ck: CanvasKit, formato: FormatoDeArquivoEmCama
     const fontes = fontesDisponiveis(recursos.fontes);
     const imagens = imagensDisponiveis(sessao, recursos.imagens);
     const rel = relatorioVazio(doc, pranchetas);
-    const base = pixelsDoRender(sessao, doc);
+    const base = pixelsDoRender(sessao, doc, recursos.fontes);
     const arquivos: ArquivoExportado[] = [];
     const juntas = opcoes.arquivos === 'juntas';
     for (const grupo of juntas ? [pranchetas] : pranchetas.map((p) => [p])) {

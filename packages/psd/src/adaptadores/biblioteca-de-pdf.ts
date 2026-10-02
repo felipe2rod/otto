@@ -29,6 +29,7 @@ import {
   PDFHexString,
   type PDFImage,
   PDFName,
+  PDFNumber,
   PDFOperator,
   PDFOperatorNames,
   type PDFRef,
@@ -43,12 +44,13 @@ import {
   setLineWidth,
   setStrokingRgbColor,
   setTextMatrix,
-  showText,
   stroke,
 } from '@cantoo/pdf-lib';
 import type { ModoDoGrupo } from '@otto/documento';
 import { perfilSrgb } from '../perfil-srgb';
 import type { ArquivoEmCamadas, ArquivoGravado, CamadaDoArquivo, CaminhoDoArquivo, DegradeDoArquivo, FormatoDeArquivoEmCamadas, Rgb } from '../porta';
+import { MODOS_DO_PDF } from '../porta';
+import { partesDoVersalete } from '../versalete';
 
 /** Modo de mesclagem do Otto → nome do modo no PDF. Só os que o PDF tem chegam aqui. */
 const MODO: Partial<Record<ModoDoGrupo, string>> = {
@@ -70,6 +72,13 @@ const MODO: Partial<Record<ModoDoGrupo, string>> = {
 };
 
 type Matriz = readonly [number, number, number, number, number, number];
+/** O que este arquivo usa da fonte aberta. */
+type Fonte = {
+  glyphForCodePoint(c: number): { id: number; advanceWidth: number };
+  layout(t: string, recursos: Record<string, boolean>): { glyphs: { id: number }[]; positions: { xAdvance: number }[] };
+  unitsPerEm: number;
+};
+
 const arredondar = (v: number): number => Math.round(v * 10000) / 10000;
 
 /** O documento em montagem: os recursos (fonte, imagem, estado gráfico, camada, degradê) são de todas as páginas. */
@@ -80,6 +89,8 @@ class Escritor {
   readonly recursosRef: PDFRef;
   private readonly fontes: ReadonlyMap<string, PDFFont>;
   private readonly imagens: ReadonlyMap<Uint8Array, PDFImage>;
+  /** o arquivo de cada fonte, aberto, para escolher os glifos e o kerning */
+  private readonly desenhos: ReadonlyMap<string, Fonte>;
   private readonly nomesDeFonte = new Map<string, PDFName>();
   private readonly nomesDeImagem = new Map<Uint8Array, PDFName>();
   private readonly estados = new Map<string, PDFName>();
@@ -87,12 +98,37 @@ class Escritor {
   /** as camadas do PDF, na ordem do painel (de cima para baixo), com as que nascem ocultas */
   readonly camadas: { ref: PDFRef; oculta: boolean; filhas: Escritor['camadas'] }[] = [];
 
-  constructor(pdf: PDFDocument, fontes: ReadonlyMap<string, PDFFont>, imagens: ReadonlyMap<Uint8Array, PDFImage>) {
+  constructor(pdf: PDFDocument, fontes: ReadonlyMap<string, PDFFont>, imagens: ReadonlyMap<Uint8Array, PDFImage>, desenhos: ReadonlyMap<string, Fonte>) {
     this.contexto = pdf.context;
     this.fontes = fontes;
+    this.desenhos = desenhos;
     this.imagens = imagens;
     this.recursos = { Font: this.contexto.obj({}), XObject: this.contexto.obj({}), ExtGState: this.contexto.obj({}), Properties: this.contexto.obj({}), Shading: this.contexto.obj({}) };
     this.recursosRef = this.contexto.register(this.contexto.obj(this.recursos));
+  }
+
+  /**
+   * O texto como glifos da fonte, um por caractere, pelo mapa de caracteres dela, com o kerning da própria fonte entre eles.
+   * De propósito sem ligadura nem glifo alternativo: glifo que não corresponde a um caractere (o "n" alternativo da
+   * Fraunces, uma ligadura "fi") não tem como voltar a ser texto, e o Illustrator converte o trecho em contorno
+   * (conferido em 2026-10-02). O programa que abre o arquivo refaz as trocas da fonte quando o texto é editado.
+   */
+  private glifos(postScript: string, texto: string, comKerning: boolean): (PDFHexString | PDFNumber)[] {
+    const fonte = this.desenhos.get(postScript);
+    if (!fonte) throw new Error(`A fonte ${postScript} não foi entregue ao PDF`);
+    const caracteres = [...texto];
+    const ids = caracteres.map((ch) => fonte.glyphForCodePoint(ch.codePointAt(0) ?? 0));
+    // o avanço com kerning, quando a fonte devolve um glifo por caractere com as trocas desligadas
+    const corrido = comKerning ? fonte.layout(texto, { kern: true, liga: false, clig: false, calt: false, rlig: false, dlig: false, rvrn: false, rclt: false, ccmp: false, locl: false }) : undefined;
+    const comAvanco = corrido && corrido.glyphs.length === ids.length && corrido.glyphs.every((g, i) => g.id === ids[i]?.id) ? corrido.positions : undefined;
+    const saida: (PDFHexString | PDFNumber)[] = [];
+    ids.forEach((glifo, i) => {
+      saida.push(PDFHexString.of(glifo.id.toString(16).padStart(4, '0')));
+      const kerning = comAvanco ? (comAvanco[i]?.xAdvance ?? glifo.advanceWidth) - glifo.advanceWidth : 0;
+      // no PDF o ajuste é em milésimos do corpo, e positivo aproxima
+      if (kerning !== 0 && i < ids.length - 1) saida.push(PDFNumber.of(arredondar((-kerning * 1000) / fonte.unitsPerEm)));
+    });
+    return saida;
   }
 
   private nome(prefixo: string): PDFName {
@@ -203,13 +239,17 @@ class Escritor {
         // a página está de cabeça para baixo (y cresce para baixo): a matriz do texto desvira as letras
         destino.push(setTextMatrix(arredondar(a), arredondar(b), arredondar(0 - cc), arredondar(0 - d), arredondar(a * linha.x + cc * linha.base + e), arredondar(b * linha.x + d * linha.base + f)));
         for (const pedaco of linha.pedacos) {
-          const { nome, fonte } = this.fonte(pedaco.estilo.fonte);
-          destino.push(
-            setFontAndSize(nome, arredondar(pedaco.estilo.tamanho)),
-            setCharacterSpacing(arredondar((pedaco.estilo.espacamento / 1000) * pedaco.estilo.tamanho)),
-            setFillingRgbColor(...Escritor.cor(pedaco.estilo.cor)),
-            showText(fonte.encodeText(pedaco.texto)),
-          );
+          // versalete: o PDF não tem; as letras que foram escritas em minúscula vão em corpo menor
+          for (const parte of partesDoVersalete(pedaco.texto, pedaco.original, t.versalete)) {
+            const { nome } = this.fonte(pedaco.estilo.fonte);
+            const tamanho = pedaco.estilo.tamanho * parte.fator;
+            destino.push(
+              setFontAndSize(nome, arredondar(tamanho)),
+              setCharacterSpacing(arredondar((pedaco.estilo.espacamento / 1000) * tamanho)),
+              setFillingRgbColor(...Escritor.cor(pedaco.estilo.cor)),
+              PDFOperator.of(PDFOperatorNames.ShowTextAdjusted, [this.contexto.obj(this.glifos(pedaco.estilo.fonte, parte.texto, t.estilo.kerning))]),
+            );
+          }
         }
       }
       destino.push(endText());
@@ -295,12 +335,21 @@ class Escritor {
       this.recortar(c.recorteVetorial, destino);
     }
     const modo = MODO[c.modo];
-    const isolada = c.opacidade < 1 || modo !== undefined || (c.filhos !== undefined && c.modo === 'normal');
     const antes = this.registroCorrente;
     this.registroCorrente = filhas;
-    if (!isolada) this.pintar(c, destino);
-    else {
-      // um objeto de formulário com grupo de transparência: a opacidade e o modo valem para a camada inteira, não para cada pedaço
+    const comEstado = c.opacidade < 1 || modo !== undefined;
+    // Uma pintura só (uma imagem, um texto, um caminho só com preenchimento): a opacidade e o modo vão direto nela.
+    // Várias pinturas (grupo, preenchimento com contorno), ou grupo isolado com modo de mesclagem dentro: aí sim um objeto
+    // de formulário com grupo de transparência, para a opacidade e o modo valerem para o conjunto. O Illustrator abre cada
+    // formulário como um grupo de recorte do tamanho da página, e por isso ele só entra quando faz falta.
+    const variasPinturas = c.filhos !== undefined || (c.preenchimento !== undefined && (c.tracoVetorial !== undefined || c.efeitos?.tracoInterno !== undefined));
+    const temModoDentro = (x: CamadaDoArquivo): boolean => (x.filhos ?? []).some((f) => MODO[f.modo] !== undefined || temModoDentro(f));
+    const isolada = (comEstado && variasPinturas) || (c.filhos !== undefined && c.modo === 'normal' && temModoDentro(c));
+    if (!isolada) {
+      if (comEstado) destino.push(pushGraphicsState(), setGraphicsState(this.estado(c.opacidade, modo)));
+      this.pintar(c, destino);
+      if (comEstado) destino.push(popGraphicsState());
+    } else {
       const dentro: PDFOperator[] = [];
       this.pintar(c, dentro);
       const formulario = this.contexto.register(
@@ -347,7 +396,7 @@ class Escritor {
 
 export function criarFormatoPdf(): FormatoDeArquivoEmCamadas {
   return {
-    capacidades: { paginas: true, degradeTransparente: false },
+    capacidades: { paginas: true, degradeTransparente: false, modos: MODOS_DO_PDF },
     async escrever(arquivo: ArquivoEmCamadas): Promise<ArquivoGravado> {
       const pdf = await PDFDocument.create({ updateMetadata: false });
       pdf.registerFontkit(fontkit);
@@ -369,7 +418,8 @@ export function criarFormatoPdf(): FormatoDeArquivoEmCamadas {
       };
       for (const c of arquivo.camadas) await embutir(c);
 
-      const e = new Escritor(pdf, fontes, imagens);
+      const desenhos = new Map<string, Fonte>((arquivo.fontes ?? []).map((f) => [f.postScript, fontkit.create(f.bytes) as unknown as Fonte]));
+      const e = new Escritor(pdf, fontes, imagens, desenhos);
       // cada prancheta é uma página; sem pranchetas, o arquivo é uma página só
       const paginas = arquivo.camadas.every((c) => c.prancheta)
         ? arquivo.camadas.map((c) => ({ nome: c.nome, largura: c.prancheta?.largura ?? arquivo.largura, altura: c.prancheta?.altura ?? arquivo.altura, camadas: c.filhos ?? [] }))

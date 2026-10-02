@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { aplicarLote, type Documento, type No, type Prancheta } from '@otto/documento';
 import { comparar, criarSessao, renderizarPrancheta } from '@otto/render';
+import { carregarCanvasKit } from '@otto/render/node';
 import { Resvg } from '@resvg/resvg-js';
 import type { CanvasKit } from 'canvaskit-wasm';
 import { XMLParser } from 'fast-xml-parser';
@@ -18,7 +19,7 @@ import { caminhoEmSvg, criarFormatoSvg, idDoSvg } from './adaptadores/svg';
 import { recursosDeTeste } from './apoio-de-teste';
 import { cenasDeGolden } from './cenas-de-golden';
 import type { RecursosConhecidos, RecursosDaExportacao } from './exportar';
-import { exportarVetorial, relatorioDeExportacaoVetorial } from './exportar-vetorial';
+import { exportarVetorial, imagemEquivalenteEmNormal, relatorioDeExportacaoVetorial } from './exportar-vetorial';
 import { MAPEAMENTO } from './mapeamento';
 
 const PASTA = path.resolve(import.meta.dirname, '../goldens');
@@ -39,6 +40,11 @@ const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes)
 const cena = (nome: string): Documento => cenasDeGolden().find((c) => c.nome === nome)?.doc as Documento;
 const exportar = (doc: Documento, nome = 'cena') => exportarVetorial(ck, criarFormatoSvg(), doc, recursos, { nome });
 const texto = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
+function mudar(doc: Documento, operacoes: unknown[]): Documento {
+  const r = aplicarLote(doc, operacoes, { autoria: { tipo: 'designer' }, idDoLote: 'mudanca-do-teste' });
+  if (!r.ok) throw new Error(`${r.erro.op} ${r.erro.alvo ?? ''}: ${r.erro.mensagem}`);
+  return r.doc;
+}
 
 /** A árvore do SVG pelo analisador de XML, na ordem do arquivo: [nome do elemento, atributos, filhos]. */
 interface Elemento {
@@ -75,6 +81,10 @@ const porId = (raiz: Elemento, id: string): Elemento => {
     );
   return achado;
 };
+/** As camadas do arquivo, de baixo para cima. */
+const camadasDe = (svg: Elemento): Elemento[] => svg.filhos.filter((e) => e.nome !== 'defs' && e.nome !== 'title');
+/** A camada de texto é um grupo com o nome, e o <text> dentro. */
+const textoDe = (raiz: Elemento, id: string): Elemento => porId(raiz, id).filhos[0] as Elemento;
 
 /** O SVG desenhado por um renderizador independente (resvg), com as fontes de teste. */
 function desenhar(svg: Uint8Array): { largura: number; altura: number; rgba: Uint8Array } {
@@ -160,15 +170,16 @@ describe('estrutura do SVG, relida por um analisador independente', () => {
     expect(grupo.filhos[1]?.atributos['clip-path']).toMatch(/^url\(#recorte-/);
   });
 
-  it('texto: é <text>, uma linha por vez, com a família, o peso e o nome PostScript de reserva; os trechos viram pedaços', async () => {
+  it('texto: é <text> dentro de um grupo com o nome, uma linha por vez, com a família, o peso e o nome PostScript de reserva; os trechos viram pedaços', async () => {
     const { arquivos, relatorio } = await exportar(cena('texto'));
     const svg = ler(texto(arquivos[0]?.bytes as Uint8Array));
-    const titulo = porId(svg, 'Título');
+    expect(porId(svg, 'Título').nome).toBe('g');
+    const titulo = textoDe(svg, 'Título');
     expect(titulo.nome).toBe('text');
     expect(titulo.atributos).toMatchObject({ 'font-family': "'Anton', 'Anton-Regular'", 'font-weight': '400', 'font-size': '52', fill: '#1c1917', transform: 'matrix(1 0 0 1 20 16)' });
     expect(titulo.atributos['letter-spacing']).toBe('1.04');
     expect(titulo.filhos.map((t) => t.texto)).toEqual(['JAZZ NA PRAÇA']);
-    const paragrafo = porId(svg, 'Parágrafo');
+    const paragrafo = textoDe(svg, 'Parágrafo');
     // duas linhas, cada uma começando num <tspan> com x e y
     const inicios = paragrafo.filhos.filter((t) => t.atributos.x !== undefined);
     expect(inicios).toHaveLength(2);
@@ -177,11 +188,42 @@ describe('estrutura do SVG, relida por um analisador independente', () => {
     expect(paragrafo.filhos[1]?.atributos).toMatchObject({ 'font-weight': '700', fill: '#c2410c', 'font-family': "'IBM Plex Sans', 'IBMPlexSans-Bold'" });
     expect(paragrafo.filhos[4]?.atributos).toMatchObject({ 'font-family': "'DM Serif Display', 'DMSerifDisplay-Regular'", 'font-size': '24' });
     // caixa alta vai já em maiúsculas; o peso que não existe sai com o mais próximo
-    expect(porId(svg, 'Caixa_alta').filhos[0]?.texto).toBe('ENTRADA FRANCA');
-    expect(porId(svg, 'Peso_trocado').atributos['font-weight']).toBe('700');
-    expect(porId(svg, 'Girado').atributos.transform).toMatch(/^matrix\(0\.99 -0\.139 0\.139 0\.99 /);
+    expect(textoDe(svg, 'Caixa_alta').filhos[0]?.texto).toBe('ENTRADA FRANCA');
+    expect(textoDe(svg, 'Peso_trocado').atributos['font-weight']).toBe('700');
+    expect(textoDe(svg, 'Girado').atributos.transform).toMatch(/^matrix\(0\.99 -0\.139 0\.139 0\.99 /);
     expect(relatorio.substituicoes).toHaveLength(1);
     expect(relatorio.avisos.map((a) => a.codigo)).toEqual(['texto-em-linhas', 'instalar-fontes', 'fonte-substituida', 'virou-imagem']);
+  });
+
+  it('opacidade do texto: vai no grupo em volta, e não no <text>, onde o Illustrator a ignora', async () => {
+    const svg = ler(texto((await exportar(cena('texto'))).arquivos[0]?.bytes as Uint8Array));
+    expect(porId(svg, 'Versalete')).toMatchObject({ nome: 'g', atributos: { opacity: '0.75' } });
+    expect(textoDe(svg, 'Versalete').atributos.opacity).toBeUndefined();
+    // nenhum <text> do arquivo leva opacidade
+    expect(todos(svg).filter((e) => e.nome === 'text' && e.atributos.opacity !== undefined)).toEqual([]);
+  });
+
+  it('versalete: as letras escritas em minúscula vão em maiúscula a 70% do corpo, na mesma linha; sem `font-variant`, que cada programa desenha do seu jeito', async () => {
+    const svg = ler(texto((await exportar(cena('texto'))).arquivos[0]?.bytes as Uint8Array));
+    const versalete = textoDe(svg, 'Versalete');
+    expect(versalete.atributos['font-variant']).toBeUndefined();
+    expect(versalete.filhos.map((t) => [t.texto, t.atributos['font-size']])).toEqual([
+      ['E', undefined],
+      ['NTRADA', '9.8'],
+      // o espaço não tem caixa: vai no corpo inteiro, como no motor
+      [' F', undefined],
+      ['RANCA', '9.8'],
+    ]);
+    // uma linha só: só o primeiro pedaço diz onde ela começa
+    expect(versalete.filhos.filter((t) => t.atributos.x !== undefined)).toHaveLength(1);
+  });
+
+  it('é SVG 1.1 completo, declarado: sem isso o Illustrator o trata como SVG Tiny e avisa que perde o recorte', async () => {
+    const arquivo = texto((await exportar(cena('imagem'))).arquivos[0]?.bytes as Uint8Array);
+    expect(arquivo).toContain('<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">');
+    expect(ler(arquivo).atributos).toMatchObject({ version: '1.1', baseProfile: 'full' });
+    // e o recorte continua lá
+    expect(arquivo).toContain('<clipPath');
   });
 
   it('foto: a imagem original embutida, com o corte da caixa como recorte; com filtro, ajuste ou máscara de sujeito vira imagem', async () => {
@@ -219,46 +261,33 @@ describe('estrutura do SVG, relida por um analisador independente', () => {
     expect(porId(svg, 'Logo').filhos[1]?.atributos).toMatchObject({ fill: '#fde047', stroke: '#0f172a' });
   });
 
-  it('grupo, modo de mesclagem, recorte e o que fica de fora', async () => {
-    const { arquivos, relatorio } = await exportar(cena('grupo-e-ajuste'));
+  it('grupo: um <g> com as camadas dentro; grupo com máscara em degradê e recorte com base em texto viram imagem', async () => {
+    // sem as camadas que achatam (os dois ajustes soltos e o véu em luz suave), para ver as camadas uma a uma
+    const doc = mudar(cena('grupo-e-ajuste'), [
+      { op: 'remover', alvo: 'Peça/Curvas' },
+      { op: 'remover', alvo: 'Peça/Níveis em sobrepor' },
+      { op: 'alterar', alvo: 'Peça/Véu bloqueado', props: { bloqueado: false } },
+      { op: 'alterar', alvo: 'Peça/Véu bloqueado', props: { modoDeMesclagem: 'normal' } },
+    ]);
+    const { arquivos, relatorio } = await exportar(doc);
     const svg = ler(texto(arquivos[0]?.bytes as Uint8Array));
+    expect(camadasDe(svg).map((e) => e.atributos.id)).toEqual(['Fundo', 'Foto', 'Selo', 'Luzes', 'Base_do_recorte', 'Véu_bloqueado', 'Oculta']);
     const selo = porId(svg, 'Selo');
     expect(selo.nome).toBe('g');
-    expect(selo.atributos).toMatchObject({ opacity: '0.9', style: 'isolation:isolate' });
+    expect(selo.atributos.opacity).toBe('0.9');
     expect(selo.filhos.map((f) => f.atributos.id)).toEqual(['Disco', 'Data']);
-    expect(porId(svg, 'Data').filhos.map((t) => t.texto)).toEqual(['20', 'JUN']);
-    expect(porId(svg, 'Véu_bloqueado').atributos.style).toBe('mix-blend-mode:soft-light');
+    expect(textoDe(svg, 'Data').filhos.map((t) => t.texto)).toEqual(['20', 'JUN']);
     expect(porId(svg, 'Oculta').atributos.display).toBe('none');
     const l = Object.fromEntries(relatorio.camadas.map((x) => [x.camada, x]));
-    // camada de ajuste não vai; grupo com máscara em degradê e recorte com base em texto viram imagem
-    expect(l.Curvas).toMatchObject({ destino: 'omitido-com-aviso', mapeamento: 'ajuste:curvas' });
-    expect(todos(svg).some((e) => e.atributos.id === 'Curvas')).toBe(false);
-    expect(l.Luzes).toMatchObject({ destino: 'raster-com-aviso', mapeamento: 'mascara:degrade' });
+    // o grupo tem máscara e, dentro, uma camada em luz linear, que age sobre a foto abaixo do grupo: o grupo vira a imagem equivalente
+    expect(l.Luzes).toMatchObject({ destino: 'raster-com-aviso', mapeamento: 'modo:luz-linear' });
     expect(l.Luz?.observacao).toBe('está dentro da imagem de "Luzes"');
-    expect(l['Base do recorte']).toMatchObject({ destino: 'raster-com-aviso', mapeamento: 'recorte-em-texto' });
+    // a base do recorte é texto, e leva um ajuste preso: o conjunto é uma imagem, com o ajuste aplicado
+    expect(l['Base do recorte']).toMatchObject({ destino: 'raster-com-aviso' });
     expect(l['Foto no texto']?.observacao).toBe('está dentro da imagem de "Base do recorte"');
+    expect(l['Preto e branco no texto']).toMatchObject({ destino: 'raster-com-aviso', observacao: 'está dentro da imagem de "Base do recorte"' });
     expect(porId(svg, 'Base_do_recorte').nome).toBe('image');
-    expect(relatorio.avisos.map((a) => a.codigo)).toEqual(['texto-em-linhas', 'instalar-fontes', 'virou-imagem', 'ficou-de-fora']);
-  });
-
-  it('modo de mesclagem que o formato não tem: a camada sai em vetor, em modo normal, e o relatório avisa', async () => {
-    const r = aplicarLote(
-      cena('forma'),
-      [
-        { op: 'alterar', alvo: 'Peça/Elipse', props: { modoDeMesclagem: 'luz-linear' } },
-        { op: 'alterar', alvo: 'Peça/Arredondado', props: { modoDeMesclagem: 'multiplicacao' } },
-      ],
-      { autoria: { tipo: 'designer' }, idDoLote: 'modos' },
-    );
-    if (!r.ok) throw new Error(r.erro.mensagem);
-    const { arquivos, relatorio } = await exportar(r.doc);
-    const svg = ler(texto(arquivos[0]?.bytes as Uint8Array));
-    expect(porId(svg, 'Elipse').nome).toBe('path');
-    expect(porId(svg, 'Elipse').atributos.style).toBeUndefined();
-    expect(porId(svg, 'Arredondado').atributos.style).toBe('mix-blend-mode:multiply');
-    expect(relatorio.camadas.find((x) => x.camada === 'Elipse')).toMatchObject({ destino: 'nativo-editavel' });
-    expect(relatorio.camadas.find((x) => x.camada === 'Elipse')?.observacao).toContain('modo luz-linear não existe no formato: saiu em modo normal');
-    expect(relatorio.avisos.map((a) => a.codigo)).toContain('modo-de-mesclagem-trocado');
+    expect(relatorio.avisos.map((a) => a.codigo)).toEqual(['texto-em-linhas', 'instalar-fontes', 'virou-imagem', 'modo-em-imagem']);
   });
 
   it('recorte com base em forma: as camadas presas vão num grupo cortado pela forma da base; máscara de forma sem borda suave vira recorte', async () => {
@@ -286,6 +315,246 @@ describe('estrutura do SVG, relida por um analisador independente', () => {
   });
 });
 
+describe('camada de ajuste: achatar, para a cor ficar certa (decisão do Felipe, 2026-10-02)', () => {
+  /** A peça com o ajuste no meio da pilha: acima da foto e da película, abaixo dos textos. */
+  const comAjusteNoMeio = (): Documento => mudar(cena('peca'), [{ op: 'reordenar', alvo: 'Feed/Níveis', posicao: 2 }]);
+
+  it('camada de ajuste: ela e tudo o que está abaixo viram UMA imagem com o fundo; o que está acima continua vetor; nada fica de fora', async () => {
+    const doc = comAjusteNoMeio();
+    const { arquivos, relatorio } = await exportar(doc, 'Festival');
+    const svg = ler(texto(arquivos[0]?.bytes as Uint8Array));
+    expect(camadasDe(svg).map((e) => e.atributos.id)).toEqual(['Fundo__x28_achatado_x29_', 'Sobretítulo', 'Título', 'Botão']);
+    expect(porId(svg, 'Fundo__x28_achatado_x29_')).toMatchObject({ nome: 'image', atributos: { width: '540', height: '676', transform: 'matrix(0.5 0 0 0.5 0 0)' } });
+    expect(textoDe(svg, 'Sobretítulo').nome).toBe('text');
+    const feed = relatorio.camadas.filter((x) => x.prancheta === 'Feed');
+    const l = Object.fromEntries(feed.map((x) => [x.camada, x]));
+    for (const nome of ['Fundo', 'Foto', 'Película', 'Níveis']) {
+      expect(l[nome], nome).toMatchObject({ destino: 'raster-com-aviso', mapeamento: 'ajuste:niveis' });
+      expect(l[nome]?.observacao).toBe('achatada numa imagem só com o que está abaixo de "Níveis" (camada de ajuste), para a cor ficar certa');
+    }
+    expect(l.Sobretítulo).toMatchObject({ destino: 'nativo-editavel' });
+    expect(relatorio.camadas.some((x) => x.destino === 'omitido-com-aviso')).toBe(false);
+    expect(relatorio.avisos.map((a) => a.codigo)).toContain('camadas-achatadas');
+    expect(relatorio.avisos.map((a) => a.codigo)).not.toContain('ficou-de-fora');
+  });
+
+  it('camada de ajuste: o arquivo parece o render do Otto COM o ajuste', async () => {
+    for (const doc of [comAjusteNoMeio(), cena('peca')]) {
+      const { arquivos } = await exportar(doc, 'Festival');
+      const p = doc.pranchetas[0] as Prancheta;
+      const desenhado = desenhar(arquivos[0]?.bytes as Uint8Array);
+      const com = renderDoOtto(doc, p);
+      expect(diferenca(com.rgba, desenhado.rgba)).toBeLessThan(0.03);
+      // contra o render sem o ajuste a diferença é maior: a comparação enxerga o ajuste
+      const sem = renderDoOtto(doc, { ...p, filhos: p.filhos.filter((n: No) => n.tipo !== 'ajuste') });
+      const media = (r: { rgba: Uint8Array }): number => comparar(r.rgba, desenhado.rgba, p.largura, p.altura).d.media;
+      expect(media(sem)).toBeGreaterThan(media(com) * 2);
+    }
+  });
+
+  it('ajuste no topo de tudo: a prancheta inteira é uma imagem, e o relatório diz', async () => {
+    const { arquivos, relatorio } = await exportar(cena('peca'), 'Festival');
+    expect(arquivos.map((a) => a.nome)).toEqual(['Festival - Feed.svg', 'Festival - Story.svg']);
+    expect(relatorio.arquivos).toEqual(arquivos.map((a) => a.nome));
+    expect(camadasDe(ler(texto(arquivos[0]?.bytes as Uint8Array))).map((e) => e.atributos.id)).toEqual(['Fundo__x28_achatado_x29_']);
+    // a outra prancheta não tem ajuste: continua em camadas
+    expect(camadasDe(ler(texto(arquivos[1]?.bytes as Uint8Array))).map((e) => e.atributos.id)).toEqual(['Fundo', 'Foto', 'Título', 'Logo']);
+    expect(relatorio.avisos.map((a) => a.codigo)).toContain('camadas-achatadas');
+    expect(relatorio.camadas.filter((x) => x.prancheta === 'Feed').every((x) => x.destino === 'raster-com-aviso')).toBe(true);
+  });
+
+  it('ajuste preso a uma camada: só as duas viram imagem; o resto continua vetor', async () => {
+    const doc = mudar(cena('forma'), [
+      { op: 'criarNo', prancheta: 'Peça', no: { tipo: 'ajuste', nome: 'Preto e branco', ajuste: { tipo: 'preto-e-branco' }, recortadaNaDeBaixo: true } },
+      { op: 'reordenar', alvo: 'Peça/Preto e branco', posicao: 1 },
+    ]);
+    const { arquivos, relatorio } = await exportar(doc);
+    const svg = ler(texto(arquivos[0]?.bytes as Uint8Array));
+    expect(
+      camadasDe(svg)
+        .map((e) => e.atributos.id)
+        .slice(0, 4),
+    ).toEqual(['Fundo', 'Retângulo', 'Arredondado', 'Elipse']);
+    expect(porId(svg, 'Fundo').nome).toBe('path');
+    expect(porId(svg, 'Retângulo').nome).toBe('image');
+    expect(porId(svg, 'Arredondado').nome).toBe('path');
+    const l = Object.fromEntries(relatorio.camadas.map((x) => [x.camada, x]));
+    expect(l.Retângulo).toMatchObject({ destino: 'raster-com-aviso', mapeamento: 'ajuste:preto-e-branco' });
+    expect(l['Preto e branco']?.observacao).toBe('está dentro da imagem de "Retângulo"');
+    const p = doc.pranchetas[0] as Prancheta;
+    expect(diferenca(renderDoOtto(doc, p).rgba, desenhar(arquivos[0]?.bytes as Uint8Array).rgba)).toBeLessThan(0.01);
+  });
+
+  it('ajuste dentro de grupo em "atravessar": achata o que está abaixo do grupo, e o grupo junto', async () => {
+    const doc = mudar(cena('forma'), [
+      { op: 'criarNo', prancheta: 'Peça', no: { tipo: 'ajuste', nome: 'Preto e branco', ajuste: { tipo: 'preto-e-branco' } } },
+      { op: 'reordenar', alvo: 'Peça/Preto e branco', posicao: 3 },
+      { op: 'agrupar', alvos: ['Peça/Elipse', 'Peça/Preto e branco'], nome: 'Par' },
+    ]);
+    const { arquivos } = await exportar(doc);
+    expect(
+      camadasDe(ler(texto(arquivos[0]?.bytes as Uint8Array)))
+        .map((e) => e.atributos.id)
+        .slice(0, 2),
+    ).toEqual(['Fundo__x28_achatado_x29_', 'Degradê_linear']);
+    const p = doc.pranchetas[0] as Prancheta;
+    expect(diferenca(renderDoOtto(doc, p).rgba, desenhar(arquivos[0]?.bytes as Uint8Array).rgba)).toBeLessThan(0.01);
+  });
+});
+
+describe('modo de mesclagem que o arquivo não guarda: a camada vira a imagem equivalente em modo normal', () => {
+  /** diferença média, em níveis de 0 a 255, nos três canais */
+  const niveis = (a: Uint8Array, b: Uint8Array): number => {
+    let soma = 0;
+    for (let k = 0; k < a.length; k += 4)
+      soma += Math.abs((a[k] as number) - (b[k] as number)) + Math.abs((a[k + 1] as number) - (b[k + 1] as number)) + Math.abs((a[k + 2] as number) - (b[k + 2] as number));
+    return soma / ((a.length / 4) * 3);
+  };
+
+  it('a conta: cor × alfa + o de baixo × (1 − alfa) = o resultado, com o menor alfa possível; onde nada muda, transparente', () => {
+    // quatro pixels: igual; escurecido (multiplicação); clareado (tela); trocado por inteiro
+    const sem = new Uint8Array([200, 100, 50, 255, 200, 100, 50, 255, 200, 100, 50, 255, 0, 255, 0, 255]);
+    const com = new Uint8Array([200, 100, 50, 255, 100, 50, 25, 255, 220, 180, 150, 255, 255, 0, 255, 255]);
+    const { rgba, area } = imagemEquivalenteEmNormal(sem, com, 4, 1);
+    expect(area).toEqual({ x: 1, y: 0, w: 3, h: 1 });
+    expect([...rgba.subarray(0, 4)]).toEqual([0, 0, 0, 0]);
+    // escurecer pela metade: preto a 50%
+    expect([...rgba.subarray(4, 8)]).toEqual([1, 0, 0, 128]);
+    expect(rgba[15]).toBe(255);
+    // recompondo em modo normal, com a conta de 8 bits de qualquer programa, volta o resultado a 1 nível
+    for (let i = 0; i < 16; i += 4) {
+      const a = (rgba[i + 3] as number) / 255;
+      for (let c = 0; c < 3; c++) expect(Math.abs(Math.round((rgba[i + c] as number) * a + (sem[i + c] as number) * (1 - a)) - (com[i + c] as number))).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('no SVG: o Illustrator não aplica modo de mesclagem, e a camada abria como um véu. Ela vira imagem, o resto continua vetor, e o arquivo não leva modo nenhum', async () => {
+    const doc = mudar(cena('forma'), [{ op: 'alterar', alvo: 'Peça/Elipse', props: { modoDeMesclagem: 'multiplicacao' } }]);
+    const { arquivos, relatorio } = await exportar(doc);
+    const arquivo = texto(arquivos[0]?.bytes as Uint8Array);
+    expect(arquivo).not.toContain('mix-blend-mode');
+    const svg = ler(arquivo);
+    expect(camadasDe(svg).map((e) => e.atributos.id)).toEqual(['Fundo', 'Retângulo', 'Arredondado', 'Elipse', 'Degradê_linear', 'Degradê_radial', 'Com_traço_e_sombra', 'Girada', 'Com_filtro']);
+    expect(porId(svg, 'Elipse').nome).toBe('image');
+    expect(porId(svg, 'Elipse').atributos.opacity).toBeUndefined();
+    expect(porId(svg, 'Arredondado').nome).toBe('path');
+    const l = Object.fromEntries(relatorio.camadas.map((x) => [x.camada, x]));
+    expect(l.Elipse).toMatchObject({ destino: 'raster-com-aviso', mapeamento: 'modo-no-svg' });
+    expect(l.Elipse?.observacao).toContain('modo de mesclagem multiplicacao: virou uma imagem em modo normal');
+    expect(l.Fundo).toMatchObject({ destino: 'nativo-editavel' });
+    expect(relatorio.avisos.map((a) => a.codigo)).toContain('modo-em-imagem');
+    expect(relatorio.avisos.map((a) => a.codigo)).not.toContain('camadas-achatadas');
+    // e nenhuma cena de golden leva modo de mesclagem no SVG
+    for (const c of cenasDeGolden()) for (const a of (await exportar(c.doc, c.nome)).arquivos) expect(texto(a.bytes), a.nome).not.toContain('mix-blend-mode');
+    // desenhado em modo normal (como o Illustrator faz), o arquivo é o render do Otto
+    const p = doc.pranchetas[0] as Prancheta;
+    expect(diferenca(renderDoOtto(doc, p).rgba, desenhar(arquivos[0]?.bytes as Uint8Array).rgba)).toBeLessThan(0.01);
+  });
+
+  it('o véu da conferência: forma do tamanho da prancheta em luz suave, por cima de tudo, não cobre a peça, e o texto abaixo dela continua texto', async () => {
+    const doc = mudar(cena('grupo-e-ajuste'), [
+      { op: 'remover', alvo: 'Peça/Curvas' },
+      { op: 'remover', alvo: 'Peça/Níveis em sobrepor' },
+    ]);
+    const { arquivos, relatorio } = await exportar(doc);
+    const svg = ler(texto(arquivos[0]?.bytes as Uint8Array));
+    expect(camadasDe(svg).map((e) => e.atributos.id)).toEqual(['Fundo', 'Foto', 'Selo', 'Luzes', 'Base_do_recorte', 'Véu_bloqueado', 'Oculta']);
+    expect(porId(svg, 'Véu_bloqueado').nome).toBe('image');
+    expect(textoDe(svg, 'Data').nome).toBe('text');
+    expect(relatorio.camadas.find((x) => x.camada === 'Véu bloqueado')).toMatchObject({ destino: 'raster-com-aviso', mapeamento: 'modo-no-svg' });
+    const p = doc.pranchetas[0] as Prancheta;
+    const otto = renderDoOtto(doc, p);
+    const desenhado = desenhar(arquivos[0]?.bytes as Uint8Array);
+    // (o que sobra é a borda das formas e do texto, que cada renderizador suaviza do seu jeito)
+    expect(niveis(otto.rgba, desenhado.rgba)).toBeLessThan(1.5);
+    // com o véu em modo normal por cima (o que o Illustrator mostrava), a peça é outra: a comparação enxerga o véu
+    const docComVeu = mudar(doc, [
+      { op: 'alterar', alvo: 'Peça/Véu bloqueado', props: { bloqueado: false } },
+      { op: 'alterar', alvo: 'Peça/Véu bloqueado', props: { modoDeMesclagem: 'normal' } },
+    ]);
+    const comVeu = renderDoOtto(docComVeu, docComVeu.pranchetas[0] as Prancheta);
+    expect(niveis(comVeu.rgba, desenhado.rgba)).toBeGreaterThan(10);
+  });
+
+  it('dentro de grupo: no grupo em "atravessar" só a camada vira imagem; o grupo isolado vira uma imagem só; o grupo em "atravessar" com opacidade vira a imagem equivalente', async () => {
+    const com = (modoDoGrupo: string, extra: object = {}): Documento =>
+      mudar(cena('forma'), [
+        { op: 'alterar', alvo: 'Peça/Elipse', props: { modoDeMesclagem: 'multiplicacao', x: 200 } },
+        { op: 'agrupar', alvos: ['Peça/Arredondado', 'Peça/Elipse'], nome: 'Par', modoDeMesclagem: modoDoGrupo },
+        ...(Object.keys(extra).length > 0 ? [{ op: 'alterar', alvo: 'Peça/Par', props: extra }] : []),
+      ]);
+    const ids = (svg: Elemento): (string | undefined)[] =>
+      camadasDe(svg)
+        .map((e) => e.atributos.id)
+        .slice(0, 4);
+    for (const [doc, tipoDoPar, observacao] of [
+      [com('atravessar'), 'g', 'grupo'],
+      [com('normal'), 'image', 'grupo com modo de mesclagem multiplicacao em "Elipse": virou uma imagem só, com a cor certa'],
+      [com('atravessar', { opacidade: 0.7 }), 'image', 'modo de mesclagem multiplicacao em "Elipse": virou uma imagem em modo normal'],
+    ] as const) {
+      const { arquivos, relatorio } = await exportar(doc);
+      const svg = ler(texto(arquivos[0]?.bytes as Uint8Array));
+      expect(ids(svg)).toEqual(['Fundo', 'Retângulo', 'Par', 'Degradê_linear']);
+      expect(porId(svg, 'Par').nome).toBe(tipoDoPar);
+      expect(relatorio.camadas.find((x) => x.camada === 'Par')?.observacao).toContain(observacao);
+      if (tipoDoPar === 'g')
+        expect(porId(svg, 'Par').filhos.map((f) => [f.atributos.id, f.nome])).toEqual([
+          ['Arredondado', 'path'],
+          ['Elipse', 'image'],
+        ]);
+      const p = doc.pranchetas[0] as Prancheta;
+      expect(diferenca(renderDoOtto(doc, p).rgba, desenhar(arquivos[0]?.bytes as Uint8Array).rgba), observacao).toBeLessThan(0.01);
+    }
+  });
+
+  it('imagem do tamanho da prancheta por cima de texto: o relatório avisa de travar a imagem antes de clicar no texto', async () => {
+    const doc = mudar(cena('texto'), [
+      {
+        op: 'criarNo',
+        prancheta: 'Peça',
+        no: {
+          tipo: 'imagem',
+          nome: 'Textura',
+          arquivo: recursos.imagens[0]?.arquivo,
+          larguraOriginal: 1280,
+          alturaOriginal: 853,
+          x: 0,
+          y: 0,
+          largura: 400,
+          altura: 300,
+          opacidade: 0.2,
+        },
+      },
+    ]);
+    expect((await exportar(doc)).relatorio.avisos.map((a) => a.codigo)).toContain('imagem-sobre-texto');
+    expect((await exportar(cena('texto'))).relatorio.avisos.map((a) => a.codigo)).not.toContain('imagem-sobre-texto');
+  });
+});
+
+describe('tamanho do arquivo: o SVG da padaria tinha 12 MB e levava 36 s para abrir', () => {
+  const imagemDe = (e: Elemento): { tipo: string; largura: number } => ({ tipo: /^data:image\/(\w+);/.exec(e.atributos['xlink:href'] ?? '')?.[1] ?? '', largura: Number(e.atributos.width) });
+
+  it('imagem sem transparência vai em JPEG, quando o motor codifica JPEG (variante completa); com transparência, em PNG', async () => {
+    const completo = await carregarCanvasKit('completa');
+    const svgDe = async (motor: CanvasKit) => ler(texto((await exportarVetorial(motor, criarFormatoSvg(), cena('peca'), recursos, { nome: 'peca' })).arquivos[0]?.bytes as Uint8Array));
+    // o fundo achatado da prancheta é opaco
+    expect(imagemDe(porId(await svgDe(completo), 'Fundo__x28_achatado_x29_')).tipo).toBe('jpeg');
+    // a variante padrão do motor só codifica PNG: o arquivo sai certo, e maior
+    expect(imagemDe(porId(await svgDe(ck), 'Fundo__x28_achatado_x29_')).tipo).toBe('png');
+    // camada com sombra tem transparência em volta: PNG nas duas
+    const comSombra = ler(texto((await exportarVetorial(completo, criarFormatoSvg(), cena('forma'), recursos, { nome: 'forma' })).arquivos[0]?.bytes as Uint8Array));
+    expect(imagemDe(porId(comSombra, 'Com_traço_e_sombra')).tipo).toBe('png');
+  });
+
+  it('foto que virou imagem (filtro, ajuste de cor) não passa da resolução do arquivo dela: ampliar não acrescenta nada', async () => {
+    // a foto de 1280 px mostrada com 1350 px de largura: no dobro seriam 800 px de imagem para a caixa de 400; sai com 400
+    const ampliada = mudar(cena('imagem'), [{ op: 'alterar', alvo: 'Peça/Com filtros', props: { x: 0, y: 0, largura: 400, altura: 300, zoom: 3 } }]);
+    expect(imagemDe(porId(ler(texto((await exportar(ampliada)).arquivos[0]?.bytes as Uint8Array)), 'Com_filtros')).largura).toBe(400);
+    // a foto reduzida continua no dobro: 140 px de área (a caixa de 120 mais o alcance do desfoque), 280 de imagem
+    expect(imagemDe(porId(ler(texto((await exportar(cena('imagem'))).arquivos[0]?.bytes as Uint8Array)), 'Com_filtros')).largura).toBe(280);
+  });
+});
+
 describe('aparência do SVG, desenhado por um renderizador independente', () => {
   // cenas em que nada fica de fora: o SVG tem de parecer o render do Otto
   for (const [nome, limite] of [
@@ -307,21 +576,6 @@ describe('aparência do SVG, desenhado por um renderizador independente', () => 
       expect(comparar(otto.rgba, desenhado.rgba, p.largura, p.altura).d.media).toBeLessThan(2);
     });
   }
-
-  it('peça com camada de ajuste: parece o render do Otto SEM o ajuste, que é o que o relatório avisa', async () => {
-    const doc = cena('peca');
-    const { arquivos, relatorio } = await exportar(doc, 'Festival');
-    expect(arquivos.map((a) => a.nome)).toEqual(['Festival - Feed.svg', 'Festival - Story.svg']);
-    expect(relatorio.arquivos).toEqual(arquivos.map((a) => a.nome));
-    const p = doc.pranchetas[0] as Prancheta;
-    const semAjuste: Prancheta = { ...p, filhos: p.filhos.filter((n: No) => n.tipo !== 'ajuste') };
-    const desenhado = desenhar(arquivos[0]?.bytes as Uint8Array);
-    const sem = renderDoOtto(doc, semAjuste);
-    expect(diferenca(sem.rgba, desenhado.rgba)).toBeLessThan(0.03);
-    // contra o render com o ajuste a diferença média dobra: é a prova de que a comparação enxerga a falta dele
-    const media = (r: { rgba: Uint8Array }): number => comparar(r.rgba, desenhado.rgba, p.largura, p.altura).d.media;
-    expect(media(renderDoOtto(doc, p))).toBeGreaterThan(media(sem) * 2);
-  });
 });
 
 describe('relatório da saída vetorial', () => {

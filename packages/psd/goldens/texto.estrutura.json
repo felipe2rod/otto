@@ -1,6 +1,18 @@
 [
   {
     "tipo": "camada",
+    "nome": "Versalete",
+    "opacidade": 191,
+    "blocos": ["TySh", "luni"],
+    "modo": "norm",
+    "oculta": false,
+    "presa": false,
+    "pixel": [217, 167, 176, 30],
+    "texto": "Entrada Franca",
+    "mascara": [156657010, 0, 1796119182, 1935764581, 56]
+  },
+  {
+    "tipo": "camada",
     "nome": "Peso trocado",
     "opacidade": 255,
     "blocos": ["TySh", "luni"],

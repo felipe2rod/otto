@@ -77,11 +77,26 @@ describe('forma', () => {
     expect(linear.style).toBe('linear');
     expect(linear.angle).toBe(45);
     expect(linear.colorStops.map((s) => s.location)).toEqual([0, 1]);
+    // escala de 100% (fração 1). Ia 100, que o Photoshop lia como 10000%: o degradê virava uma faixa lisa
+    expect((linear as unknown as { scale: number }).scale).toBe(1);
+    expect((camada(psd, 'Degradê radial').vectorFill as unknown as { scale: number }).scale).toBe(1);
     expect((camada(psd, 'Degradê radial').vectorFill as { style: string }).style).toBe('radial');
     const fx = camada(psd, 'Com traço e sombra').effects;
     expect(fx?.stroke?.[0]).toMatchObject({ position: 'inside', fillType: 'color', color: { r: 15, g: 23, b: 42 }, size: { units: 'Pixels', value: 6 }, enabled: true });
     // a sombra vai em modo normal, que é como o motor a desenha
     expect(fx?.dropShadow?.[0]).toMatchObject({ blendMode: 'normal', angle: 120, distance: { value: 6 }, size: { value: 10 }, useGlobalLight: false });
+    // O que o Photoshop recusou em 2026-10-02 ("as configurações no arquivo não eram válidas"): a sombra projetada ia
+    // com o contorno vazio. Agora vai o contorno linear, com os outros parâmetros neutros.
+    expect(fx?.dropShadow?.[0]?.contour).toEqual({
+      name: 'Linear',
+      curve: [
+        { x: 0, y: 0 },
+        { x: 255, y: 255 },
+      ],
+    });
+    expect(fx?.dropShadow?.[0]).toMatchObject({ choke: { units: 'Pixels', value: 0 }, antialiased: false, layerConceals: true });
+    // e o traço interno continua lá, junto com a sombra
+    expect(fx?.stroke?.[0]?.enabled).toBe(true);
     expect(fx?.dropShadow?.[0]?.opacity).toBeCloseTo(0.45, 2);
     const girada = camada(psd, 'Girada');
     expect(girada.opacity).toBeCloseTo(0.8, 2);
@@ -109,8 +124,8 @@ describe('texto', () => {
     expect(titulo.text?.style?.autoLeading).toBe(false);
     expect(titulo.text?.style?.tracking).toBe(20);
     expect(titulo.text?.shapeType).toBe('box');
-    expect(titulo.text?.boxBounds).toEqual([0, 0, 360, 64]);
-    expect(titulo.text?.transform).toEqual([1, 0, 0, 1, 20, 16]);
+    // a caixa desce (ascendente − maiúscula) × tamanho e encolhe o mesmo tanto: ver "texto não sai do lugar", abaixo
+    expect(titulo.text?.transform?.slice(0, 5)).toEqual([1, 0, 0, 1, 20]);
     expect(titulo.text?.paragraphStyle?.justification).toBe('left');
     // o pixel da camada vai junto: é o que o Photoshop mostra até a pessoa editar
     expect(titulo.imageData?.width).toBeGreaterThan(300);
@@ -140,8 +155,9 @@ describe('texto', () => {
     const t = camada(psd, 'Girado').text?.transform as number[];
     expect(t[0]).toBeCloseTo(Math.cos((-8 * Math.PI) / 180), 6);
     expect(t[1]).toBeCloseTo(Math.sin((-8 * Math.PI) / 180), 6);
-    // a origem da caixa, girada em torno do centro da camada
-    expect(Math.hypot((t[4] as number) - 335, (t[5] as number) - 253)).toBeCloseTo(Math.hypot(55, 17), 3);
+    // a origem da caixa (já descida pela compensação da primeira linha), girada em torno do centro da camada (335, 253)
+    const descida = (1.17627 - 0.859375) * 28;
+    expect(Math.hypot((t[4] as number) - 335, (t[5] as number) - 253)).toBeCloseTo(Math.hypot(55, 17 - descida), 0);
     expect(camada(psd, 'Peso trocado').text?.style?.font?.name).toBe('IBMPlexSans-Bold');
   });
 
@@ -196,8 +212,22 @@ describe('foto', () => {
     const nomes = psd.children?.map((c) => c.name) ?? [];
     const i = nomes.indexOf('Com ajuste de cor');
     expect(nomes.slice(i, i + 3)).toEqual(['Com ajuste de cor', 'Com ajuste de cor: brilho e contraste', 'Com ajuste de cor: saturação']);
-    expect(camada(psd, 'Com ajuste de cor: brilho e contraste')).toMatchObject({ clipping: true, adjustment: { type: 'brightness/contrast', brightness: 15, contrast: 20 } });
-    expect(camada(psd, 'Com ajuste de cor: saturação')).toMatchObject({ clipping: true, adjustment: { type: 'hue/saturation', master: { saturation: -40 } } });
+    // brilho 10, contraste 20: ganho 1,4, e a reta cruza o preto no nível 26 e o branco no 208
+    expect(camada(psd, 'Com ajuste de cor: brilho e contraste')).toMatchObject({
+      clipping: true,
+      adjustment: { type: 'levels', rgb: { shadowInput: 26, highlightInput: 208, shadowOutput: 0, highlightOutput: 255, midtoneInput: 1 } },
+    });
+    // saturação −40: cada canal fica com 60% dele e 40% do cinza
+    expect(camada(psd, 'Com ajuste de cor: saturação')).toMatchObject({
+      clipping: true,
+      adjustment: {
+        type: 'channel mixer',
+        monochrome: false,
+        red: { red: 72, green: 23, blue: 5, constant: 0 },
+        green: { red: 12, green: 83, blue: 5, constant: 0 },
+        blue: { red: 12, green: 23, blue: 65, constant: 0 },
+      },
+    });
   });
 
   it('a máscara do sujeito vai como máscara de camada, e a sombra como efeito', async () => {
@@ -276,12 +306,55 @@ describe('grupo, ajuste, máscara e recorte', () => {
 describe('efeitos de camada', () => {
   it('cada efeito com os parâmetros do documento e o modo com que o motor o desenha', async () => {
     const psd = await ler('efeitos');
-    expect(camada(psd, 'Brilho externo').effects?.outerGlow).toMatchObject({ enabled: true, blendMode: 'normal', color: { r: 245, g: 158, b: 11 }, size: { value: 14 } });
-    expect(camada(psd, 'Brilho interno').effects?.innerGlow).toMatchObject({ blendMode: 'screen', source: 'edge', size: { value: 14 } });
-    expect(camada(psd, 'Sombra interna').effects?.innerShadow?.[0]).toMatchObject({ blendMode: 'multiply', angle: 120, distance: { value: 6 }, size: { value: 8 } });
+    // todos os parâmetros que o Photoshop grava vão, nos valores neutros: contorno linear, sem retração, e o alcance
+    // do brilho em 100% (o desfoque puro, que é o que o motor desenha)
+    const contorno = {
+      name: 'Linear',
+      curve: [
+        { x: 0, y: 0 },
+        { x: 255, y: 255 },
+      ],
+    };
+    expect(camada(psd, 'Brilho externo').effects?.outerGlow).toMatchObject({
+      enabled: true,
+      blendMode: 'normal',
+      color: { r: 245, g: 158, b: 11 },
+      size: { value: 14 },
+      choke: { value: 0 },
+      range: 1,
+      noise: 0,
+      jitter: 0,
+      contour: contorno,
+    });
+    expect(camada(psd, 'Brilho interno').effects?.innerGlow).toMatchObject({
+      blendMode: 'screen',
+      source: 'edge',
+      size: { value: 14 },
+      choke: { value: 0 },
+      range: 1,
+      technique: 'softer',
+      contour: contorno,
+    });
+    expect(camada(psd, 'Sombra interna').effects?.innerShadow?.[0]).toMatchObject({
+      blendMode: 'multiply',
+      angle: 120,
+      distance: { value: 6 },
+      size: { value: 8 },
+      choke: { value: 0 },
+      contour: contorno,
+    });
+    // nenhum efeito de nenhuma cena sai com contorno vazio
+    for (const nome of ['forma', 'texto', 'imagem', 'vetor', 'efeitos', 'peca']) {
+      const ver = (l: Layer): void => {
+        for (const efeito of [...(l.effects?.dropShadow ?? []), ...(l.effects?.innerShadow ?? []), l.effects?.outerGlow, l.effects?.innerGlow])
+          if (efeito) expect(efeito.contour?.curve.length, `${nome}/${l.name}`).toBeGreaterThanOrEqual(2);
+        for (const f of l.children ?? []) ver(f);
+      };
+      for (const l of (await ler(nome)).children ?? []) ver(l);
+    }
     expect(camada(psd, 'Sobreposição de cor').effects?.solidFill?.[0]).toMatchObject({ blendMode: 'multiply', color: { r: 225, g: 29, b: 72 } });
     const degrade = camada(psd, 'Sobreposição de degradê').effects?.gradientOverlay?.[0];
-    expect(degrade).toMatchObject({ blendMode: 'soft light', type: 'linear', angle: 0 });
+    expect(degrade).toMatchObject({ blendMode: 'soft light', type: 'linear', angle: 0, scale: 1 });
     expect(degrade?.opacity).toBeCloseTo(0.7, 2);
     const noTexto = camada(psd, 'Texto com efeitos').effects;
     expect(Object.keys(noTexto ?? {}).sort()).toEqual(expect.arrayContaining(['gradientOverlay', 'innerShadow', 'outerGlow']));
@@ -298,10 +371,71 @@ describe('várias pranchetas num arquivo', () => {
     expect(camada(psd, 'Feed').artboard).toMatchObject({ rect: { top: 0, left: 0, bottom: 338, right: 270 }, color: { r: 12, g: 10, b: 9 } });
     expect(camada(psd, 'Story').artboard?.rect).toEqual({ top: 0, left: 430, bottom: 384, right: 646 });
     // as camadas da segunda prancheta estão deslocadas para a posição dela
-    expect(camada(psd, 'Story', 'Título').text?.transform?.slice(4)).toEqual([446, 250]);
+    expect(camada(psd, 'Story', 'Título').text?.transform?.[4]).toBe(446);
     expect(camada(psd, 'Story', 'Fundo').left).toBe(430);
     // a mesma foto nas duas pranchetas: um arquivo embutido só
     expect(psd.linkedFiles).toHaveLength(1);
+  });
+});
+
+describe('texto não sai do lugar quando o Photoshop o refaz', () => {
+  // O Photoshop refaz o texto em caixa encostando a ALTURA DA MAIÚSCULA da primeira linha no topo da caixa; o motor
+  // encosta a ascendente. A caixa gravada desce a diferença, para a linha de base cair no mesmo lugar.
+  // Anton: ascendente 1,17627 e maiúscula 0,859375 do corpo. IBM Plex Sans: 1,025 e 0,698.
+  it('a caixa desce (ascendente − maiúscula) × tamanho, e encolhe o mesmo tanto', async () => {
+    const psd = await ler('texto');
+    const titulo = camada(psd, 'Título').text;
+    // 52 px de Anton em y = 16: o motor põe a linha de base em 16 + 1,17627 × 52 (em pixel inteiro: 77)
+    const descida = (titulo?.transform?.[5] as number) - 16;
+    expect(descida).toBeGreaterThan((1.17627 - 0.859375) * 52 - 1);
+    expect(descida).toBeLessThan((1.17627 - 0.859375) * 52 + 1);
+    // topo da caixa + maiúscula = linha de base do motor
+    expect((titulo?.transform?.[5] as number) + 0.859375 * 52).toBeCloseTo(77, 0);
+    // a caixa encolhe o que desceu, e continua cobrindo a caixa da camada (64 de altura) e o texto que o motor desenhou
+    expect((titulo?.boxBounds?.[3] as number) + descida).toBeGreaterThanOrEqual(64);
+    expect((titulo?.boxBounds?.[3] as number) + descida).toBeLessThan(64 + 16);
+    expect(titulo?.boxBounds?.slice(0, 3)).toEqual([0, 0, 360]);
+    // IBM Plex Sans a 18 px: desce (1,025 − 0,698) × 18 = 5,9
+    const paragrafo = camada(psd, 'Parágrafo').text;
+    expect((paragrafo?.transform?.[5] as number) - 90).toBeCloseTo((1.025 - 0.698) * 18, 0);
+  });
+
+  it('a caixa nunca fica menor que o texto: as linhas que o motor desenhou cabem nela', async () => {
+    const psd = await ler('grupo-e-ajuste');
+    // "20\nJUN" a 30 px com entrelinha 0,95 numa caixa de 64 de altura
+    const data = camada(psd, 'Selo', 'Data').text;
+    const descida = (data?.transform?.[5] as number) - 34;
+    expect(descida).toBeGreaterThan(8);
+    expect(data?.boxBounds?.[3] as number).toBeGreaterThanOrEqual(30);
+    expect((data?.boxBounds?.[3] as number) + descida).toBeGreaterThanOrEqual(64);
+  });
+});
+
+describe('forma viva', () => {
+  it('retângulo, retângulo arredondado e elipse sem rotação levam os dados de forma viva; girada, só o caminho', async () => {
+    const psd = await ler('forma');
+    const viva = (nome: string) => camada(psd, nome).vectorOrigination?.keyDescriptorList[0];
+    expect(viva('Retângulo')).toMatchObject({
+      keyOriginType: 1,
+      keyOriginResolution: 72,
+      keyOriginShapeBoundingBox: { top: { units: 'Pixels', value: 20 }, left: { value: 20 }, bottom: { value: 90 }, right: { value: 120 } },
+      transform: [1, 0, 0, 1, 0, 0],
+    });
+    expect(viva('Arredondado')).toMatchObject({
+      keyOriginType: 2,
+      keyOriginRRectRadii: { topRight: { units: 'Pixels', value: 18 }, topLeft: { value: 18 }, bottomLeft: { value: 18 }, bottomRight: { value: 18 } },
+    });
+    expect(viva('Arredondado')?.keyOriginBoxCorners).toEqual([
+      { x: 140, y: 20 },
+      { x: 240, y: 20 },
+      { x: 240, y: 90 },
+      { x: 140, y: 90 },
+    ]);
+    expect(viva('Elipse')).toMatchObject({ keyOriginType: 5 });
+    expect(viva('Elipse')?.keyOriginRRectRadii).toBeUndefined();
+    expect(camada(psd, 'Girada').vectorOrigination).toBeUndefined();
+    // a foto e o fundo não são forma viva
+    expect(camada(psd, 'Fundo').vectorOrigination).toBeUndefined();
   });
 });
 

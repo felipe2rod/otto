@@ -113,6 +113,8 @@ export interface TextoDoArquivo {
   estilo: EstiloDeTextoDoArquivo;
   /** estilo por sequência de caracteres, cobrindo o texto inteiro, quando há trechos */
   trechos?: { comprimento: number; estilo: Pick<EstiloDeTextoDoArquivo, 'fonte' | 'tamanho' | 'cor' | 'espacamento' | 'entrelinha'> }[];
+  /** versalete: a fração do corpo em que vão as letras que foram escritas em minúscula (o formato que não tem versalete as desenha menores) */
+  versalete?: number;
   /**
    * As linhas como o Otto as quebrou, para o formato que não requebra sozinho (o vetorial): onde cada uma começa,
    * dentro da caixa do texto (antes de `transformacao`), e os pedaços dela, cada um com o estilo e o texto já como aparece.
@@ -124,7 +126,13 @@ export interface LinhaDeTextoDoArquivo {
   /** começo da linha e linha de base, a partir do canto da caixa */
   x: number;
   base: number;
-  pedacos: { texto: string; estilo: Pick<EstiloDeTextoDoArquivo, 'fonte' | 'familia' | 'peso' | 'tamanho' | 'cor' | 'espacamento'> }[];
+  pedacos: {
+    /** como aparece (em maiúsculas, se a camada está em caixa alta ou em versalete) */
+    texto: string;
+    /** como foi escrito, quando a camada está em versalete */
+    original?: string;
+    estilo: Pick<EstiloDeTextoDoArquivo, 'fonte' | 'familia' | 'peso' | 'tamanho' | 'cor' | 'espacamento'>;
+  }[];
 }
 
 /** Imagem já codificada, para o formato que embute arquivo de imagem (o vetorial). */
@@ -201,6 +209,16 @@ export interface CamadaDoArquivo {
   preenchimento?: PreenchimentoDoArquivo;
   mascaraVetorial?: CaminhoDoArquivo[];
   tracoVetorial?: TracoVetorialDoArquivo;
+  /**
+   * camada de ajuste "misturador de canais": cada canal de saída é uma soma dos três de entrada mais uma constante,
+   * tudo em porcento (100 = o canal inteiro; constante 100 = branco). É como o ajuste de saturação da foto vai, exato.
+   */
+  misturaDeCanais?: Record<'vermelho' | 'verde' | 'azul', { vermelho: number; verde: number; azul: number; constante: number }>;
+  /**
+   * a forma como "forma viva" do Photoshop (retângulo, com raio, ou elipse, sem rotação): além do caminho, o painel
+   * Propriedades mostra largura, altura e raio de canto
+   */
+  formaViva?: { forma: 'retangulo' | 'elipse'; x: number; y: number; largura: number; altura: number; raio: number };
   texto?: TextoDoArquivo;
   objetoInteligente?: ObjetoInteligenteDoArquivo;
   /** imagem codificada: a foto original, ou a camada rasterizada (saída vetorial) */
@@ -231,6 +249,25 @@ export interface ArquivoGravado {
   extensao: 'psd' | 'psb' | 'svg' | 'pdf';
 }
 
+/** Os modos de mesclagem que o PDF tem (os do padrão; os outros dez do Photoshop não existem nele). */
+export const MODOS_DO_PDF: readonly ModoDeMesclagem[] = [
+  'escurecer',
+  'multiplicacao',
+  'subexposicao-de-cores',
+  'clarear',
+  'tela',
+  'superexposicao-de-cores',
+  'sobrepor',
+  'luz-suave',
+  'luz-direta',
+  'diferenca',
+  'exclusao',
+  'matiz',
+  'saturacao',
+  'cor',
+  'luminosidade',
+];
+
 /** Maior lado que o PSD comum aceita. Acima disso o arquivo é PSB. */
 export const MAIOR_LADO_DO_PSD = 30_000;
 
@@ -243,5 +280,7 @@ export interface FormatoDeArquivoEmCamadas {
     paginas: boolean;
     /** degradê com parada transparente */
     degradeTransparente: boolean;
+    /** os modos de mesclagem que o formato guarda e que o Illustrator aplica ao abrir (além de normal) */
+    modos: readonly ModoDeMesclagem[];
   };
 }

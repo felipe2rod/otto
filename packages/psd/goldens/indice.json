@@ -1,30 +1,30 @@
 {
   "forma": {
-    "bytes": 188532,
-    "sha256": "32941a0f0e38121cd19431df6235672eb16a62417f0d0b2474e733e4b63f876f"
+    "bytes": 195004,
+    "sha256": "7ae67288fa8d342869ab4cdd6471d78a73e9a81fb1c8016e426160f55c87d252"
   },
   "texto": {
-    "bytes": 200033,
-    "sha256": "9fbf733920c1d0c68cf388a1d225c3c5ff2782ea60bfdc154af9d0f1c46c4f24"
+    "bytes": 214041,
+    "sha256": "7dc8ad0c24141240cf20539c7d9a7d9f29ebfb27d08251c7717c19ed9d065b18"
   },
   "imagem": {
-    "bytes": 779876,
-    "sha256": "caf623c718b423cd5597c40da12230eecb39a65adfe9091f6a2330cd96641f5c"
+    "bytes": 780496,
+    "sha256": "42e1d06f484b0bdff689d28ea3e5c5755098b7d8f68c8cfb3092931076dcf8e9"
   },
   "vetor": {
-    "bytes": 65883,
-    "sha256": "9a9c27dc7a061029e9000f093949bd7f1ae66e21ce8896509d2c0db6bc8765fb"
+    "bytes": 66079,
+    "sha256": "c57002b3c09e6de8b173294dfc19b52e81d708d5166d7f7f35eea1fbc8d4a307"
   },
   "grupo-e-ajuste": {
-    "bytes": 777864,
-    "sha256": "5ff2ccf5c06e1faf1f94b77e8ec2a32e83222ebd498350b51115a373fb950ccb"
+    "bytes": 781780,
+    "sha256": "4e27bb6bd23a8129979e958ec5c75c84bd37cb10463008e041fe0722f864eaef"
   },
   "efeitos": {
-    "bytes": 222436,
-    "sha256": "2a037d05ee7e5e26c773a7680998e8feeb40de9b8ff12ba8afe2a80a72da23dd"
+    "bytes": 229352,
+    "sha256": "c6c57a69977f0144e79a9859af38730cbbe5d4c44f51f12457c494ed6ec83cfe"
   },
   "peca": {
-    "bytes": 783988,
-    "sha256": "0985a463ed0448d4a730ac36f1f75f972cddf1acaa6be7b78b4818cfda8a6ad6"
+    "bytes": 786336,
+    "sha256": "1bce4b1594d7fbcae5449095fd963bde8fc5c439aabf4664a523efce8f76ba8c"
   }
 }

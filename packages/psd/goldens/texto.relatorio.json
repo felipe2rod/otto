@@ -62,6 +62,15 @@
       "destino": "nativo-editavel",
       "mapeamento": "no:texto",
       "observacao": "texto em caixa, IBMPlexSans-Bold, 18 px"
+    },
+    {
+      "prancheta": "Peça",
+      "camada": "Versalete",
+      "idDoNo": "3fd2f4ae-aea7-8f1d-9004-f8b37b92fd9d",
+      "tipo": "texto",
+      "destino": "nativo-editavel",
+      "mapeamento": "no:texto",
+      "observacao": "texto em caixa, IBMPlexSans, 14 px"
     }
   ],
   "tokens": [],

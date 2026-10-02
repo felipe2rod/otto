@@ -18,7 +18,7 @@ import {
   resolverCor,
   todasAsCamadas,
 } from '@otto/documento';
-import { escolherFonte, extremosDoDegrade, textoExibido } from '@otto/render';
+import { escolherFonte, extremosDoDegrade, FATOR_DO_VERSALETE, textoExibido } from '@otto/render';
 import { type Mapa, mapearNos, nosDaForma, nosDoSubcaminho, subcaminhosDe } from './caminho';
 import { type ChaveDoMapeamento, MAPEAMENTO } from './mapeamento';
 import { cantosDaFoto, type FonteDisponivel, type ImagemDisponivel } from './montar';
@@ -29,8 +29,18 @@ import { type DestinoVetorial, nomeDaCamada, type RelatorioDeExportacaoVetorial 
 export interface MeiosDoVetorial {
   /** As linhas do texto como o motor as quebrou: onde começam, a linha de base, e que trecho do conteúdo mostram. */
   linhas(no: NoTexto): { x: number; base: number; inicio: number; fim: number }[];
-  /** Os nós desenhados juntos numa imagem PNG, já posicionada. Sem nada a desenhar, undefined. */
-  rasterizar(p: Prancheta, nos: readonly No[]): ImagemDoArquivo | undefined;
+  /**
+   * Os nós desenhados juntos numa imagem, já posicionada. Sem nada a desenhar, undefined.
+   * `comFundo`: a prancheta inteira, com o fundo dela (para achatar). `escalaMaxima`: não passar desta resolução
+   * (a foto que virou imagem não ganha nada acima da resolução do arquivo dela).
+   */
+  rasterizar(p: Prancheta, nos: readonly No[], opcoes?: { comFundo?: boolean; escalaMaxima?: number }): ImagemDoArquivo | undefined;
+  /**
+   * A imagem que, posta em modo normal por cima de `antes`, dá a mesma cor que `depois`. As duas listas são a prancheta
+   * até certa camada: sem ela e com ela. É como a camada com modo de mesclagem que o arquivo não guarda vai para ele sem
+   * mudar a cor da peça e sem transformar em imagem o que está abaixo. Sem diferença nenhuma, undefined.
+   */
+  equivalenteEmNormal(p: Prancheta, antes: readonly No[], depois: readonly No[]): ImagemDoArquivo | undefined;
 }
 
 export interface PedidoDeMontagemVetorial {
@@ -42,6 +52,11 @@ export interface PedidoDeMontagemVetorial {
   meios?: MeiosDoVetorial;
   /** o formato não guarda degradê com parada transparente (PDF): a forma vira imagem */
   semDegradeTransparente?: boolean;
+  /**
+   * Os modos de mesclagem que o formato guarda E que o Illustrator lê (além de normal). O PDF: os 15 que ele tem.
+   * O SVG: nenhum (o Illustrator não aplica `mix-blend-mode`). Camada com outro modo vira a imagem equivalente em modo normal.
+   */
+  modos?: readonly ModoDoGrupo[];
   rel: RelatorioDeExportacaoVetorial;
 }
 
@@ -51,15 +66,20 @@ export interface MontagemVetorial {
   camadas: CamadaDoArquivo[];
   /** nomes PostScript das fontes do texto que saiu como texto */
   fontesUsadas: string[];
-  /** alguma camada tinha modo de mesclagem que o formato não tem, e saiu em normal */
-  modoTrocado: boolean;
+  /** quantas camadas foram achatadas numa imagem só, com o que estava abaixo de uma camada de ajuste */
+  achatadas: number;
+  /** quantas camadas com modo de mesclagem viraram a imagem equivalente em modo normal */
+  modosEmImagem: number;
+  /** há imagem do tamanho da prancheta por cima de texto: no Illustrator o clique da ferramenta Texto cai nela */
+  imagemSobreTexto: boolean;
 }
 
 interface Contexto extends PedidoDeMontagemVetorial {
   p: Prancheta;
   imagensPorChave: ReadonlyMap<string, ImagemDisponivel>;
   fontesUsadas: Set<string>;
-  modoTrocado: boolean;
+  achatadas: number;
+  modosEmImagem: number;
 }
 
 const cor = (doc: Documento, c: string): Rgb => {
@@ -95,8 +115,8 @@ function degrade(doc: Documento, d: Degrade, no: NoVisual): DegradeDoArquivo {
 const preenchimento = (doc: Documento, pr: Preenchimento, no: NoVisual): PreenchimentoDoArquivo =>
   typeof pr === 'string' ? { tipo: 'cor', cor: cor(doc, pr) } : { tipo: 'degrade', ...degrade(doc, pr, no) };
 
-/** Os modos que o SVG (mix-blend-mode) e o PDF têm. Os outros são do Photoshop só. */
-const TEM_NO_VETORIAL = (modo: ModoDoGrupo): boolean => MAPEAMENTO[`modo:${modo}`].vetorial?.destino === 'Nativo';
+/** A camada tem modo de mesclagem que o formato (ou o Illustrator, lendo o formato) não aplica? */
+const semModo = (no: No, cx: Contexto): boolean => no.modoDeMesclagem !== 'normal' && no.modoDeMesclagem !== 'atravessar' && !(cx.modos ?? []).includes(no.modoDeMesclagem);
 
 const NOME_DO_FILTRO: Record<Filtro['tipo'], string> = { desfoque: 'desfoque', 'desfoque-de-movimento': 'desfoque de movimento', ruido: 'ruído', nitidez: 'nitidez' };
 const NOME_DO_EFEITO = {
@@ -158,40 +178,37 @@ function recorteDaMascara(no: No): CaminhoDoArquivo[] | undefined {
 const paraImagem = <T extends No>(no: T): T => ({ ...no, opacidade: 1, modoDeMesclagem: no.tipo === 'grupo' ? 'atravessar' : 'normal', visivel: true, recortadaNaDeBaixo: false });
 
 function comum(no: No, cx: Contexto): CamadaDoArquivo {
-  const temModo = TEM_NO_VETORIAL(no.modoDeMesclagem);
-  if (!temModo) cx.modoTrocado = true;
-  return { nome: no.nome, opacidade: no.opacidade, modo: temModo ? no.modoDeMesclagem : 'normal', oculta: !no.visivel, recortadaNaDeBaixo: false, bloqueada: false };
+  // modo que o formato não aplica só chega aqui em camada oculta (as visíveis viraram imagem): sai como normal
+  return { nome: no.nome, opacidade: no.opacidade, modo: semModo(no, cx) ? 'normal' : no.modoDeMesclagem, oculta: !no.visivel, recortadaNaDeBaixo: false, bloqueada: false };
 }
 
 function linha(cx: Contexto, no: No, destino: DestinoVetorial, mapeamento: ChaveDoMapeamento, observacao: string): void {
   const extras = [
-    no.modoDeMesclagem !== 'normal' && no.modoDeMesclagem !== 'atravessar'
-      ? TEM_NO_VETORIAL(no.modoDeMesclagem)
-        ? `modo ${no.modoDeMesclagem}`
-        : `modo ${no.modoDeMesclagem} não existe no formato: saiu em modo normal`
-      : '',
+    no.modoDeMesclagem !== 'normal' && no.modoDeMesclagem !== 'atravessar' && !semModo(no, cx) ? `modo ${no.modoDeMesclagem}` : '',
     ehVisualComRotacao(no) ? `girada ${no.rotacao}°` : '',
   ].filter(Boolean);
   cx.rel.camadas.push({ prancheta: cx.p.nome, camada: no.nome, idDoNo: no.id, tipo: no.tipo, destino, mapeamento, observacao: [observacao, ...extras].filter(Boolean).join('; ') });
 }
 const ehVisualComRotacao = (no: No): no is NoVisual => 'rotacao' in no && no.rotacao !== 0;
 
-/** Estilo de cada caractere do texto exibido: o da camada, os trechos por cima, e o versalete (minúscula vira maiúscula a 75% do corpo). */
+/**
+ * As linhas do texto, cada uma partida só onde o estilo muda (fonte, tamanho, cor, espaçamento). O versalete NÃO parte
+ * a linha: cada pedaço leva o texto como aparece (em maiúsculas) e como foi escrito, e o formato decide como mostra.
+ */
 function linhasDoTexto(no: NoTexto, cx: Contexto): LinhaDeTextoDoArquivo[] | undefined {
   if (!cx.meios) return undefined;
   const exibido = textoExibido(no);
+  const versalete = no.versalete && !no.caixaAlta;
   type Estilo = LinhaDeTextoDoArquivo['pedacos'][number]['estilo'];
   const estilos: { chave: string; estilo: Estilo }[] = [];
   for (let i = 0; i < exibido.length; i++) {
     const t = [...(no.trechos ?? [])].reverse().find((x) => i >= x.inicio && i < x.fim);
     const fonte = escolherFonte(cx.fontes, t?.fonte ?? no.fonte, t?.peso ?? no.peso) as FonteDisponivel;
-    const original = no.conteudo[i] ?? '';
-    const menor = no.versalete && !no.caixaAlta && original !== original.toLocaleUpperCase('pt-BR');
     const estilo: Estilo = {
       fonte: fonte.postScript,
       familia: fonte.familia,
       peso: fonte.peso,
-      tamanho: (t?.tamanho ?? no.tamanho) * (menor ? 0.75 : 1),
+      tamanho: t?.tamanho ?? no.tamanho,
       cor: cor(cx.doc, t?.cor ?? no.cor),
       espacamento: t?.espacamento ?? no.espacamento,
     };
@@ -205,8 +222,10 @@ function linhasDoTexto(no: NoTexto, cx: Contexto): LinhaDeTextoDoArquivo[] | und
     for (let i = l.inicio; i < fim; i++) {
       const e = estilos[i] as (typeof estilos)[number];
       const ultimo = pedacos[pedacos.length - 1];
-      if (ultimo && i > l.inicio && estilos[i - 1]?.chave === e.chave) ultimo.texto += exibido[i];
-      else pedacos.push({ texto: exibido[i] as string, estilo: e.estilo });
+      if (ultimo && i > l.inicio && estilos[i - 1]?.chave === e.chave) {
+        ultimo.texto += exibido[i];
+        if (versalete) ultimo.original = (ultimo.original ?? '') + (no.conteudo[i] ?? '');
+      } else pedacos.push({ texto: exibido[i] as string, estilo: e.estilo, ...(versalete ? { original: no.conteudo[i] ?? '' } : {}) });
     }
     return { x: l.x - no.x, base: l.base - no.y, pedacos };
   });
@@ -247,6 +266,7 @@ function camadaDeTexto(no: NoTexto, cx: Contexto): CamadaDoArquivo {
       caixa: { largura: no.largura, altura: no.altura },
       alinhamento: no.alinhamento,
       estilo,
+      ...(estilo.caixa === 'versalete' ? { versalete: FATOR_DO_VERSALETE } : {}),
       ...(linhas ? { linhas } : {}),
     },
   };
@@ -322,6 +342,15 @@ function camadaDoVetor(no: NoVetor, cx: Contexto): CamadaDoArquivo {
   return { ...comum(no, cx), filhos, ...(recorteVetorial ? { recorteVetorial } : {}) };
 }
 
+/** A resolução acima da qual a foto não ganha nada: os pixels do arquivo dela por unidade do documento (nunca menos de 1). */
+function escalaDaFoto(no: No, cx: Contexto): number | undefined {
+  if (no.tipo !== 'imagem') return undefined;
+  const original = cx.imagensPorChave.get(no.arquivo);
+  const largura = original?.largura ?? no.larguraOriginal;
+  const cantos = cantosDaFoto(largura, original?.altura ?? no.alturaOriginal, no);
+  return Math.max(1, largura / ((cantos[2] as number) - (cantos[0] as number)));
+}
+
 /** A camada (ou o conjunto) como uma imagem só, e a linha de cada nó dela no relatório. */
 function comoImagem(nos: readonly No[], motivo: Motivo, observacao: string, cx: Contexto): CamadaDoArquivo {
   const base = nos[0] as No;
@@ -345,21 +374,116 @@ function comoImagem(nos: readonly No[], motivo: Motivo, observacao: string, cx: 
       else cx.rel.emFalta.fontes.push({ familia: f.pedida.familia, camadas: [nomeDaCamada(cx.p, base.nome)] });
     }
   }
+  const escalaMaxima = nos.length === 1 ? escalaDaFoto(base, cx) : undefined;
   const imagem = cx.meios?.rasterizar(
     cx.p,
     nos.map((n, i) => (i === 0 ? paraImagem(n) : n)),
+    escalaMaxima ? { escalaMaxima } : {},
   );
   return { ...comum(base, cx), ...(imagem ? { imagem } : {}) };
 }
 
-/** A camada tem forma que serve de recorte para as presas a ela? */
-const serveDeBase = (c: CamadaDoArquivo): boolean => !c.imagem || Boolean(c.mascaraVetorial);
+/** O grupo deixa passar o que está abaixo dele para os filhos, sem mexer neles (sem opacidade nem máscara próprias)? */
+const atravessa = (g: No): boolean => g.tipo === 'grupo' && g.modoDeMesclagem === 'atravessar' && g.opacidade >= 1 && !g.mascara;
+
+/**
+ * Como a camada precisa do que está abaixo dela:
+ * - `achatar`: camada de ajuste. Ela e tudo o que está abaixo viram uma imagem só (decisão do Felipe, 2026-10-02).
+ * - `equivalente`: modo de mesclagem que o arquivo não guarda. A camada vira a imagem que, em modo normal, dá a mesma
+ *   cor sobre o que está abaixo; o que está abaixo continua como está.
+ */
+type Dependencia = Motivo & { camada: string; como: 'achatar' | 'equivalente' };
+
+const motivoDoModo = (no: No, cx: Contexto): Dependencia => ({
+  chave:
+    (cx.modos ?? []).length === 0 && MAPEAMENTO[`modo:${no.modoDeMesclagem as Exclude<ModoDoGrupo, 'atravessar'>}`].vetorial?.destino === 'Nativo'
+      ? 'modo-no-svg'
+      : (`modo:${no.modoDeMesclagem}` as ChaveDoMapeamento),
+  texto: `modo de mesclagem ${no.modoDeMesclagem}`,
+  camada: no.nome,
+  como: 'equivalente',
+});
+
+/**
+ * Por que a camada (visível, e que não está presa a outra) precisa do que está abaixo dela já pronto: camada de ajuste,
+ * modo de mesclagem que o arquivo não guarda, ou grupo em "atravessar" com uma dessas dentro.
+ */
+function dependeDoQueEstaAbaixo(no: No, cx: Contexto): Dependencia | undefined {
+  if (!no.visivel || no.recortadaNaDeBaixo) return undefined;
+  if (no.tipo === 'ajuste') return { chave: `ajuste:${no.ajuste.tipo}`, texto: 'camada de ajuste', camada: no.nome, como: 'achatar' };
+  if (semModo(no, cx)) return motivoDoModo(no, cx);
+  if (no.tipo !== 'grupo' || no.modoDeMesclagem !== 'atravessar') return undefined;
+  // grupo em "atravessar": o que está dentro age sobre o que está abaixo do grupo
+  const dentro = no.filhos.flatMap((f) => dependeDoQueEstaAbaixo(f, cx) ?? []);
+  const ajuste = dentro.find((d) => d.como === 'achatar');
+  if (ajuste) return ajuste;
+  // só modos de mesclagem dentro: sem opacidade nem máscara no grupo, cada camada de dentro se resolve sozinha;
+  // com elas, o grupo inteiro é que vira a imagem equivalente
+  return atravessa(no) ? undefined : dentro[0];
+}
+
+/** Dentro de um grupo isolado, ou entre as camadas presas a uma base: há camada que age sobre o que está abaixo dela (dentro do próprio conjunto)? */
+function dependenteDentro(nos: readonly No[], cx: Contexto): Dependencia | undefined {
+  for (const n of nos) {
+    // presa por recorte: camada de ajuste, ou modo que o arquivo não guarda, age sobre a base
+    if (n.recortadaNaDeBaixo && n.visivel && (n.tipo === 'ajuste' || semModo(n, cx))) return dependeDoQueEstaAbaixo({ ...n, recortadaNaDeBaixo: false }, cx);
+    const d = dependeDoQueEstaAbaixo(n, cx);
+    if (d) return d;
+    if (atravessa(n) && n.tipo === 'grupo') {
+      const maisDentro = dependenteDentro(n.filhos, cx);
+      if (maisDentro) return maisDentro;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A prancheta até a camada de id `alvo`, na ordem em que é desenhada: tudo o que vem antes dela e, com `quantas`,
+ * ela e as seguintes (as presas a ela). Grupo em "atravessar" no caminho entra só com o que vem antes.
+ */
+function ate(filhos: readonly No[], alvo: string, quantas: number): No[] | undefined {
+  const antes: No[] = [];
+  for (let i = 0; i < filhos.length; i++) {
+    const n = filhos[i] as No;
+    if (n.id === alvo) return [...antes, ...filhos.slice(i, i + quantas)];
+    if (n.tipo === 'grupo') {
+      const dentro = ate(n.filhos, alvo, quantas);
+      if (dentro) return [...antes, { ...n, filhos: dentro }];
+    }
+    antes.push(n);
+  }
+  return undefined;
+}
+
+/**
+ * A camada com modo de mesclagem que o arquivo não guarda (com as presas a ela, se houver) como a imagem que, em modo
+ * normal, dá a mesma cor sobre o que está abaixo dela. O que está abaixo continua em vetor.
+ */
+function comoEquivalente(nos: readonly No[], motivo: Dependencia, cx: Contexto): CamadaDoArquivo {
+  const base = nos[0] as No;
+  const observacao = `${motivo.texto}${motivo.camada === base.nome ? '' : ` em "${motivo.camada}"`}: virou uma imagem em modo normal que dá a mesma cor sobre o que estava abaixo dela na exportação. O que está abaixo continua editável, e esta imagem não acompanha se ele mudar`;
+  cx.rel.camadas.push({ prancheta: cx.p.nome, camada: base.nome, idDoNo: base.id, tipo: base.tipo, destino: 'raster-com-aviso', mapeamento: motivo.chave, observacao });
+  for (const n of [...nos.slice(1), ...(base.tipo === 'grupo' ? todasAsCamadas(base.filhos) : [])])
+    cx.rel.camadas.push({
+      prancheta: cx.p.nome,
+      camada: n.nome,
+      idDoNo: n.id,
+      tipo: n.tipo,
+      destino: 'raster-com-aviso',
+      mapeamento: motivo.chave,
+      observacao: `está dentro da imagem de "${base.nome}"`,
+    });
+  cx.modosEmImagem++;
+  const antes = ate(cx.p.filhos, base.id, 0);
+  const depois = ate(cx.p.filhos, base.id, nos.length);
+  const imagem = antes && depois ? cx.meios?.equivalenteEmNormal(cx.p, antes, depois) : undefined;
+  // a opacidade e o modo já estão na imagem
+  return { nome: base.nome, opacidade: 1, modo: 'normal', oculta: false, recortadaNaDeBaixo: false, bloqueada: false, ...(imagem ? { imagem } : {}) };
+}
 
 function camadaDoNo(no: No, cx: Contexto): CamadaDoArquivo | undefined {
-  if (no.tipo === 'ajuste') {
-    linha(cx, no, 'omitido-com-aviso', `ajuste:${no.ajuste.tipo}`, 'camada de ajuste: não vai para o arquivo vetorial');
-    return undefined;
-  }
+  // camada de ajuste oculta: não desenha nada, e não vai
+  if (no.tipo === 'ajuste') return undefined;
   if (no.tipo === 'grupo') {
     const m = no.mascara;
     if (m && !recorteDaMascara(no)) {
@@ -371,6 +495,10 @@ function camadaDoNo(no: No, cx: Contexto): CamadaDoArquivo | undefined {
             : { chave: 'mascara-suave-ou-invertida', texto: 'máscara de forma com borda suave ou invertida' };
       return comoImagem([no], motivo, `grupo com ${motivo.texto}: virou uma imagem só`, cx);
     }
+    // grupo isolado com camada de ajuste ou modo que o arquivo não guarda dentro: o efeito fica dentro do grupo, e ele vira uma imagem.
+    // (No grupo em "atravessar" sem opacidade nem máscara, cada camada de dentro se resolve sozinha.)
+    const dentro = atravessa(no) ? undefined : dependenteDentro(no.filhos, cx);
+    if (dentro) return comoImagem([no], dentro, `grupo com ${dentro.texto} em "${dentro.camada}": virou uma imagem só, com a cor certa`, cx);
     linha(cx, no, 'nativo-editavel', 'no:grupo', 'grupo');
     const recorteVetorial = recorteDaMascara(no);
     return { ...comum(no, cx), filhos: camadasDaLista(no.filhos, cx), ...(recorteVetorial ? { recorteVetorial } : {}) };
@@ -415,9 +543,21 @@ function camadasDaLista(nos: readonly No[], cx: Contexto): CamadaDoArquivo[] {
     const base = nos[i] as No;
     const presas: No[] = [];
     while (base.tipo !== 'ajuste' && nos[i + 1]?.recortadaNaDeBaixo) presas.push(nos[++i] as No);
+    // modo de mesclagem que o arquivo não guarda: a camada (com as presas a ela) vira a imagem equivalente em modo normal
+    const depende = dependeDoQueEstaAbaixo(base, cx);
+    if (depende?.como === 'equivalente') {
+      saida.push(comoEquivalente([base, ...presas], depende, cx));
+      continue;
+    }
     if (presas.length === 0) {
       const c = camadaDoNo(base, cx);
       if (c) saida.push(c);
+      continue;
+    }
+    // camada de ajuste (ou modo que o formato não aplica) presa à base: age só sobre a base, e o conjunto vira uma imagem
+    const presaDependente = dependenteDentro(presas, cx);
+    if (presaDependente) {
+      saida.push(comoImagem([base, ...presas], presaDependente, `${presaDependente.texto} em "${presaDependente.camada}", presa a esta camada: as duas viraram uma imagem só, com a cor certa`, cx));
       continue;
     }
     // a base precisa ter forma vetorial para cortar as presas: forma, vetor ou foto. Texto e camada que virou imagem não têm
@@ -434,7 +574,7 @@ function camadasDaLista(nos: readonly No[], cx: Contexto): CamadaDoArquivo[] {
       continue;
     }
     const c = camadaDoNo(base, cx);
-    if (c && serveDeBase(c)) saida.push(c);
+    if (c) saida.push(c);
     for (const presa of presas) {
       const p = camadaDoNo(presa, cx);
       if (p) saida.push({ ...p, recortadaNaDeBaixo: true });
@@ -443,22 +583,64 @@ function camadasDaLista(nos: readonly No[], cx: Contexto): CamadaDoArquivo[] {
   return saida;
 }
 
-/** Monta as camadas de uma prancheta para a saída vetorial e preenche o relatório. */
+/** A camada sai como imagem (foto, ou camada que virou imagem) e cobre a prancheta quase inteira? */
+function imagemQueCobre(no: No, cx: Contexto): boolean {
+  if (!no.visivel || no.tipo === 'grupo' || no.tipo === 'ajuste') return false;
+  if (no.tipo !== 'imagem' && motivosParaImagem(no, cx).length === 0) return false;
+  return no.largura >= cx.p.largura * 0.9 && no.altura >= cx.p.altura * 0.9;
+}
+const temTexto = (no: No): boolean => no.visivel && (no.tipo === 'texto' || (no.tipo === 'grupo' && no.filhos.some(temTexto)));
+
+/**
+ * Monta as camadas de uma prancheta para a saída vetorial e preenche o relatório.
+ *
+ * Camada de ajuste muda a cor de tudo o que está abaixo dela, e o vetor não tem como guardar isso. Para a cor ficar
+ * certa (decisão do Felipe, 2026-10-02), tudo o que está abaixo da mais alta delas, e ela própria, vira UMA imagem com
+ * o fundo da prancheta. O que está acima continua vetor. Camada com modo de mesclagem que o arquivo não guarda não
+ * achata nada: ela vira a imagem equivalente em modo normal (ver `comoEquivalente`).
+ */
 export function montarVetorial(pedido: PedidoDeMontagemVetorial): MontagemVetorial {
   const p = pedido.prancheta;
-  const cx: Contexto = { ...pedido, p, imagensPorChave: new Map(pedido.imagens.map((i) => [i.arquivo, i])), fontesUsadas: new Set(), modoTrocado: false };
+  const cx: Contexto = { ...pedido, p, imagensPorChave: new Map(pedido.imagens.map((i) => [i.arquivo, i])), fontesUsadas: new Set(), achatadas: 0, modosEmImagem: 0 };
   const fundo = cor(pedido.doc, p.fundo);
-  cx.rel.camadas.push({ prancheta: p.nome, camada: 'Fundo', tipo: 'prancheta', destino: 'nativo-editavel', mapeamento: 'fundo-da-prancheta', observacao: 'retângulo do tamanho da prancheta' });
-  const camadaDeFundo: CamadaDoArquivo = {
-    nome: 'Fundo',
-    opacidade: 1,
-    modo: 'normal',
-    oculta: false,
-    recortadaNaDeBaixo: false,
-    bloqueada: false,
-    preenchimento: { tipo: 'cor', cor: fundo },
-    mascaraVetorial: [{ aberto: false, regra: 'nao-zero', nos: nosDaForma('retangulo', 0, 0, p.largura, p.altura, 0) }],
-  };
-  const camadas = [camadaDeFundo, ...camadasDaLista(p.filhos, cx)];
-  return { largura: p.largura, altura: p.altura, camadas, fontesUsadas: [...cx.fontesUsadas], modoTrocado: cx.modoTrocado };
+  // a camada de ajuste mais alta (ou o grupo em "atravessar" que a contém), com as presas a ela, se houver
+  let corte = -1;
+  let motivo: Dependencia | undefined;
+  for (let i = 0; i < p.filhos.length; i++) {
+    const d = dependeDoQueEstaAbaixo(p.filhos[i] as No, cx);
+    if (d?.como !== 'achatar') continue;
+    corte = i;
+    motivo = d;
+  }
+  while (corte >= 0 && p.filhos[corte + 1]?.recortadaNaDeBaixo) corte++;
+
+  const camadas: CamadaDoArquivo[] = [];
+  if (motivo && corte >= 0) {
+    const abaixo = p.filhos.slice(0, corte + 1);
+    const observacao = `achatada numa imagem só com o que está abaixo de "${motivo.camada}" (${motivo.texto}), para a cor ficar certa`;
+    cx.rel.camadas.push({ prancheta: p.nome, camada: 'Fundo', tipo: 'prancheta', destino: 'raster-com-aviso', mapeamento: motivo.chave, observacao });
+    for (const n of todasAsCamadas(abaixo)) {
+      cx.rel.camadas.push({ prancheta: p.nome, camada: n.nome, idDoNo: n.id, tipo: n.tipo, destino: 'raster-com-aviso', mapeamento: motivo.chave, observacao });
+      if (n.visivel) cx.achatadas++;
+    }
+    const imagem = cx.meios?.rasterizar(p, abaixo, { comFundo: true });
+    camadas.push({ nome: 'Fundo (achatado)', opacidade: 1, modo: 'normal', oculta: false, recortadaNaDeBaixo: false, bloqueada: false, ...(imagem ? { imagem } : {}) });
+  } else {
+    cx.rel.camadas.push({ prancheta: p.nome, camada: 'Fundo', tipo: 'prancheta', destino: 'nativo-editavel', mapeamento: 'fundo-da-prancheta', observacao: 'retângulo do tamanho da prancheta' });
+    camadas.push({
+      nome: 'Fundo',
+      opacidade: 1,
+      modo: 'normal',
+      oculta: false,
+      recortadaNaDeBaixo: false,
+      bloqueada: false,
+      preenchimento: { tipo: 'cor', cor: fundo },
+      mascaraVetorial: [{ aberto: false, regra: 'nao-zero', nos: nosDaForma('retangulo', 0, 0, p.largura, p.altura, 0) }],
+    });
+  }
+  camadas.push(...camadasDaLista(p.filhos.slice(corte + 1), cx));
+  // imagem do tamanho da prancheta por cima de texto que saiu como texto (o fundo achatado fica embaixo de tudo, e não conta)
+  const acima = p.filhos.slice(corte + 1);
+  const imagemSobreTexto = acima.some((n, i) => imagemQueCobre(n, cx) && acima.slice(0, i).some(temTexto));
+  return { largura: p.largura, altura: p.altura, camadas, fontesUsadas: [...cx.fontesUsadas], achatadas: cx.achatadas, modosEmImagem: cx.modosEmImagem, imagemSobreTexto };
 }

@@ -61,6 +61,11 @@ export interface FonteDePixels {
   /** o pixel de uma camada, já "limpa": sem opacidade, modo, máscara nem efeitos */
   camada(p: Prancheta, no: NoVisual): PixelsDoArquivo | undefined;
   mascara(p: Prancheta, no: No): MascaraDoArquivo | undefined;
+  /**
+   * Onde o motor pôs a primeira linha do texto: a linha de base (y na prancheta, antes da rotação), a altura que o
+   * texto ocupa e a altura da maiúscula da primeira linha, em pixels. Texto sem fonte: undefined.
+   */
+  primeiraLinha?(no: NoTexto): { base: number; alturaUsada: number; maiuscula: number } | undefined;
 }
 
 export interface Montagem {
@@ -225,6 +230,43 @@ function descreverMascara(no: No, cx: Contexto): string {
   return `máscara do sujeito${m.inverter ? ' invertida' : ''}`;
 }
 
+/**
+ * Brilho e contraste da foto como camada de Níveis. A conta do motor é saída = ganho × entrada + deslocamento
+ * (ganho de 1 + contraste/50, ou 1 + contraste/100 se negativo; pivô em 128; brilho × 1,5 níveis), e Níveis com gama 1
+ * é a mesma reta, dita pelos pontos em que ela cruza o preto e o branco.
+ */
+export function niveisDoBrilhoEContraste(brilho: number, contraste: number): Extract<Ajuste, { tipo: 'niveis' }> {
+  const ganho = contraste >= 0 ? 1 + contraste / 50 : 1 + contraste / 100;
+  const deslocamento = (128 / 255) * (1 - ganho) + (brilho * 1.5) / 255;
+  const limitar = (v: number): number => Math.max(0, Math.min(1, v));
+  const nivel = (v: number): number => Math.round(limitar(v) * 255);
+  const reta = (v: number): number => limitar(ganho * v + deslocamento);
+  // o trecho da entrada em que a reta ainda não bateu no preto nem no branco
+  const de = ganho > 0 ? limitar(-deslocamento / ganho) : 0;
+  const ate = ganho > 0 ? limitar((1 - deslocamento) / ganho) : 1;
+  if (ganho <= 0 || nivel(ate) - nivel(de) < 2) {
+    // a reta é plana, ou bate num extremo na entrada inteira: a saída é uma cor só
+    const fixa = nivel(reta(0.5));
+    return { tipo: 'niveis', pretoDeEntrada: 0, brancoDeEntrada: 255, gama: 1, pretoDeSaida: fixa, brancoDeSaida: fixa };
+  }
+  return { tipo: 'niveis', pretoDeEntrada: nivel(de), brancoDeEntrada: nivel(ate), gama: 1, pretoDeSaida: nivel(reta(de)), brancoDeSaida: nivel(reta(ate)) };
+}
+
+/** Saturação da foto como Misturador de canais: cada canal é ele mesmo puxado para o cinza (0,299 R + 0,587 G + 0,114 B), ou afastado dele. */
+export function misturaDaSaturacao(saturacao: number): NonNullable<CamadaDoArquivo['misturaDeCanais']> {
+  const s = 1 + saturacao / 100;
+  const cinza = { vermelho: 0.299, verde: 0.587, azul: 0.114 };
+  type Canal = 'vermelho' | 'verde' | 'azul';
+  const canal = (proprio: Canal) => {
+    const pct = (k: Canal): number => Math.round((cinza[k] * (1 - s) + (k === proprio ? s : 0)) * 100);
+    // os três somam 100: o arredondamento não pode clarear nem escurecer o cinza
+    const outros = (['vermelho', 'verde', 'azul'] as const).filter((k) => k !== proprio);
+    const soma = outros.reduce((t, k) => t + pct(k), 0);
+    return { vermelho: 0, verde: 0, azul: 0, ...Object.fromEntries(outros.map((k) => [k, pct(k)])), [proprio]: 100 - soma, constante: 0 } as Record<Canal | 'constante', number>;
+  };
+  return { vermelho: canal('vermelho'), verde: canal('verde'), azul: canal('azul') };
+}
+
 /** Os quatro cantos da foto inteira (não só do que a caixa mostra), em coordenadas da prancheta, sem a rotação. */
 export function cantosDaFoto(larguraDaFoto: number, alturaDaFoto: number, no: NoImagem): number[] {
   const e = enquadrar(larguraDaFoto, alturaDaFoto, no.x, no.y, no.largura, no.altura, no.ajuste, no.foco, no.zoom);
@@ -324,6 +366,8 @@ function camadasDoNo(no: No, cx: Contexto): CamadaDoArquivo[] {
           ...soPixel(),
           preenchimento: preenchimento(doc, no.preenchimento),
           mascaraVetorial: [{ aberto: false, regra: 'nao-zero', nos: mapearNos(nosDaForma(no.forma, no.x, no.y, no.largura, no.altura, no.raio), f) }],
+          // forma viva só sem rotação: girada, vai como caminho comum
+          ...(no.rotacao ? {} : { formaViva: { forma: no.forma, x: no.x + cx.dx, y: no.y + cx.dy, largura: no.largura, altura: no.altura, raio: Math.min(no.raio, no.largura / 2, no.altura / 2) } }),
         },
       ];
     }
@@ -356,7 +400,6 @@ function camadasDoNo(no: No, cx: Contexto): CamadaDoArquivo[] {
       const principal = fontes[0]?.usada as FonteDisponivel;
       const trechos = trechosDoTexto(no, cx);
       const a = (no.rotacao * Math.PI) / 180;
-      const [tx, ty] = f(no.x, no.y);
       const estilo: EstiloDeTextoDoArquivo = {
         fonte: principal.postScript,
         tamanho: no.tamanho,
@@ -367,6 +410,14 @@ function camadasDoNo(no: No, cx: Contexto): CamadaDoArquivo[] {
         kerning: no.kerning !== 'nenhum',
       };
       linha('nativo-editavel', 'no:texto', detalhe(`texto em caixa, ${principal.postScript}, ${no.tamanho} px${trechos ? `, ${trechos.length} trechos de estilo` : ''}`));
+      // O Photoshop, ao refazer um texto em caixa gravado por esta biblioteca, encosta no topo da caixa a ALTURA DA
+      // MAIÚSCULA da primeira linha; o motor do Otto encosta a ascendente. Sem compensar, o texto sobe
+      // (ascendente − maiúscula) × tamanho ao ser atualizado ou editado (medido no Photoshop 2025, 2026-10-02).
+      // A caixa gravada desce o quanto for preciso para a linha de base do Photoshop cair na do motor, e encolhe o mesmo tanto.
+      const primeira = cx.pixels?.primeiraLinha?.(no);
+      const desce = primeira ? Math.max(0, primeira.base - no.y - primeira.maiuscula) : 0;
+      const [tx, ty] = f(no.x, no.y + desce);
+      const alturaDaCaixa = Math.max(no.tamanho, Math.max(no.altura, Math.ceil(primeira?.alturaUsada ?? 0)) - desce);
       return [
         {
           ...soPixel(),
@@ -374,7 +425,7 @@ function camadasDoNo(no: No, cx: Contexto): CamadaDoArquivo[] {
             conteudo: no.conteudo,
             // sem rotação o seno é zero, e o zero não pode sair negativo no arquivo
             transformacao: [Math.cos(a), Math.sin(a), 0 - Math.sin(a), Math.cos(a), tx, ty],
-            caixa: { largura: no.largura, altura: no.altura },
+            caixa: { largura: no.largura, altura: Math.round(alturaDaCaixa * 100) / 100 },
             alinhamento: no.alinhamento,
             estilo,
             ...(trechos ? { trechos } : {}),
@@ -457,26 +508,31 @@ function camadasDaFoto(no: NoImagem, soPixel: (manterAjusteDeCor?: boolean) => C
   }
 
   const ajustes: CamadaDoArquivo[] = [];
-  const preso = (nome: string, ajuste: Ajuste): void => {
-    ajustes.push({ nome: `${no.nome}: ${nome}`, opacidade: 1, modo: 'normal', oculta: false, recortadaNaDeBaixo: true, bloqueada: false, ajuste });
+  const preso = (nome: string, ajuste: Pick<CamadaDoArquivo, 'ajuste' | 'misturaDeCanais'>): void => {
+    ajustes.push({ nome: `${no.nome}: ${nome}`, opacidade: 1, modo: 'normal', oculta: false, recortadaNaDeBaixo: true, bloqueada: false, ...ajuste });
     rel.camadas.push({
       prancheta: p.nome,
       camada: `${no.nome}: ${nome}`,
       tipo: 'ajuste',
       destino: 'nativo-editavel',
       mapeamento: 'ajuste-de-cor-da-foto',
-      observacao: 'camada de ajuste presa à foto por máscara de recorte; o Photoshop recalcula com a fórmula dele',
+      observacao: 'camada de ajuste presa à foto por máscara de recorte',
     });
   };
-  if (a && (a.brilho !== 0 || a.contraste !== 0)) preso('brilho e contraste', { tipo: 'brilho-contraste', brilho: Math.round(a.brilho * 1.5), contraste: Math.max(-50, Math.round(a.contraste)) });
-  if (a && a.saturacao !== 0) preso('saturação', { tipo: 'matiz-saturacao', matiz: 0, saturacao: Math.round(a.saturacao), luminosidade: 0 });
+  // As duas contas do motor são lineares, e vão como ajustes lineares do Photoshop, que dão o mesmo resultado:
+  // brilho e contraste como Níveis, saturação como Misturador de canais. (Os ajustes "Brilho/Contraste" e
+  // "Matiz/Saturação" do Photoshop têm outra fórmula: medido em 2026-10-02, a foto saía 9 a 13 níveis diferente.)
+  if (a && (a.brilho !== 0 || a.contraste !== 0)) preso('brilho e contraste', { ajuste: niveisDoBrilhoEContraste(a.brilho, a.contraste) });
+  if (a && a.saturacao !== 0) preso('saturação', { misturaDeCanais: misturaDaSaturacao(a.saturacao) });
   if (a?.duotone)
     preso('duotone', {
-      tipo: 'mapa-de-degrade',
-      paradas: [
-        { cor: resolverCor(doc, a.duotone.sombras), posicao: 0 },
-        { cor: resolverCor(doc, a.duotone.luzes), posicao: 1 },
-      ],
+      ajuste: {
+        tipo: 'mapa-de-degrade',
+        paradas: [
+          { cor: resolverCor(doc, a.duotone.sombras), posicao: 0 },
+          { cor: resolverCor(doc, a.duotone.luzes), posicao: 1 },
+        ],
+      },
     });
   return [foto, ...ajustes];
 }

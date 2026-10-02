@@ -132,6 +132,8 @@ export function cenasDeGolden(): CenaDeGolden[] {
       texto('Girado', 'ao vivo', { x: 280, y: 236, largura: 110, altura: 34, fonte: 'Anton', tamanho: 28, rotacao: -8, cor: '#be123c' }),
       // peso que os recursos de teste não têm: sai com o mais próximo, e o relatório diz
       texto('Peso trocado', 'meio-negrito', { y: 250, largura: 200, altura: 30, peso: 600, tamanho: 18 }),
+      // versalete com opacidade: os dois se perdiam no Illustrator (conferência de 2026-10-02)
+      texto('Versalete', 'Entrada Franca', { x: 220, y: 170, largura: 170, altura: 24, tamanho: 14, versalete: true, opacidade: 0.75, cor: '#7c2d12' }),
     ]),
     uma('imagem', 400, 300, '#1c1917', [
       imagem('Cobrir', FOTO, 10, 10, 120, 130),

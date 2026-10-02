@@ -1209,6 +1209,27 @@ export function codificarPng(sessao: Sessao, render: RenderEmPixels): Uint8Array
   }
 }
 
+/**
+ * JPEG dos pixels, para imagem sem transparência (foto, prancheta achatada): dez vezes menor que o PNG.
+ * Só a variante "completa" do CanvasKit codifica JPEG; na padrão devolve undefined, e quem chama fica com o PNG.
+ */
+export function codificarJpeg(sessao: Sessao, render: RenderEmPixels, qualidade = 90): Uint8Array | undefined {
+  const { ck } = sessao;
+  const img = ck.MakeImage(
+    { width: render.largura, height: render.altura, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: ck.ColorSpace.SRGB },
+    render.rgba,
+    render.largura * 4,
+  );
+  if (!img) return undefined;
+  try {
+    const bytes = img.encodeToBytes(ck.ImageFormat.JPEG, qualidade);
+    // a variante padrão devolve nada, ou cai no PNG: só vale o que começa pela marca do JPEG
+    return bytes && bytes[0] === 0xff && bytes[1] === 0xd8 ? bytes : undefined;
+  } finally {
+    img.delete();
+  }
+}
+
 // ---------- o que falta ao motor, dito pelo próprio motor ----------
 
 export interface RecursosEmFalta {

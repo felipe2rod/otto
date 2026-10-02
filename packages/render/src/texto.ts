@@ -49,8 +49,11 @@ interface Estilo {
   espacamento: number;
 }
 
-/** Versalete sintético, como o do Photoshop: minúscula vira maiúscula a 75% do corpo. */
-const FATOR_DO_VERSALETE = 0.75;
+/**
+ * Versalete sintético, como o do Photoshop e o do Illustrator: minúscula vira maiúscula a 70% do corpo.
+ * (Era 75%, herdado da POC. Medido no Photoshop 2025 em 2026-10-02: o texto em versalete estreitava ao ser atualizado.)
+ */
+export const FATOR_DO_VERSALETE = 0.7;
 
 function rgb(cor: string): [number, number, number] {
   const n = Number.parseInt(cor.slice(1), 16);

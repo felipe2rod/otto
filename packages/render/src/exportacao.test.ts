@@ -7,7 +7,7 @@ import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ajuste, FOTO, forma, grupo, idDe, imagem, novaSessao, peca, SUJEITO_DA_FOTO } from './apoio-de-teste';
 import { codificarPng, renderizarMascara, renderizarPrancheta } from './compositor';
-import { nomePostScript } from './opentype';
+import { alturaDaMaiuscula, nomePostScript } from './opentype';
 import type { Sessao } from './sessao';
 import { escolherFonte } from './texto';
 
@@ -118,5 +118,14 @@ describe('PNG', () => {
     const lido = img?.readPixels(0, 0, { width: 80, height: 80, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: ck.ColorSpace.SRGB }) as Uint8Array;
     img?.delete();
     expect(Buffer.compare(Buffer.from(lido), Buffer.from(r.rgba))).toBe(0);
+  });
+});
+
+describe('altura da maiúscula da fonte', () => {
+  it('lê o sCapHeight da tabela OS/2, em fração do corpo', () => {
+    // Anton: 1760 de 2048 unidades; IBM Plex Sans: 698 de 1000
+    expect(alturaDaMaiuscula(fonte('Anton-Regular.ttf'))).toBeCloseTo(0.859, 3);
+    expect(alturaDaMaiuscula(fonte('IBMPlexSans-Regular.ttf'))).toBeCloseTo(0.698, 3);
+    expect(alturaDaMaiuscula(new Uint8Array([1, 2, 3]))).toBeUndefined();
   });
 });

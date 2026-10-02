@@ -31,9 +31,13 @@ const NOS: Record<TipoDeNo, LinhaDoMapeamento> = {
   forma: nativo(
     'Forma: retângulo (com raio) e elipse',
     'Camada de preenchimento (`SoCo` ou `GdFl`) com máscara vetorial (`vmsk`)',
-    'O raio vai como curva no caminho; não grava os dados de forma viva (`vogk`)',
+    'O raio vai como curva no caminho. Sem rotação, leva também os dados de forma viva (`vogk`): o painel Propriedades mostra o raio',
   ),
-  texto: nativo('Texto em caixa', 'Camada de texto (`TySh`)', 'Maior risco. A fonte precisa estar instalada para editar; o pixel vai junto'),
+  texto: nativo(
+    'Texto em caixa',
+    'Camada de texto (`TySh`)',
+    'A fonte precisa estar instalada para editar; o pixel vai junto. A caixa gravada desce para a primeira linha cair onde o motor a pôs. O Photoshop pede para atualizar o texto ao abrir (limite da biblioteca)',
+  ),
   imagem: nativo(
     'Foto',
     'Objeto inteligente (`SoLd`) com o arquivo original embutido (`lnk2`), e o corte da caixa como máscara vetorial',
@@ -90,17 +94,25 @@ const FILTROS: Record<Filtro['tipo'], LinhaDoMapeamento> = {
   desfoque: nativo('Filtro de desfoque, em foto', 'Filtro inteligente: desfoque gaussiano', 'Filtro inteligente está listado como fora da v1 no ADR 028: pede ADR'),
   'desfoque-de-movimento': nativo('Filtro de desfoque de movimento, em foto', 'Filtro inteligente: desfoque de movimento', 'Pede ADR, como o desfoque'),
   ruido: nativo('Filtro de ruído, em foto', 'Filtro inteligente: adicionar ruído', 'O grão do Photoshop não é o do Otto: ao reaplicar, o desenho do grão muda. Pede ADR'),
-  nitidez: nativo('Filtro de nitidez, em foto', 'Filtro inteligente: máscara de nitidez', 'Pede ADR, como o desfoque'),
+  nitidez: nativo(
+    'Filtro de nitidez, em foto',
+    'Filtro inteligente: máscara de nitidez',
+    'Pede ADR, como o desfoque. No Photoshop, reaplicar o filtro mudou um pouco a aparência (conferência de 2026-10-02): causa em aberto',
+  ),
 };
 
 const EFEITOS: Record<keyof Efeitos | 'sombra' | 'traco', LinhaDoMapeamento> = {
   sombra: nativo('Sombra projetada', 'Efeito de camada (`lfx2`): sombra projetada', 'Gravada com modo normal, como o motor desenha (o padrão do Photoshop é multiplicação)'),
   traco: nativo('Traço da forma', 'Efeito de camada (`lfx2`): traço interno de cor sólida'),
-  sombraInterna: nativo('Sombra interna', 'Efeito de camada (`lfx2`): sombra interna', 'Modo multiplicação'),
-  brilhoExterno: nativo('Brilho externo', 'Efeito de camada (`lfx2`): brilho externo', 'Gravado com modo normal, como o motor desenha (o padrão do Photoshop é tela)'),
+  sombraInterna: nativo('Sombra interna', 'Efeito de camada (`lfx2`): sombra interna', 'Modo multiplicação, contorno linear, sem retração nem ruído'),
+  brilhoExterno: nativo(
+    'Brilho externo',
+    'Efeito de camada (`lfx2`): brilho externo',
+    'Gravado com modo normal, como o motor desenha (o padrão do Photoshop é tela); técnica mais suave, contorno linear, sem expansão',
+  ),
   brilhoInterno: nativo('Brilho interno', 'Efeito de camada (`lfx2`): brilho interno, a partir da borda', 'Modo tela'),
   sobreposicaoDeCor: nativo('Sobreposição de cor', 'Efeito de camada (`lfx2`): sobreposição de cor'),
-  sobreposicaoDeDegrade: nativo('Sobreposição de degradê', 'Efeito de camada (`lfx2`): sobreposição de degradê'),
+  sobreposicaoDeDegrade: nativo('Sobreposição de degradê', 'Efeito de camada (`lfx2`): sobreposição de degradê', 'Escala de 100%, alinhada à camada'),
 };
 
 const MASCARAS: Record<Mascara['tipo'], LinhaDoMapeamento> = {
@@ -113,10 +125,18 @@ const OUTROS = {
   documento: nativo('Documento', 'Cabeçalho do arquivo', 'RGB, 8 bits, com o perfil sRGB embutido. PSB quando um lado passa de 30.000 px'),
   prancheta: nativo('Prancheta', 'Um arquivo por prancheta; no arquivo com todas, grupo com dados de prancheta (`artb`)'),
   'fundo-da-prancheta': nativo('Fundo da prancheta', 'Camada de preenchimento sólido (`SoCo`)'),
-  'preenchimento-em-degrade': nativo('Preenchimento em degradê (linear e radial)', 'Camada de preenchimento em degradê (`GdFl`)'),
+  'preenchimento-em-degrade': nativo(
+    'Preenchimento em degradê (linear e radial)',
+    'Camada de preenchimento em degradê (`GdFl`)',
+    'Escala de 100%. A suavidade vai em 100%, o padrão do Photoshop (a biblioteca não grava outra): a transição pode diferir um pouco da do motor, que é linear',
+  ),
   'traco-de-vetor': nativo('Traço de caminho de vetor', 'Traçado vetorial (`vstk`)', 'Centralizado no caminho'),
   'trechos-de-texto': nativo('Trechos de texto com estilo próprio', 'Estilos por sequência de caracteres, no `TySh`'),
-  'caixa-alta-e-versalete': nativo('Caixa alta e versalete', 'Atributo de caixa do caractere, no `TySh`'),
+  'caixa-alta-e-versalete': nativo(
+    'Caixa alta e versalete',
+    'Atributo de caixa do caractere, no `TySh`',
+    'O versalete do motor é o sintético do Photoshop: as minúsculas viram maiúsculas a 70% do corpo',
+  ),
   opacidade: nativo('Opacidade', 'Opacidade da camada'),
   'visivel-e-bloqueado': nativo('Visível e bloqueado', 'Flags da camada e bloqueio (`lspf`)'),
   rotacao: nativo('Rotação', 'Na geometria: caminho girado, transformação do texto e do objeto inteligente'),
@@ -124,8 +144,8 @@ const OUTROS = {
   'recortada-na-de-baixo': nativo('Máscara de recorte na camada de baixo', 'Recorte (clipping) da camada'),
   'ajuste-de-cor-da-foto': nativo(
     'Ajuste de cor da foto (brilho, contraste, saturação, duotone)',
-    'Camadas de ajuste presas à foto por máscara de recorte',
-    'Aproximação: o Photoshop recalcula com a fórmula dele',
+    'Camadas de ajuste presas à foto: Níveis (`levl`) para brilho e contraste, Misturador de canais (`mixr`) para saturação, Mapa de degradê (`grdm`) para duotone',
+    'Níveis e Misturador são lineares, como a conta do motor: dão o mesmo resultado, a 2 níveis',
   ),
   token: nativo('Token de cor', 'Valor resolvido', 'A referência se perde; o relatório lista cada token'),
   'filtro-fora-de-foto': raster('Filtro em forma, texto ou vetor', 'Camada de pixels', 'No Photoshop, filtro editável só existe em objeto inteligente'),
@@ -140,10 +160,14 @@ const OUTROS = {
     'Camada de preenchimento em degradê (`GdFl`)',
     'É o preenchimento em degradê; tem linha própria porque no PDF vira imagem',
   ),
+  'modo-no-svg': nativo('Modo de mesclagem que o PDF tem, numa peça exportada em SVG', 'O modo da camada', 'São os modos de mesclagem; tem linha própria porque no SVG a camada vira imagem'),
   'modo-dissolver': bloqueado('Modo dissolver', 'O ruído do Photoshop não é reproduzível'),
   'chanfro-acetinado-padrao': bloqueado('Chanfro e entalhe, acetinado, sobreposição de padrão', 'Custo de reproduzir no motor'),
   'efeito-repetido': bloqueado('Vários efeitos do mesmo tipo na mesma camada', 'Fora da v1'),
-  'ajustes-fora-da-lista': bloqueado('Exposição, inverter, cor seletiva, misturador de canais, pesquisa de cor, limiar, posterizar', 'Fora da v1'),
+  'ajustes-fora-da-lista': bloqueado(
+    'Exposição, inverter, cor seletiva, misturador de canais, pesquisa de cor, limiar, posterizar',
+    'Fora da v1. O misturador de canais só aparece no PSD como o jeito de gravar a saturação da foto',
+  ),
   'texto-em-caminho': bloqueado('Texto em caminho', 'Até um spike provar que abre bem'),
   'cor-fora-de-rgb-8-bits': bloqueado('CMYK, 16 e 32 bits, perfis além de sRGB', 'Fora da v1 (ADR 028, item 3)'),
 } satisfies Record<string, LinhaDoMapeamento>;
@@ -161,10 +185,9 @@ type ChaveBloqueada = 'modo-dissolver' | 'chanfro-acetinado-padrao' | 'efeito-re
 type Vetorial = [DestinoVetorialDoMapeamento, string];
 const NATIVO = (como: string): Vetorial => ['Nativo', como];
 const RASTER = (como = 'A camada vira imagem embutida'): Vetorial => ['Raster', como];
-const OMITIDO = (como: string): Vetorial => ['Omitido', como];
-const COM_MODO = NATIVO('Modo de mesclagem do SVG (`mix-blend-mode`) e do PDF');
-const SEM_MODO = OMITIDO('O formato não tem este modo: a camada sai em modo normal');
-const SEM_AJUSTE = OMITIDO('Não vai: o arquivo fica sem o ajuste de cor');
+const COM_MODO = NATIVO('Modo de mesclagem do PDF. No SVG vira imagem: ver `modo-no-svg`');
+const SEM_MODO = RASTER('Nem o SVG nem o PDF têm este modo: a camada vira uma imagem em modo normal que dá a mesma cor sobre o que está abaixo dela. O que está abaixo continua vetor');
+const SEM_AJUSTE = RASTER('O ajuste e o que está abaixo dele viram uma imagem só, com a cor certa (presa a uma camada, só ela e o ajuste)');
 const FOTO_FILTRADA = RASTER('A foto vira imagem com o filtro já aplicado');
 
 /**
@@ -173,18 +196,20 @@ const FOTO_FILTRADA = RASTER('A foto vira imagem com o filtro já aplicado');
  */
 const VETORIAL: Record<Exclude<ChaveDoMapeamento, ChaveBloqueada>, Vetorial> = {
   documento: NATIVO('Cores em sRGB'),
-  prancheta: NATIVO('Um SVG por prancheta; no PDF, uma página por prancheta'),
+  prancheta: NATIVO('Um SVG por prancheta; um PDF por prancheta (a pedido, um PDF só com uma página por prancheta)'),
   'fundo-da-prancheta': NATIVO('Retângulo do tamanho da prancheta'),
-  'no:grupo': NATIVO('Grupo com o nome da camada; no PDF, cada camada de cima da prancheta é uma camada do PDF'),
+  'no:grupo': NATIVO('Grupo com o nome da camada no SVG. No PDF vai como camada do PDF, que o Illustrator não mostra: lá os objetos chegam sem nome'),
   'no:forma': NATIVO('Caminho'),
-  'no:texto': NATIVO('Texto como texto, linha por linha, na quebra do Otto (não requebra sozinho)'),
+  'no:texto': NATIVO('Texto como texto, linha por linha, na quebra do Otto (não requebra sozinho). No Illustrator chega um objeto de texto por linha e por mudança de estilo'),
   'no:imagem': NATIVO('Imagem embutida (o arquivo original), com o corte da caixa como recorte vetorial'),
   'no:vetor': NATIVO('Grupo com um caminho para cada caminho'),
   'no:ajuste': SEM_AJUSTE,
   'preenchimento-em-degrade': NATIVO('Degradê linear e radial'),
   'traco-de-vetor': NATIVO('Contorno do caminho'),
   'trechos-de-texto': NATIVO('Um pedaço de texto para cada estilo, dentro da linha'),
-  'caixa-alta-e-versalete': NATIVO('O texto vai já em maiúsculas; no versalete, as letras que eram minúsculas vão em corpo menor'),
+  'caixa-alta-e-versalete': NATIVO(
+    'Caixa alta: o texto vai já em maiúsculas. Versalete: as letras que eram minúsculas vão em maiúscula a 70% do corpo, na mesma linha (no Illustrator, um objeto de texto por mudança de corpo)',
+  ),
   opacidade: NATIVO('Opacidade'),
   'visivel-e-bloqueado': NATIVO('Camada oculta vai oculta; o bloqueio não vai'),
   rotacao: NATIVO('Na geometria: caminho girado, transformação do texto e da imagem'),
@@ -198,6 +223,9 @@ const VETORIAL: Record<Exclude<ChaveDoMapeamento, ChaveBloqueada>, Vetorial> = {
   'mascara-suave-ou-invertida': RASTER(),
   'recorte-em-texto': RASTER('A base e as camadas presas a ela viram uma imagem só'),
   'degrade-transparente-no-pdf': RASTER('Só no PDF: no SVG vai como degradê'),
+  'modo-no-svg': RASTER(
+    'Só no SVG: o Illustrator não aplica o modo de mesclagem do SVG. A camada vira uma imagem em modo normal que dá a mesma cor sobre o que está abaixo dela. O que está abaixo continua vetor',
+  ),
   'modo:atravessar': NATIVO('Grupo sem isolamento'),
   'modo:normal': NATIVO('Normal'),
   'modo:escurecer': COM_MODO,
@@ -247,7 +275,7 @@ const VETORIAL: Record<Exclude<ChaveDoMapeamento, ChaveBloqueada>, Vetorial> = {
   'filtro:nitidez': FOTO_FILTRADA,
   'filtro-fora-de-foto': RASTER(),
   'foto-recortada-com-ajuste-de-cor': RASTER(),
-  'foto-em-webp': RASTER('A foto vira imagem PNG, na resolução do documento'),
+  'foto-em-webp': RASTER('A foto vira imagem, na resolução do documento'),
   'texto-sem-fonte': RASTER('Imagem vazia'),
   'vetor-fora-do-padrao': RASTER(),
 };

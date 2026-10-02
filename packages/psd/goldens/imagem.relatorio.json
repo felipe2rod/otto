@@ -60,7 +60,7 @@
       "tipo": "ajuste",
       "destino": "nativo-editavel",
       "mapeamento": "ajuste-de-cor-da-foto",
-      "observacao": "camada de ajuste presa à foto por máscara de recorte; o Photoshop recalcula com a fórmula dele"
+      "observacao": "camada de ajuste presa à foto por máscara de recorte"
     },
     {
       "prancheta": "Peça",
@@ -68,7 +68,7 @@
       "tipo": "ajuste",
       "destino": "nativo-editavel",
       "mapeamento": "ajuste-de-cor-da-foto",
-      "observacao": "camada de ajuste presa à foto por máscara de recorte; o Photoshop recalcula com a fórmula dele"
+      "observacao": "camada de ajuste presa à foto por máscara de recorte"
     },
     {
       "prancheta": "Peça",

@@ -64,7 +64,8 @@ function paradas(d: DegradeDoArquivo) {
 
 function conteudoVetorial(p: PreenchimentoDoArquivo): VectorContent {
   if (p.tipo === 'cor') return { type: 'color', color: p.cor };
-  return { type: 'solid', name: 'Otto', style: p.estilo, angle: p.angulo, scale: 100, align: true, ...paradas(p) } as VectorContent;
+  // a escala é fração: 1 é 100% (com 100 o Photoshop lia 10000% e o degradê virava uma faixa lisa)
+  return { type: 'solid', name: 'Otto', style: p.estilo, angle: p.angulo, scale: 1, align: true, ...paradas(p) } as VectorContent;
 }
 
 function ajuste(a: Ajuste): AdjustmentLayer {
@@ -120,25 +121,63 @@ function filtroInteligente(f: Filtro, semente: number): Filter {
   }
 }
 
+/** Contorno linear: o padrão do Photoshop. Sem ele a biblioteca grava a sombra projetada com um contorno vazio, e o Photoshop recusa a camada. */
+const CONTORNO_LINEAR = {
+  name: 'Linear',
+  curve: [
+    { x: 0, y: 0 },
+    { x: 255, y: 255 },
+  ],
+};
+
+/**
+ * Efeitos de camada, com TODOS os parâmetros que o Photoshop grava, nos valores neutros dele: contorno linear, sem
+ * retração, sem ruído, sem suavização de serrilhado. Parâmetro que falta é parâmetro que o Photoshop preenche por conta
+ * própria (ou rejeita: foi o caso do contorno da sombra projetada, "as configurações no arquivo não eram válidas").
+ */
 function efeitos(e: EfeitosDoArquivo): LayerEffectsInfo {
   const fx: LayerEffectsInfo = {};
   const base = { present: true, showInDialog: true, enabled: true };
-  if (e.sombraProjetada) {
-    const s = e.sombraProjetada;
-    fx.dropShadow = [{ ...base, color: s.cor, opacity: s.opacidade, angle: s.angulo, distance: px(s.distancia), size: px(s.tamanho), blendMode: MESCLAGEM[s.modo], useGlobalLight: false }];
-  }
-  if (e.tracoInterno) fx.stroke = [{ ...base, position: 'inside', fillType: 'color', color: e.tracoInterno.cor, size: px(e.tracoInterno.espessura), opacity: 1, blendMode: 'normal' }];
-  if (e.sombraInterna) {
-    const s = e.sombraInterna;
-    fx.innerShadow = [{ ...base, color: s.cor, opacity: s.opacidade, angle: s.angulo, distance: px(s.distancia), size: px(s.tamanho), blendMode: MESCLAGEM[s.modo], useGlobalLight: false }];
-  }
-  if (e.brilhoExterno) fx.outerGlow = { ...base, color: e.brilhoExterno.cor, opacity: e.brilhoExterno.opacidade, size: px(e.brilhoExterno.tamanho), blendMode: MESCLAGEM[e.brilhoExterno.modo] };
-  if (e.brilhoInterno)
-    fx.innerGlow = { ...base, color: e.brilhoInterno.cor, opacity: e.brilhoInterno.opacidade, size: px(e.brilhoInterno.tamanho), blendMode: MESCLAGEM[e.brilhoInterno.modo], source: 'edge' };
+  const sombra = (s: NonNullable<EfeitosDoArquivo['sombraProjetada']>) => ({
+    ...base,
+    color: s.cor,
+    opacity: s.opacidade,
+    angle: s.angulo,
+    distance: px(s.distancia),
+    size: px(s.tamanho),
+    choke: px(0),
+    blendMode: MESCLAGEM[s.modo],
+    useGlobalLight: false,
+    antialiased: false,
+    contour: CONTORNO_LINEAR,
+  });
+  // brilho: técnica suave, sem retração, e o contorno linear valendo para o brilho inteiro (alcance de 100%): é o
+  // desfoque puro que o motor desenha
+  const brilho = (b: NonNullable<EfeitosDoArquivo['brilhoExterno']>) => ({
+    ...base,
+    color: b.cor,
+    opacity: b.opacidade,
+    size: px(b.tamanho),
+    choke: px(0),
+    blendMode: MESCLAGEM[b.modo],
+    technique: 'softer' as const,
+    antialiased: false,
+    noise: 0,
+    jitter: 0,
+    range: 1,
+    contour: CONTORNO_LINEAR,
+  });
+  if (e.sombraProjetada) fx.dropShadow = [{ ...sombra(e.sombraProjetada), layerConceals: true }];
+  if (e.tracoInterno)
+    fx.stroke = [{ ...base, position: 'inside', fillType: 'color', color: e.tracoInterno.cor, size: px(e.tracoInterno.espessura), opacity: 1, blendMode: 'normal', overprint: false }];
+  if (e.sombraInterna) fx.innerShadow = [sombra(e.sombraInterna)];
+  if (e.brilhoExterno) fx.outerGlow = brilho(e.brilhoExterno);
+  if (e.brilhoInterno) fx.innerGlow = { ...brilho(e.brilhoInterno), source: 'edge' };
   if (e.sobreposicaoDeCor) fx.solidFill = [{ ...base, color: e.sobreposicaoDeCor.cor, opacity: e.sobreposicaoDeCor.opacidade, blendMode: MESCLAGEM[e.sobreposicaoDeCor.modo] }];
   if (e.sobreposicaoDeDegrade) {
     const g = e.sobreposicaoDeDegrade;
     fx.gradientOverlay = [
+      // a escala é fração: 1 é 100%
       {
         ...base,
         opacity: g.opacidade,
@@ -146,7 +185,9 @@ function efeitos(e: EfeitosDoArquivo): LayerEffectsInfo {
         type: g.degrade.estilo,
         angle: g.degrade.angulo,
         align: true,
-        scale: 100,
+        scale: 1,
+        reverse: false,
+        dither: false,
         gradient: { name: 'Otto', type: 'solid', ...paradas(g.degrade) },
       },
     ];
@@ -189,6 +230,33 @@ function camada(c: CamadaDoArquivo): Layer {
     l.artboard = { rect: { top: p.y, left: p.x, bottom: p.y + p.altura, right: p.x + p.largura }, presetName: `${p.largura}×${p.altura}`, color: p.fundo, backgroundType: 1 };
   }
   if (c.ajuste) l.adjustment = ajuste(c.ajuste);
+  if (c.misturaDeCanais) {
+    const canal = (k: { vermelho: number; verde: number; azul: number; constante: number }) => ({ red: k.vermelho, green: k.verde, blue: k.azul, constant: k.constante });
+    const m = c.misturaDeCanais;
+    l.adjustment = { type: 'channel mixer', monochrome: false, red: canal(m.vermelho), green: canal(m.verde), blue: canal(m.azul), gray: { red: 0, green: 0, blue: 0, constant: 0 } };
+  }
+  if (c.formaViva) {
+    const v = c.formaViva;
+    const raio = px(v.raio);
+    // tipos da forma viva no Photoshop: 1 retângulo, 2 retângulo arredondado, 5 elipse
+    l.vectorOrigination = {
+      keyDescriptorList: [
+        {
+          keyOriginType: v.forma === 'elipse' ? 5 : v.raio > 0 ? 2 : 1,
+          keyOriginResolution: 72,
+          keyOriginShapeBoundingBox: { top: px(v.y), left: px(v.x), bottom: px(v.y + v.altura), right: px(v.x + v.largura) },
+          ...(v.forma === 'retangulo' ? { keyOriginRRectRadii: { topRight: raio, topLeft: raio, bottomLeft: raio, bottomRight: raio } } : {}),
+          keyOriginBoxCorners: [
+            { x: v.x, y: v.y },
+            { x: v.x + v.largura, y: v.y },
+            { x: v.x + v.largura, y: v.y + v.altura },
+            { x: v.x, y: v.y + v.altura },
+          ],
+          transform: [1, 0, 0, 1, 0, 0],
+        },
+      ],
+    };
+  }
   if (c.preenchimento) l.vectorFill = conteudoVetorial(c.preenchimento);
   if (c.mascaraVetorial)
     l.vectorMask = { paths: c.mascaraVetorial.map((k) => ({ open: k.aberto, knots: k.nos.map(no), fillRule: k.regra === 'par-impar' ? ('even-odd' as const) : ('non-zero' as const) })) };

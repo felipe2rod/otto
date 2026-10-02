@@ -75,7 +75,7 @@ O WebGL em si não roda no Node: `navegador.ts` (a tela WebGL) não tem teste au
 |---|---|---|---|
 | Prancheta, fundo, cor por token | desenha | — | — |
 | Forma: retângulo, elipse, raio, degradê linear e radial, traço interno | desenha | — | — |
-| Texto: fonte de arquivo, peso mais próximo, trechos, tracking, entrelinha, alinhamento, caixa alta, versalete sintético, kerning ligado ou desligado | desenha | A quebra é a do Skia (parte palavra que não cabe; a POC deixava estourar) e a linha de base cai em pixel inteiro. Conferir contra o Photoshop | — |
+| Texto: fonte de arquivo, peso mais próximo, trechos, tracking, entrelinha, alinhamento, caixa alta, versalete sintético (minúsculas em maiúscula a 70% do corpo, como o do Photoshop), kerning ligado ou desligado | desenha | A quebra é a do Skia (parte palavra que não cabe; a POC deixava estourar) e a linha de base cai em pixel inteiro. Conferir contra o Photoshop | — |
 | Imagem: cobrir, conter, foco, zoom, recorte, ajuste de cor (brilho, contraste, saturação, duotone) | desenha | — | — |
 | Vetor: preenchimento, traço (ponta, junção), regra par-ímpar | desenha | — | — |
 | Grupo: atravessar, opacidade, modo, máscara | desenha | — | — |
@@ -96,7 +96,7 @@ Em foto, os filtros são aplicados na resolução do documento (a POC aplicava n
 
 ## O que a exportação usa
 
-`renderizarMascara(sessao, doc, prancheta, no)` devolve a máscara do nó como cobertura (um byte por pixel), pelo mesmo código que corta a camada no render. `codificarPng(sessao, render)` grava PNG. `limitesDoNo` é a área que a camada ocupa. `nomePostScript(bytes)` lê o nome que o Photoshop procura, e `escolherFonte(fontes, familia, peso)` é a regra do motor para o arquivo de fonte (peso mais próximo da família; sem a família, nada). `@otto/render/apoio-de-teste` expõe as fontes e imagens de teste para os testes de outros pacotes.
+`renderizarMascara(sessao, doc, prancheta, no)` devolve a máscara do nó como cobertura (um byte por pixel), pelo mesmo código que corta a camada no render. `codificarPng(sessao, render)` grava PNG, e `codificarJpeg(sessao, render)` grava JPEG na variante completa do motor (na padrão devolve `undefined`). `alturaDaMaiuscula(bytes)` lê a altura da maiúscula da fonte, que a exportação usa para pôr a caixa de texto onde o Photoshop assenta a primeira linha. `limitesDoNo` é a área que a camada ocupa. `nomePostScript(bytes)` lê o nome que o Photoshop procura, e `escolherFonte(fontes, familia, peso)` é a regra do motor para o arquivo de fonte (peso mais próximo da família; sem a família, nada). `@otto/render/apoio-de-teste` expõe as fontes e imagens de teste para os testes de outros pacotes.
 
 Do motor da POC, não vieram: `tracarCaminho` (SVG, de outra fatia) e as texturas geradas.
 

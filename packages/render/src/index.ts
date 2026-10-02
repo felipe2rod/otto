@@ -18,6 +18,7 @@ export const DEPENDE_DE = [DOCUMENTO] as const;
 
 export { type AjusteResolvido, funcaoDoAjuste, referenciaDeAjuste } from './ajustes';
 export {
+  codificarJpeg,
   codificarPng,
   desenharNos,
   desenharPrancheta,
@@ -39,12 +40,13 @@ export {
 } from './compositor';
 export { comparar, type Diferenca } from './diferenca';
 export { aplicarPrevia, type CaixaDePrevia, type CameraEmPixels, CenaDoEditor, type ContadoresDoCache, type FabricaDeImagens, fabricaNaCpu, fabricaNaGpu, type PreviaDeGesto } from './editor';
+export { type AjusteDeCorResolvido, referenciaDeAjusteDeCor } from './foto';
 export { MODOS_POR_SHADER, referenciaDeMesclagem } from './mesclagem';
 export { type Camera, criarMotorSobreTela, type MotorDeRender, type OpcoesDoMotor, type RecursosDoRender, type Tela, telaDeCpu } from './motor';
-export { nomePostScript, type RecursosOpenType, recursosOpenType } from './opentype';
+export { alturaDaMaiuscula, nomePostScript, type RecursosOpenType, recursosOpenType } from './opentype';
 export { sementeDe } from './ruido';
 export { SENTINELA_DO_MOTOR } from './sentinela';
 export { criarSessao, type FonteDeArquivo, type ImagemDeArquivo, type RecursosDaSessao, type Sessao } from './sessao';
-export { escolherFonte, type MotorDeTexto, type TextoDoMotor, textoExibido } from './texto';
+export { escolherFonte, FATOR_DO_VERSALETE, type MotorDeTexto, type TextoDoMotor, textoExibido } from './texto';
 export { criarMedidor, criarMeiosDeVerificacao } from './verificacao';
 export { MOTOR, VERSAO_DO_CANVASKIT } from './versao';

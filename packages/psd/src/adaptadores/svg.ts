@@ -3,27 +3,8 @@
 //
 // O que o Illustrator precisa achar no arquivo: cada camada com o nome dela no `id` (ele mostra o id como nome),
 // o texto como <text>, a imagem embutida em base64 e os recortes como <clipPath>.
-import type { ModoDoGrupo } from '@otto/documento';
 import type { ArquivoEmCamadas, ArquivoGravado, CamadaDoArquivo, CaminhoDoArquivo, DegradeDoArquivo, FormatoDeArquivoEmCamadas, PreenchimentoDoArquivo, Rgb } from '../porta';
-
-/** Modo de mesclagem do Otto → `mix-blend-mode` do SVG. Só os que o SVG tem chegam aqui. */
-const MODO: Partial<Record<ModoDoGrupo, string>> = {
-  escurecer: 'darken',
-  multiplicacao: 'multiply',
-  'subexposicao-de-cores': 'color-burn',
-  clarear: 'lighten',
-  tela: 'screen',
-  'superexposicao-de-cores': 'color-dodge',
-  sobrepor: 'overlay',
-  'luz-suave': 'soft-light',
-  'luz-direta': 'hard-light',
-  diferenca: 'difference',
-  exclusao: 'exclusion',
-  matiz: 'hue',
-  saturacao: 'saturation',
-  cor: 'color',
-  luminosidade: 'luminosity',
-};
+import { partesDoVersalete } from '../versalete';
 
 /** Número curto e estável: três casas, sem zero à direita. */
 const n = (v: number): string => {
@@ -128,11 +109,13 @@ class Escritor {
     return `url(#${id})`;
   }
 
-  /** Atributos que toda camada leva: opacidade, modo de mesclagem e visibilidade. */
+  /**
+   * Atributos que toda camada leva: opacidade e visibilidade. Modo de mesclagem não vai: o SVG tem `mix-blend-mode`, mas o
+   * Illustrator não o aplica ao abrir, e a camada chegava em modo normal, como um véu (conferido em 2026-10-02).
+   * Quem monta o arquivo já achatou as camadas com modo de mesclagem.
+   */
   private comuns(c: CamadaDoArquivo): string {
-    const modo = MODO[c.modo];
-    const estilo = [modo ? `mix-blend-mode:${modo}` : '', c.filhos && c.modo === 'normal' ? 'isolation:isolate' : ''].filter(Boolean).join(';');
-    return `${c.opacidade < 1 ? ` opacity="${n(c.opacidade)}"` : ''}${estilo ? ` style="${estilo}"` : ''}${c.oculta ? ' display="none"' : ''}`;
+    return `${c.opacidade < 1 ? ` opacity="${n(c.opacidade)}"` : ''}${c.oculta ? ' display="none"' : ''}`;
   }
 
   /** O elemento da camada, sem o recorte de quem a contém. */
@@ -145,9 +128,12 @@ class Escritor {
       // a família primeiro (é por ela e pelo peso que navegador e Illustrator acham a fonte); o nome PostScript de reserva
       const fonte = (e: { fonte: string; familia?: string }): string => xml(e.familia ? `'${e.familia}', '${e.fonte}'` : `'${e.fonte}'`);
       const espaco = (e: { espacamento: number; tamanho: number }): string => (e.espacamento ? ` letter-spacing="${n((e.espacamento / 1000) * e.tamanho)}"` : '');
+      // Versalete: o SVG tem `font-variant`, mas cada programa o desenha do seu jeito (e há quem o ignore). Para a peça
+      // abrir igual em qualquer um, as letras escritas em minúscula vão em maiúscula, no corpo menor, na mesma linha.
       const linhas = (t.linhas ?? [])
         .map((l) =>
           l.pedacos
+            .flatMap((p) => partesDoVersalete(p.texto, p.original, t.versalete).map((parte) => ({ texto: parte.texto, estilo: { ...p.estilo, tamanho: p.estilo.tamanho * parte.fator } })))
             .map((p, i) => {
               const e = p.estilo;
               const proprio = [
@@ -163,7 +149,9 @@ class Escritor {
             .join(''),
         )
         .join('');
-      return `<text id="${id}"${comuns} transform="${matriz(t.transformacao)}" font-family="${fonte(t.estilo)}"${t.estilo.peso !== undefined ? ` font-weight="${t.estilo.peso}"` : ''} font-size="${n(t.estilo.tamanho)}" fill="${hex(t.estilo.cor)}"${espaco(t.estilo)}${t.estilo.kerning ? '' : ' font-kerning="none"'} xml:space="preserve">${linhas}</text>`;
+      // O nome, a opacidade e a visibilidade ficam num grupo em volta do texto: o Illustrator ignora a opacidade posta no
+      // próprio <text> (o texto a 75% chegava a 100%), e ao abrir ele já põe o texto dentro de um grupo com o nome.
+      return `<g id="${id}"${comuns}><text transform="${matriz(t.transformacao)}" font-family="${fonte(t.estilo)}"${t.estilo.peso !== undefined ? ` font-weight="${t.estilo.peso}"` : ''} font-size="${n(t.estilo.tamanho)}" fill="${hex(t.estilo.cor)}"${espaco(t.estilo)}${t.estilo.kerning ? '' : ' font-kerning="none"'} xml:space="preserve">${linhas}</text></g>`;
     }
     if (c.imagem) {
       const i = c.imagem;
@@ -217,12 +205,15 @@ class Escritor {
 
 export function criarFormatoSvg(): FormatoDeArquivoEmCamadas {
   return {
-    capacidades: { paginas: false, degradeTransparente: true },
+    // nenhum modo de mesclagem: o SVG tem `mix-blend-mode`, mas o Illustrator não o aplica ao abrir (conferido no 2022, em 2026-10-02)
+    capacidades: { paginas: false, degradeTransparente: true, modos: [] },
     escrever(arquivo: ArquivoEmCamadas): ArquivoGravado {
       if (arquivo.camadas.some((c) => c.prancheta)) throw new Error('O SVG leva uma prancheta por arquivo');
       const e = new Escritor();
       const corpo = e.lista(arquivo.camadas);
-      const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${arquivo.largura}" height="${arquivo.altura}" viewBox="0 0 ${arquivo.largura} ${arquivo.altura}">${arquivo.titulo ? `<title>${xml(arquivo.titulo)}</title>` : ''}${e.defs()}${corpo}</svg>\n`;
+      // SVG 1.1 completo, declarado: sem a versão e o tipo de documento o Illustrator trata o arquivo como SVG Tiny e avisa
+      // que "o recorte será perdido" (o Tiny não tem recorte)
+      const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n<svg version="1.1" baseProfile="full" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${arquivo.largura}" height="${arquivo.altura}" viewBox="0 0 ${arquivo.largura} ${arquivo.altura}">${arquivo.titulo ? `<title>${xml(arquivo.titulo)}</title>` : ''}${e.defs()}${corpo}</svg>\n`;
       return { bytes: new TextEncoder().encode(svg), extensao: 'svg' };
     },
   };

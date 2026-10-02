@@ -52,6 +52,29 @@ export function nomePostScript(bytes: Uint8Array): string | undefined {
   return undefined;
 }
 
+/**
+ * Altura da maiúscula da fonte, em fração do corpo (sCapHeight da tabela OS/2, versão 2 ou maior).
+ * É por ela que o Photoshop alinha a primeira linha de um texto em caixa gravado sem os dados dele.
+ * Fonte sem o campo: undefined.
+ */
+export function alturaDaMaiuscula(bytes: Uint8Array): number | undefined {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  try {
+    let unidades: number | undefined;
+    let maiuscula: number | undefined;
+    for (let i = 0; i < v.getUint16(4); i++) {
+      const p = 12 + i * 16;
+      const tabela = String.fromCharCode(v.getUint8(p), v.getUint8(p + 1), v.getUint8(p + 2), v.getUint8(p + 3));
+      const inicio = v.getUint32(p + 8);
+      if (tabela === 'head') unidades = v.getUint16(inicio + 18);
+      if (tabela === 'OS/2' && v.getUint16(inicio) >= 2) maiuscula = v.getInt16(inicio + 88);
+    }
+    return unidades && maiuscula && maiuscula > 0 ? maiuscula / unidades : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function recursosOpenType(bytes: Uint8Array): RecursosOpenType {
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const tabelas = v.getUint16(4);

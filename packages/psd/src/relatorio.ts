@@ -82,6 +82,13 @@ export type CodigoDeAvisoVetorial =
   | 'tokens-viram-valor'
   | 'texto-em-linhas'
   | 'virou-imagem'
+  /** camadas achatadas numa imagem com o que estava abaixo de uma camada de ajuste */
+  | 'camadas-achatadas'
+  /** camada com modo de mesclagem que o arquivo não guarda: saiu como a imagem que, em modo normal, dá a mesma cor */
+  | 'modo-em-imagem'
+  /** há imagem do tamanho da prancheta por cima de texto: no Illustrator, trave-a para clicar no texto */
+  | 'imagem-sobre-texto'
+  /** não são mais emitidos (desde 2026-10-02 a camada de ajuste é achatada, e o modo que o arquivo não guarda vira imagem). Ficam no tipo para quem já tem texto para eles. */
   | 'ficou-de-fora'
   | 'modo-de-mesclagem-trocado';
 
@@ -99,12 +106,17 @@ const TEXTO_DO_AVISO_VETORIAL: Record<CodigoDeAvisoVetorial, string> = {
   'tokens-viram-valor': 'As cores da identidade viraram valor fixo.',
   'texto-em-linhas': 'O texto vai como texto, uma linha de cada vez, na quebra que o Otto fez. No Illustrator ele não requebra sozinho ao mudar a largura.',
   'virou-imagem': 'Algumas camadas saíram como imagem embutida, porque usam recurso que o vetor não tem (sombra, brilho, filtro, máscara suave). A lista de camadas diz quais e por quê.',
+  'camadas-achatadas': 'Camada de ajuste muda a cor de tudo o que está abaixo dela. Para a cor ficar certa, ela e o que estava abaixo dela saíram numa imagem só. A lista de camadas diz quais.',
+  'modo-em-imagem':
+    'Há camada com modo de mesclagem que o arquivo não guarda (no SVG, todos; no PDF, só alguns). Ela saiu como uma imagem em modo normal que dá a mesma cor sobre o que estava abaixo dela. O que está abaixo continua editável; se você mudar o que está abaixo, essa imagem não acompanha.',
+  'imagem-sobre-texto':
+    'Há imagem do tamanho da prancheta por cima do texto. No Illustrator, trave essa imagem (Objeto > Bloquear) para o clique da ferramenta Texto entrar no texto, e não criar um texto novo.',
   'ficou-de-fora': 'As camadas de ajuste não vão para o arquivo vetorial. As cores podem ficar diferentes do que o Otto mostra.',
   'modo-de-mesclagem-trocado': 'Há camada com modo de mesclagem que o formato não tem. Ela saiu em modo normal.',
 };
 
 /** Fecha o relatório da saída vetorial: os avisos gerais saem do que de fato entrou no arquivo. */
-export function fecharRelatorioVetorial(rel: RelatorioDeExportacaoVetorial, modoTrocado: boolean): RelatorioDeExportacaoVetorial {
+export function fecharRelatorioVetorial(rel: RelatorioDeExportacaoVetorial, oQueHouve: { achatadas: number; modosEmImagem?: number; imagemSobreTexto: boolean }): RelatorioDeExportacaoVetorial {
   const avisos: CodigoDeAvisoVetorial[] = [];
   const tem = (f: (l: LinhaDoRelatorioVetorial) => boolean): boolean => rel.camadas.some(f);
   if (tem((l) => l.tipo === 'texto' && l.destino === 'nativo-editavel')) avisos.push('texto-em-linhas', 'instalar-fontes');
@@ -112,8 +124,9 @@ export function fecharRelatorioVetorial(rel: RelatorioDeExportacaoVetorial, modo
   if (rel.emFalta.fontes.length > 0) avisos.push('fonte-em-falta');
   if (rel.emFalta.imagens.length > 0) avisos.push('imagem-em-falta');
   if (tem((l) => l.destino === 'raster-com-aviso')) avisos.push('virou-imagem');
-  if (tem((l) => l.destino === 'omitido-com-aviso')) avisos.push('ficou-de-fora');
-  if (modoTrocado) avisos.push('modo-de-mesclagem-trocado');
+  if (oQueHouve.achatadas > 0) avisos.push('camadas-achatadas');
+  if ((oQueHouve.modosEmImagem ?? 0) > 0) avisos.push('modo-em-imagem');
+  if (oQueHouve.imagemSobreTexto) avisos.push('imagem-sobre-texto');
   if (rel.tokens.length > 0) avisos.push('tokens-viram-valor');
   return { ...rel, avisos: avisos.map((codigo) => ({ codigo, texto: TEXTO_DO_AVISO_VETORIAL[codigo] })) };
 }

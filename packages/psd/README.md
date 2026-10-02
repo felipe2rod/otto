@@ -25,7 +25,8 @@ docker compose run --rm teste pnpm --filter @otto/psd exportar:pecas
 | `exportar.ts` | `exportarPsd`, `exportarPng`, `relatorioDeExportacao`: junta o mapeamento, o render de referência em CPU e a porta |
 | `adaptadores/biblioteca-de-psd.ts` | O único arquivo que conhece a biblioteca que grava o PSD. Só traduz o modelo da porta. O perfil sRGB entra aqui, direto nos bytes (a biblioteca não o grava) |
 | `perfil-srgb.ts` | O perfil ICC sRGB, gerado aqui (2,5 KB), para o PSD e para o PDF |
-| `montar-vetorial.ts` | O mapeamento vetorial em ação: o que sai em vetor, o que vira imagem e o que fica de fora, e o relatório |
+| `montar-vetorial.ts` | O mapeamento vetorial em ação: o que sai em vetor, o que vira imagem, o que achata (camada de ajuste) e o que vira imagem equivalente em modo normal (modo de mesclagem que o arquivo não guarda), e o relatório |
+| `versalete.ts` | O versalete nos formatos que não o têm: onde o texto muda de corpo |
 | `exportar-vetorial.ts` | `exportarVetorial`, `relatorioDeExportacaoVetorial`: junta o mapeamento vetorial, o motor (quebra de linha do texto, imagens) e a porta |
 | `adaptadores/svg.ts` | O SVG, escrito aqui, sem biblioteca |
 | `adaptadores/biblioteca-de-pdf.ts` | O único arquivo que conhece a biblioteca de PDF. As camadas do PDF são montadas com os objetos de baixo nível dela |
@@ -69,17 +70,21 @@ import { criarFormatoPdf, criarFormatoSvg, exportarVetorial, relatorioDeExportac
 
 const svg = await exportarVetorial(ck, criarFormatoSvg(), doc, recursos, { nome, pranchetas, escalaDaImagem: 2, entreEtapas });
 // svg.arquivos: um ".svg" por prancheta
-const pdf = await exportarVetorial(ck, criarFormatoPdf(), doc, recursos, { nome, pranchetas, arquivos: 'juntas' });
-// pdf.arquivos: um ".pdf" com uma página por prancheta ('por-prancheta' dá um arquivo por prancheta)
+const pdf = await exportarVetorial(ck, criarFormatoPdf(), doc, recursos, { nome, pranchetas });
+// pdf.arquivos: um ".pdf" por prancheta. Com arquivos: 'juntas', um ".pdf" só, com uma página por prancheta
 const previsto = relatorioDeExportacaoVetorial(doc, { fontes, imagens }, { pranchetas, formato: 'pdf' });
 ```
 
-- `recursos` é o mesmo do PSD. O relatório é `RelatorioDeExportacaoVetorial`: a mesma forma do relatório do PSD, com um destino a mais nas camadas (`'omitido-com-aviso'`) e os códigos de aviso próprios (`CodigoDeAvisoVetorial`). Os tipos do relatório do PSD não mudaram.
-- `relatorioDeExportacaoVetorial` sai sem renderizar, e o teste garante que é igual ao que a exportação devolve. No PDF passe `formato: 'pdf'`: degradê com parada transparente vira imagem só nele.
-- `escalaDaImagem` (padrão 2) é a resolução das camadas que viram imagem. É o que mais pesa no tempo e na memória.
-- A porta agora admite `escrever` assíncrono (a biblioteca de PDF é) e o formato declara `capacidades` (páginas, degradê transparente). `exportarPsd` não mudou de assinatura.
+- `recursos` é o mesmo do PSD. O relatório é `RelatorioDeExportacaoVetorial`: a mesma forma do relatório do PSD, com os códigos de aviso próprios (`CodigoDeAvisoVetorial`). Os tipos do relatório do PSD não mudaram.
+- **O padrão do PDF é um arquivo por prancheta** (desde 2026-10-02): o Illustrator abre só a primeira página de um PDF de várias. `arquivos: 'juntas'` continua valendo para quem quer um PDF só.
+- **Carregue o motor com `carregarCanvasKit('completa')` para a saída vetorial.** Só a variante completa codifica JPEG, e é em JPEG que vai toda imagem sem transparência (o fundo achatado, a foto com filtro). Com a variante padrão o arquivo sai certo, em PNG, várias vezes maior.
+- `relatorioDeExportacaoVetorial` sai sem renderizar, e o teste garante que é igual ao que a exportação devolve. **Passe `formato`**: no PDF, degradê com parada transparente vira imagem e 15 modos de mesclagem vão nativos; no SVG (o padrão), todo modo de mesclagem vira imagem.
+- Destinos do relatório: `nativo-editavel`, `nativo-pixel` e `raster-com-aviso`. `omitido-com-aviso` continua no tipo e não é mais emitido: nada fica de fora do arquivo.
+- Avisos novos: `camadas-achatadas` (camada de ajuste: ela e o que está abaixo viraram uma imagem só), `modo-em-imagem` (camada com modo de mesclagem que o arquivo não guarda virou a imagem equivalente em modo normal) e `imagem-sobre-texto` (imagem do tamanho da prancheta por cima de texto: no Illustrator é preciso travá-la para clicar no texto). `ficou-de-fora` e `modo-de-mesclagem-trocado` continuam no tipo e não são mais emitidos.
+- `escalaDaImagem` (padrão 2) é a resolução das camadas que viram imagem. É o que mais pesa no tempo e na memória. A foto que vira imagem não passa da resolução do arquivo dela, e a imagem equivalente de um modo de mesclagem vai na resolução do documento.
+- A porta admite `escrever` assíncrono (a biblioteca de PDF é) e o formato declara `capacidades` (páginas, degradê transparente, modos de mesclagem). `exportarPsd` não mudou de assinatura.
 
-Medido nas cinco peças de `exportar:pecas` (1080 px, uma ou duas pranchetas): SVG de 5,8 a 7 s, e 29,5 s na peça com desfoque de movimento; PDF de 7,3 a 10,4 s, e 31 s na mesma peça. Arquivos de 1,8 a 12,9 MB. A memória do processo passou de 1 GB ao exportar PSD, PNG, SVG e PDF das cinco peças em seguida: a imagem em escala 2 tem quatro vezes os pixels.
+Medido nas cinco peças de `exportar:pecas` (1080 px, uma ou duas pranchetas), com a variante completa do motor, em 2026-10-02: SVG de 4 a 20 s, e 38 s na peça com desfoque de movimento; PDF de 2 a 21 s, e 40 s na mesma peça. Arquivos de 1,3 a 6,7 MB (o SVG da padaria caiu de 12 para 4,6 MB). Pico de memória do processo ao exportar PSD, PNG, SVG e PDF das cinco peças em seguida: 880 MB.
 
 ### Tempo e memória do PSD, medidos
 
@@ -103,12 +108,12 @@ A pior peça tem desfoque de movimento de 100 px numa foto de 900 × 600: o laç
 - **O perfil sRGB**: a segunda biblioteca o lê inteiro de cada PSD. O perfil em si foi conferido uma vez, à mão, contra o sRGB do LittleCMS (pelo Pillow): converter 6088 cores de um para o outro dá diferença máxima de 1 nível.
 - **SVG** (`vetorial.test.ts`): relido por um analisador de XML independente (ids, `<text>` com as linhas e os pedaços, imagem embutida, recortes, degradês) e **desenhado por um renderizador de SVG independente** (`@resvg/resvg-js`), comparado com o render do Otto: menos de 1% a 5% dos pixels a mais de 24 níveis, conforme a cena (a borda suavizada e o texto, que cada renderizador faz do seu jeito). Goldens: os `.svg` de cada cena.
 - **PDF** (`pdf.test.ts`): aberto por um leitor de PDF independente (`pdfjs-dist`), que dá as páginas, as camadas com os nomes, o texto extraído, e **desenha a página** (com `@napi-rs/canvas`), comparada com o render do Otto pelo mesmo critério. A fonte embutida, descomprimida, é o arquivo original byte a byte. Goldens: os `.pdf` de cada cena. O leitor não monta a árvore de camada dentro de camada; a árvore é conferida nos bytes do arquivo.
-- **O que nenhum teste prova: que o Photoshop e o Illustrator abrem e editam.** Não há Photoshop nem Illustrator no CI. A cada release que mexe neste pacote, uma pessoa abre os arquivos de `goldens/` e os de `exportar:pecas` e segue `saida/CONFERIR-NO-PHOTOSHOP.txt` e `saida/CONFERIR-NO-ILLUSTRATOR.txt`. O que falhar muda de linha em `docs/tecnico/psd.md`. **Essas conferências ainda não foram feitas nenhuma vez.**
+- **O que nenhum teste prova: que o Photoshop e o Illustrator abrem e editam.** Não há Photoshop nem Illustrator no CI. A cada release que mexe neste pacote, uma pessoa abre os arquivos de `goldens/` e os de `exportar:pecas` e segue `saida/CONFERIR-NO-PHOTOSHOP.txt` e `saida/CONFERIR-NO-ILLUSTRATOR.txt`. O que falhar muda de linha em `docs/tecnico/psd.md`. **A primeira conferência foi feita em 2026-10-02** (respostas em `docs/tecnico/conferencias/2026-10-02/`); o que ela mudou, e o que ficou para confirmar numa segunda, está em `docs/tecnico/psd.md`.
 
 ## O que falta
 
 - Miniatura do PSD.
 - Leitura (`ler`) na porta: entra com a importação de PSD.
 - Objeto inteligente e filtro inteligente estão em uso para foto, como na POC, e o ADR 028 os lista como fora da v1: **pede ADR**.
-- Na saída vetorial: camada de ajuste fica de fora e a cor muda (em peça que depende de duotone por ajuste, muda muito); recorte com base em texto vira imagem (o SVG e o PDF têm recorte por texto, falta ver se o Illustrator o abre editável); a mesma foto em várias camadas é embutida uma vez no PDF e uma vez por camada no SVG; o PDF não leva kerning (as letras vão no avanço da fonte), e o Illustrator refaz o texto com o dele.
-- A biblioteca de PDF só lê camadas; a criação delas é nossa, com os objetos de baixo nível. Se o Illustrator não as reconhecer, o nome das camadas no Illustrator fica só no SVG.
+- No PSD: o Photoshop pede para atualizar as camadas de texto ao abrir (a biblioteca não grava o texto já diagramado); a suavidade do degradê vai sempre em 100%; forma girada não é forma viva.
+- Na saída vetorial: os nomes das camadas só chegam ao Illustrator pelo SVG (ele não lê as camadas do PDF); um objeto de texto por linha e por mudança de estilo, e o versalete conta como mudança de estilo; camada de ajuste solta no topo da pilha transforma a prancheta inteira numa imagem (é a decisão de achatar); recorte com base em texto vira imagem; a mesma foto em várias camadas é embutida uma vez no PDF e uma vez por camada no SVG; o texto do PDF vai sem ligadura e sem desenho alternativo de letra (o Illustrator converte em contorno o que não corresponde a um caractere).

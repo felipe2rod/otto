@@ -44,7 +44,9 @@ describe('mapeamento Otto → PSD', () => {
     }
     // os 15 modos que o SVG e o PDF têm, mais normal e atravessar
     expect(Object.entries(MAPEAMENTO).filter(([chave, l]) => chave.startsWith('modo:') && l.vetorial?.destino === 'Nativo')).toHaveLength(17);
-    expect(Object.entries(MAPEAMENTO).filter(([chave, l]) => chave.startsWith('ajuste:') && l.vetorial?.destino === 'Omitido')).toHaveLength(9);
+    // camada de ajuste: achata (decisão do Felipe, 2026-10-02). Nada mais fica de fora do arquivo vetorial
+    expect(Object.entries(MAPEAMENTO).filter(([chave, l]) => chave.startsWith('ajuste:') && l.vetorial?.destino === 'Raster')).toHaveLength(9);
+    expect(Object.values(MAPEAMENTO).filter((l) => l.vetorial?.destino === 'Omitido')).toEqual([]);
   });
 
   it('o que o Otto bloqueia não tem representação no arquivo', () => {

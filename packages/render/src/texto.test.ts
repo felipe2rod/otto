@@ -94,12 +94,12 @@ describe('texto com o módulo de parágrafo do Skia', () => {
     expect(alta.linhas[0]?.largura).toBeGreaterThan((baixa.linhas[0]?.largura ?? 0) + 10);
   });
 
-  it('versalete sintético: minúscula vira maiúscula a 75% do corpo, como no Photoshop', () => {
+  it('versalete sintético: minúscula vira maiúscula a 70% do corpo, como no Photoshop', () => {
     const cheio = sessao.texto.diagramar(no('ABC', { tamanho: 80 }));
     const versalete = sessao.texto.diagramar(no('abc', { tamanho: 80, versalete: true }));
     const maiusculaEmVersalete = sessao.texto.diagramar(no('ABC', { tamanho: 80, versalete: true }));
     expect(versalete.linhas[0]?.texto).toBe('ABC');
-    expect(Math.abs(versalete.tinta.h - cheio.tinta.h * 0.75)).toBeLessThanOrEqual(1);
+    expect(Math.abs(versalete.tinta.h - cheio.tinta.h * 0.7)).toBeLessThanOrEqual(1);
     expect(Math.abs(maiusculaEmVersalete.tinta.h - cheio.tinta.h)).toBeLessThanOrEqual(1);
   });
 
