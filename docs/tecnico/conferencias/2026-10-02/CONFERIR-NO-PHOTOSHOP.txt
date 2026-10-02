@@ -1,0 +1,39 @@
+Conferência no Photoshop (ADR 028, item 6)
+
+Para cada peça há: um PSD por prancheta, um PSD com todas as pranchetas, o PNG de cada prancheta (o que o Otto
+renderiza) e o relatório. Instale antes as fontes da pasta "fontes" de cada peça.
+
+Ao abrir
+ 1. O arquivo abre sem erro? Se o Photoshop mostrar algum aviso, qual é o texto dele?
+ 2. Aparece o pedido de atualizar as camadas de texto? Escolha "Atualizar" e veja se o texto muda de lugar ou de quebra de linha.
+ 3. O Photoshop reclama de fonte ausente mesmo com as fontes da pasta instaladas? Qual?
+ 4. Pergunta sobre perfil de cor? (O arquivo sai sem perfil embutido; o Otto trabalha em sRGB.)
+
+Aparência
+ 5. Antes de mexer em qualquer coisa, compare com o PNG da prancheta. O que está diferente?
+ 6. Desligue e ligue uma camada com efeito (sombra, brilho, traço): a aparência volta igual? O tamanho da sombra e do brilho
+    bate com o do PNG?
+ 7. Camadas com modo de mesclagem e camadas de ajuste: a cor bate com o PNG?
+
+Texto
+ 8. Dê dois cliques num texto: ele entra em edição sem pular? Mudou a quebra de linha, a entrelinha ou o espaçamento?
+ 9. A fonte, o tamanho e a cor estão certos no painel Caractere? Em texto com trechos (preço em destaque), cada trecho tem o estilo dele?
+
+Forma e vetor
+10. A forma é camada de forma (ícone de forma no painel Camadas, cor trocável com dois cliques na miniatura)?
+11. Com a seta branca, os pontos do caminho aparecem? O canto arredondado está redondo?
+12. Vetor (logo, ícone): é um grupo com uma camada de forma por caminho? O traçado aparece no painel Propriedades?
+
+Foto
+13. A foto é objeto inteligente (ícone no canto da miniatura)? Dois cliques abrem a foto original inteira?
+14. O corte da foto é uma máscara vetorial (segunda miniatura, cinza)?
+15. Os filtros aparecem como filtros inteligentes embaixo da camada (desfoque, ruído, nitidez, desfoque de movimento)? Dois cliques
+    abrem o filtro com o valor certo? Ao reaplicar, a aparência muda muito?
+16. A mesma foto usada em duas camadas (fundo e sujeito): as duas são o mesmo objeto inteligente?
+17. A máscara do sujeito aparece como máscara de camada, no lugar certo?
+
+Estrutura
+18. Os grupos estão no lugar, com os nomes das camadas do Otto? A máscara de recorte (seta para baixo) está nas camadas certas?
+19. No PSD com todas as pranchetas: cada prancheta é uma prancheta do Photoshop, com o nome e o tamanho certos?
+
+Anote, por peça, o número do item e o que viu. O que falhar muda de linha em docs/tecnico/psd.md.

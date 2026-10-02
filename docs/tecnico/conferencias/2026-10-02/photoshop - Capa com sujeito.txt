@@ -1,0 +1,65 @@
+Conferência no Photoshop — respostas
+Peça: Capa com sujeito (Capa com sujeito.psd, 1080 × 1350 px)
+Feita em 02/10/2026 no Photoshop 2025 (26.7), em português, com as fontes da pasta "fontes" instaladas.
+Como foi feita: o arquivo foi aberto de verdade no Photoshop; os avisos foram lidos da tela; as camadas foram lidas por
+script; a aparência foi medida exportando o que o Photoshop mostra e comparando, pixel a pixel, com o PNG da pasta.
+"Diferença média" é a média da diferença por canal, numa escala de 0 a 255.
+
+Ao abrir
+ 1. Abre sem erro. Aparecem dois avisos, nesta ordem:
+    a) "Perfil não correspondente incorporado": "O documento “Capa com sujeito.psd” tem um perfil de cor incorporado
+       que não corresponde ao espaço de trabalho RGB atual. Incorporado: sRGB IEC61966-2.1. Ativo: Adobe RGB (1998)."
+    b) "É possível que algumas camadas de texto precisem ser atualizadas antes que possam ser utilizadas para saída
+       baseada em vetor. Deseja atualizar estas camadas agora?" (Não / Atualizar / Saiba mais)
+ 2. Aparece. Com "Atualizar" o texto MUDA DE LUGAR, sem mudar a quebra de linha:
+    - Título "JAZZ" (470 px): sobe 149 px (o topo da tinta vai de y=189 para y=40) e anda 3 px para a esquerda.
+    - Subtítulo (56 px): sobe 15 px.
+    O salto é sempre (ascendente da fonte − altura da maiúscula) × tamanho: Anton 0,317 × 470 = 149; Instrument Serif
+    0,270 × 56 = 15. A caixa de texto está gravada com a primeira linha alinhada pela altura da maiúscula
+    (frameBaselineAlignment = alignByCapHeight), e os pixels gravados no arquivo usam o ascendente.
+ 3. Não. As duas fontes (Anton-Regular e InstrumentSerif-Regular) aparecem como disponíveis.
+ 4. Pergunta, sim (o aviso do item 1a). O arquivo TEM perfil embutido: sRGB IEC61966-2.1. O aviso aparece porque o
+    espaço de trabalho deste Photoshop é Adobe RGB (1998).
+
+Aparência
+ 5. Antes de mexer (sem atualizar o texto): diferença média de 3,8; 4,9% dos pixels diferem de forma visível.
+    O que está diferente é a camada "Película" (faixa de y=950 até a base): no PNG ela é um degradê, opaca embaixo e
+    transparente em cima; no Photoshop é uma faixa quase uniforme, com uma borda dura no topo. Causa: a escala do
+    degradê está gravada como 10000% (o normal é 100%). Trocando para 100% no Photoshop, a faixa passa a bater com o PNG
+    (diferença média na região cai de 5,7 para 2,4). O resto (foto, duotone, sujeito, grão, texto) bate.
+ 6. Não se aplica: esta peça não tem camada com efeito (sombra, brilho, traço).
+ 7. Batem. "Grão" (sobrepor, 40%) e os dois "Duotone" (mapa de degradê, 85%): diferença média de 4,0 numa faixa sem
+    texto nem película.
+
+Texto
+ 8. Depende do que foi escolhido ao abrir. Sem "Atualizar": ao entrar em edição o texto pula, exatamente o mesmo salto do
+    item 2 (Título vai para a caixa 139,40–942,448). Depois de "Atualizar": não pula mais; caixa e aparência ficam
+    idênticas. Quebra de linha e espaçamento não mudam em nenhum dos casos.
+    (Medido regravando o texto pelo motor de texto do Photoshop, por script, e não com dois cliques do mouse.)
+ 9. Certos. Título: Anton Regular, 470 px, #f3ecdd, entrelinha 470, espaçamento −10, centralizado. Subtítulo: Instrument
+    Serif Regular, 56 px, #f3ecdd, entrelinha 64,4, à esquerda. Não há trechos com estilo próprio nesta peça.
+
+Forma e vetor
+10. Sim. "Película" é camada de forma (preenchimento em degradê + máscara vetorial); "Fundo" é camada de preenchimento
+    sólido (#1b1f4b). "Grão" é camada de pixel, como o relatório avisa.
+11. Os pontos aparecem (retângulo de 4 pontos). Não há canto arredondado nesta peça. A forma não é "forma viva": o
+    painel Propriedades não mostra os controles de retângulo, só o caminho.
+12. Não se aplica: não há logo nem ícone vetorial.
+
+Foto
+13. Sim. "Foto" e "Foto (sujeito)" são objetos inteligentes embutidos; abrir o conteúdo mostra a foto original inteira
+    (853 × 1280 px).
+14. Sim, máscara vetorial retangular de 4 pontos (0,0 a 1080,1350) nas duas camadas.
+15. Não se aplica: nenhuma foto desta peça tem filtro inteligente.
+16. Sim. As duas camadas têm o mesmo identificador de objeto inteligente (9f36fdfc-…); abrir uma ou outra abre o mesmo
+    conteúdo.
+17. Sim. "Foto (sujeito)" tem máscara de camada (ativa e vinculada) além da máscara vetorial, e o recorte do sujeito
+    fica no lugar do PNG.
+
+Estrutura
+18. Não se aplica (parte da premissa de camadas do Otto). O que há: sem grupos; máscara de recorte em "Duotone da marca"
+    (sobre "Foto") e em "Duotone do sujeito" (sobre "Foto (sujeito)").
+19. Não se aplica: a peça tem uma prancheta só e não há PSD de todas as pranchetas.
+
+O que falhou nesta peça: item 2/8 (texto pula ao atualizar ou editar), item 5 (escala do degradê da Película) e o
+texto do item 4 do questionário (o arquivo sai com perfil sRGB embutido, não sem perfil).

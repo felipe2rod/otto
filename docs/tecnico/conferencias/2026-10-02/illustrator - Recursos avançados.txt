@@ -1,0 +1,73 @@
+Conferência no Illustrator — respostas
+Peça: Recursos avançados (Feed.svg 1080 × 1350, Quadrado.svg 1080 × 1080 e o PDF de duas páginas)
+Feita em 02/10/2026 no Illustrator 2022 (26.1), em português, com as fontes da pasta "fontes" instaladas.
+Como foi feita: os arquivos foram abertos de verdade no Illustrator; os avisos foram lidos da tela; os objetos foram
+lidos por script; a aparência foi medida exportando cada prancheta em PNG e comparando, pixel a pixel, com o PNG da
+pasta. O item 7 foi testado com clique de verdade da ferramenta Texto. "Diferença média" vai de 0 a 255.
+
+Ao abrir
+ 1. SVG (os dois): abrem, com um aviso: "Não foi possível importar corretamente estes itens: O recorte será perdido no
+    percurso de ida e volta para Tiny".
+    PDF: abre, com um aviso: "O documento contém objetos PDF que foram reinterpretados: Para preservar a aparência,
+    parte do texto foi contornada." (OK / Cancelar).
+    Nenhum aviso de fonte ausente nem de perfil de cor.
+ 2. Pergunta. Abre a janela "Opções de importação de PDF", com "Intervalo: 1-1 (de 2)" marcado. Com OK direto vem só a
+    página 1. Com "Tudo", o Illustrator marca sozinho "Importar as páginas do PDF como links" e cria um documento novo
+    ("Sem título", em CMYK) com as duas pranchetas, mas cada página é um link, sem edição. Com "Tudo" e essa caixa
+    desmarcada, cria um documento novo em RGB com as duas pranchetas editáveis. O tamanho está certo: 1080 × 1350 e
+    1080 × 1080.
+
+Camadas e nomes
+ 3. Não se aplica (parte da premissa de camadas do Otto). O que há no SVG: os objetos chegam com nome, e acentos,
+    espaços e símbolos chegam certos: "Papel", "Logo", "Logo · #ff5a3d (3)", "Faixa", "Texto do selo", "Selo",
+    "Subtítulo", "Título", "Foto", "Fundo".
+ 4. Não se aplica. O que há no PDF: uma camada só ("Camada 1") e nenhum objeto com nome. Importando as duas páginas,
+    cada página vira um grupo sem nome.
+ 5. Não se aplica. O que há: no SVG o "Logo" continua grupo, com os três caminhos nomeados dentro; no PDF o logo vem
+    num grupo sem nome, com um grupo de recorte do tamanho da prancheta dentro e os três caminhos dentro dele.
+ 6. SVG: não há recorte em volta de tudo; só um grupo de recorte, o do "Papel". PDF: 7 grupos de recorte na página; a
+    imagem do papel vem dentro de três, um dentro do outro, e o logo dentro de um do tamanho da prancheta; os textos
+    vêm soltos. Atrapalha para pegar a imagem e o logo.
+
+Texto (o risco principal)
+ 7. É texto editável, mas PARTIDO, e o esperado (um objeto por camada) não acontece:
+    - Título: 4 objetos ("Cap", "p", "uccino", "em dobro"), um por trecho de estilo e por linha.
+    - Subtítulo: 18 objetos, um por palavra e por espaço (a camada está em versalete, e cada mudança de tamanho vira
+      um objeto).
+    - Texto do selo: 2 objetos, um por linha.
+    No SVG os pedaços ficam dentro de um grupo com o nome da camada; no PDF ficam soltos.
+    No PDF, além disso, parte do título deixa de ser texto: "uccino" e "em dobro" viram dois caminhos compostos
+    (é o aviso do item 1); só "Cap" e "p" continuam texto.
+    O clique da ferramenta Texto em cima de "em dobro", no SVG, cria um texto novo, porque a imagem "Papel" está por
+    cima de tudo e é nela que o clique cai. Com as imagens travadas, o mesmo clique entra no texto.
+ 8. Certos, sem fonte substituta. Título: Fraunces SemiBold, 150 pt (120 no Quadrado), #0f3b2c. Subtítulo: Fraunces
+    Regular 40 pt nas iniciais e 30 pt nas versaletes (32 e 24 no Quadrado), #17171c. Texto do selo: Space Grotesk
+    Bold, 34 pt (27), #0f3b2c.
+ 9. Bate: no PDF as linhas ficam no lugar do PNG com erro de até 1 px (até 5 px na largura em dois pedaços do
+    subtítulo do Quadrado). No SVG a posição dos objetos é a mesma; não dá para medir pela aparência por causa do véu
+    do item 16. Cada trecho tem o estilo dele: " R$ " em Fraunces Bold #0f3b2c.
+10. Sim. O "Texto do selo" continua texto editável, girado −12°, no lugar, em dois objetos (um por linha).
+
+Forma, vetor e foto
+11. Sim. "Fundo" (4 pontos) e os caminhos do logo são editáveis, com cor trocável. "Selo" e "Faixa" viraram imagem, como
+    o relatório avisa.
+12. Não há degradê em vetor nesta peça: o da "Faixa" foi para dentro da imagem, no SVG e no PDF.
+13. Não se aplica: nenhuma forma desta peça tem traço.
+14. "Papel": sim, imagem inteira (1600 × 1600 px), embutida, dentro de um grupo de recorte com um retângulo de 4
+    pontos; dá para mover dentro da máscara. "Foto": virou imagem já cortada (2160 × 1406 px no Feed), sem máscara,
+    como o relatório avisa.
+15. Sim no SVG: grupo "Logo" com um caminho para cada parte, "Logo · #1a1512 (1)" (8 pontos curvos), "Logo · #f6f0e6
+    (2)" (caminho composto, 2 subcaminhos) e "Logo · #ff5a3d (3)" (4 pontos). No PDF os três caminhos existem, sem
+    nome, dentro de um grupo de recorte.
+
+Aparência
+16. SVG: muito diferente. Diferença média de 70 no Feed e 56 no Quadrado. O "Papel" perde o modo multiplicação e vira
+    um véu a 60% sobre a peça inteira, que apaga a foto e desbota o texto.
+    PDF: bate. Diferença média de 2,2 no Feed e 2,0 no Quadrado, concentrada na borda dos textos.
+17. Sim. No PDF, "Foto", "Selo" e "Faixa" estão no lugar e com a borda certa. No SVG estão no mesmo lugar, embaixo do véu.
+18. Opacidade: certa nos dois (Papel a 60%). Modo de mesclagem: no PDF está certo (multiplicação, no grupo do Papel); no
+    SVG se perde, o Papel chega como Normal. O SVG traz "mix-blend-mode:multiply", que o Illustrator 2022 não aplica.
+
+O que falhou nesta peça: item 1 (avisos), item 2 (por padrão só abre a página 1), item 7 (texto partido; parte
+contornada no PDF; clique cria texto novo), itens 16 e 18 (modo de mesclagem perdido no SVG) e, só no PDF, itens 4, 5
+e 6 (sem nomes, sem grupo, recortes aninhados).

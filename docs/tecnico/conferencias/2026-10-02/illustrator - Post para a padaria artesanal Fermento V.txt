@@ -1,0 +1,65 @@
+Conferência no Illustrator — respostas
+Peça: Post para a padaria artesanal Fermento Vivo divulgando o pão (um SVG e um PDF, 1080 × 1350)
+Feita em 02/10/2026 no Illustrator 2022 (26.1), em português, com as fontes da pasta "fontes" instaladas.
+Como foi feita: os arquivos foram abertos de verdade no Illustrator; os avisos foram lidos da tela; os objetos foram
+lidos por script; a aparência foi medida exportando a prancheta em PNG e comparando, pixel a pixel, com o PNG da pasta.
+"Diferença média" vai de 0 a 255.
+
+Ao abrir
+ 1. SVG: abre, com um aviso: "Não foi possível importar corretamente estes itens: O recorte será perdido no percurso de
+    ida e volta para Tiny". É o arquivo mais lento: levou 36 s para abrir (o SVG tem 12 MB).
+    PDF: abre, com um aviso: "O documento contém objetos PDF que foram reinterpretados: Para preservar a aparência,
+    parte do texto foi contornada." (OK / Cancelar).
+    Nenhum aviso de fonte ausente nem de perfil de cor.
+ 2. O PDF tem uma página só: abre direto, sem perguntar. Prancheta de 1080 × 1350, certa (no SVG também).
+
+Camadas e nomes
+ 3. Não se aplica (parte da premissa de camadas do Otto). O que há no SVG: os objetos chegam com nome, e acentos e
+    espaços chegam certos: "Textura grão", "Marca texto", "Selo marca", "Título", "Apoio", "Película degradê", "Foto pão",
+    "Fundo".
+ 4. Não se aplica. O que há no PDF: uma camada só ("Camada 1") e nenhum objeto com nome.
+ 5. Não se aplica: a peça não tem grupos.
+ 6. SVG: não há recorte em volta de tudo; só um grupo de recorte, o da "Textura grão". PDF: cada imagem vem dentro de
+    grupos de recorte aninhados, até três níveis; os textos vêm soltos. Atrapalha para pegar a imagem.
+
+Texto (o risco principal)
+ 7. É texto editável, mas PARTIDO:
+    - Título: 3 objetos ("Pão", "que tem ", "tempo"), um por linha e por trecho de estilo.
+    - Marca texto: 4 objetos ("F", "ERMENTO", "V", "IVO"), porque a camada está em versalete e cada mudança de tamanho
+      vira um objeto.
+    - Apoio: 1 objeto.
+    No SVG os pedaços ficam dentro de um grupo com o nome da camada; no PDF ficam soltos.
+    No PDF, além disso, parte do título deixa de ser texto: "que tem " e "tempo" viram dois caminhos compostos (é o
+    aviso do item 1); só "Pão" continua texto. E o "Apoio" fica com o espaçamento picado, letra a letra.
+    Atenção ao clique: a imagem "Textura grão" está por cima de todos os textos. Nas peças em que testei isso (Capa e
+    Recursos avançados), o clique da ferramenta Texto caía na imagem e criava um texto novo; com a imagem travada,
+    entrava no texto. Nesta peça não repeti o teste do clique.
+ 8. Certos, sem fonte substituta. Título: Fraunces SemiBold, 110 pt, #f3e9da, com "tempo" em Fraunces Bold. Marca texto:
+    Work Sans SemiBold, 26 pt nas iniciais e 19,5 pt nas versaletes, #5c3a21. Apoio: Work Sans Regular, 28 pt, #f3e9da.
+ 9. Bate: no SVG as linhas ficam no lugar do PNG com erro de até 1 px; no PDF, até 3 px na largura do "Apoio". O
+    trecho em destaque tem o estilo dele ("tempo" em Bold), em objeto separado.
+10. Não se aplica: não há texto girado.
+
+Forma, vetor e foto
+11. Sim. "Fundo" e, no SVG, "Película degradê" são caminhos de 4 pontos com cor trocável. O "Selo marca" virou imagem,
+    como o relatório avisa.
+12. SVG: sim, a "Película degradê" é um degradê linear editável, com três paradas (#5c3a21 a 95%, 55% e 0%). PDF: não,
+    virou imagem dentro de um grupo de recorte.
+13. O traço interno do "Selo marca" aparece igual ao PNG, mas não como contorno: está dentro da imagem do selo
+    (456 × 456 px), junto com a sombra. Não há grupo de recorte com contorno.
+14. "Textura grão": sim, imagem inteira (1600 × 1600 px), embutida, dentro de um grupo de recorte com um retângulo de 4
+    pontos; dá para mover dentro da máscara. "Foto pão": virou imagem já cortada (2160 × 2700 px), sem máscara, como o
+    relatório avisa.
+15. Não se aplica: não há logo nem ícone vetorial.
+
+Aparência
+16. SVG: diferença média de 26. A "Textura grão" perde o modo multiplicação e vira um véu claro a 20% sobre a peça
+    inteira; o "Apoio" fica um pouco mais forte (ver item 18).
+    PDF: bate. Diferença média de 1,8, concentrada na borda dos textos.
+17. Sim, nos dois formatos: "Foto pão", "Selo marca" e, no PDF, a película estão no lugar e com a borda certa.
+18. Opacidade das imagens: certa nos dois (Textura grão a 20%). Opacidade do "Apoio" (92%): certa no PDF; no SVG se
+    perde e o texto chega a 100%. Modo de mesclagem: no PDF está certo (multiplicação, no grupo da textura); no SVG se
+    perde e a textura chega como Normal. O SVG traz "mix-blend-mode:multiply", que o Illustrator 2022 não aplica.
+
+O que falhou nesta peça: item 1 (avisos), item 7 (texto partido; parte contornada no PDF), itens 16 e 18 (modo de
+mesclagem e opacidade de texto perdidos no SVG) e, só no PDF, itens 4 e 6 (sem nomes; recortes aninhados).

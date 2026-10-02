@@ -1,0 +1,71 @@
+Conferência no Photoshop — respostas
+Peça: Post para a padaria artesanal Fermento Vivo divulgando o pão (um PSD, 1080 × 1350 px)
+Feita em 02/10/2026 no Photoshop 2025 (26.7), em português, com as fontes da pasta "fontes" instaladas.
+Como foi feita: o arquivo foi aberto de verdade no Photoshop; os avisos foram lidos da tela; as camadas foram lidas por
+script; a aparência foi medida exportando o que o Photoshop mostra e comparando, pixel a pixel, com o PNG da pasta.
+"Diferença média" é a média da diferença por canal, numa escala de 0 a 255.
+
+Ao abrir
+ 1. ABRE COM ERRO. Antes de tudo o Photoshop mostra:
+    "Foi encontrado um problema ao ler a camada “Selo marca” porque as configurações no arquivo não eram válidas.
+    Continuar?" (OK / Cancelar)
+    Com OK o arquivo abre, mas o "Selo marca" fica só com a sombra projetada (normal, preto 25%, ângulo 90°, distância
+    6, tamanho 16): o traço interno que o relatório lista NÃO está na camada, e a borda do selo some. "Selo marca" é a
+    única camada da peça com sombra projetada; o mesmo erro aparece na peça do tênis, na outra camada que tem sombra
+    projetada.
+    Em seguida vêm os dois avisos de sempre: perfil não correspondente (sRGB incorporado × Adobe RGB) e o pedido de
+    atualizar as camadas de texto.
+ 2. Aparece. Com "Atualizar" o texto MUDA DE LUGAR (sobe); a quebra de linha continua igual:
+    - Título (110 px): sobe 31 px.
+    - Apoio (28 px): sobe 8 px.
+    - Marca texto (26 px): sobe 7 px e fica 6 px mais estreito (está em versalete, e o versalete do Photoshop é menor
+      que o que está nos pixels gravados no arquivo).
+    O salto é (ascendente da fonte − altura da maiúscula) × tamanho (Fraunces 0,278; Work Sans 0,270): a caixa de texto
+    está gravada com a primeira linha alinhada pela altura da maiúscula.
+ 3. Não. WorkSans-Regular, WorkSans-SemiBold, Fraunces-SemiBold e Fraunces-Bold aparecem como disponíveis.
+ 4. Pergunta, sim. O arquivo tem perfil sRGB IEC61966-2.1 embutido e o espaço de trabalho deste Photoshop é Adobe RGB.
+
+Aparência
+ 5. Antes de mexer é a peça que mais difere: diferença média de 11,4; 46% dos pixels diferem de forma visível.
+    a) "Película degradê": no PNG é um degradê que escurece a parte de baixo; no Photoshop é uma faixa uniforme com uma
+       borda dura em y=550, atravessando o pão. Causa: a escala do degradê está gravada como 10000% (o normal é 100%).
+       Trocando para 100% passa a bater (diferença na região cai de 17,7 para 3,8).
+    b) "Selo marca": sem a borda (ver item 1).
+    c) Foto: um pouco menos contrastada e saturada que no PNG (diferença média de 9,1 acima da película).
+ 6. Volta igual: desligar e ligar "Selo marca" não muda nenhum pixel. A sombra está no lugar; o que não bate com o PNG é
+    a borda, que falta (diferença média de 6,7 na região do selo).
+ 7. "Textura grão" (multiplicação, 20%) bate. "Foto pão: brilho e contraste" (brilho +5, contraste +12) e "Foto pão:
+    saturação" (+6) ficam mais fracos que no PNG: ver 5c.
+
+Texto
+ 8. Sem "Atualizar" na abertura: ao entrar em edição o texto pula, o mesmo salto do item 2. Depois de "Atualizar": não
+    pula; caixa e aparência ficam idênticas. Quebra de linha não muda.
+    (Medido regravando o texto pelo motor de texto do Photoshop, por script, e não com dois cliques do mouse.)
+ 9. Certos, e cada trecho tem o estilo dele:
+    - Apoio: Work Sans Regular, 28 px, #f3e9da, espaçamento 6, camada a 92%.
+    - Título: Fraunces SemiBold, 110 px, #f3e9da, entrelinha 99, espaçamento −15; a palavra "tempo" em Fraunces Bold.
+    - Marca texto: Work Sans SemiBold, 26 px, #5c3a21, versalete, centralizado.
+
+Forma e vetor
+10. Sim. "Película degradê" (preenchimento em degradê) e "Selo marca" (cor sólida #ead9be) são camadas de forma.
+11. Os pontos aparecem. O selo tem 4 pontos curvos (elipse) e está redondo. Não são "formas vivas".
+12. Não se aplica: não há logo nem ícone vetorial.
+
+Foto
+13. Sim. "Foto pão" abre "Foto pão.jpg" inteira (853 × 1280 px); "Textura grão" abre "Textura grão.jpg" inteira
+    (1600 × 1600 px).
+14. Sim, máscara vetorial retangular nas duas.
+15. Sim. "Foto pão" tem o filtro inteligente "Máscara de nitidez" com intensidade 40%, raio 1,5 px e limiar 0.
+    Reaplicar com os mesmos valores muda um pouco a aparência: diferença média de 1,5, o pixel que mais muda 40,
+    concentrada na parte de cima do pão (y de 332 a 550).
+16. Não se aplica: nenhuma foto é usada em duas camadas.
+17. Não se aplica: não há máscara de sujeito.
+
+Estrutura
+18. Não se aplica (parte da premissa de camadas do Otto). O que há: sem grupos; máscara de recorte nas duas camadas de
+    ajuste, sobre "Foto pão".
+19. Não se aplica: a peça tem uma prancheta só e não há PSD de todas as pranchetas.
+
+O que falhou nesta peça: item 1 (erro ao ler "Selo marca" e perda do traço interno), item 2/8 (texto pula; versalete
+estreita), item 5a (escala do degradê da película), item 5c/7 (ajustes da foto), item 15 (nitidez muda ao reaplicar) e o
+texto do item 4 do questionário (o arquivo sai com perfil sRGB embutido).

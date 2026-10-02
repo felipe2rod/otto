@@ -1,0 +1,36 @@
+Conferência no Illustrator (ADR 034)
+
+Para cada peça, na pasta "illustrator", há: um SVG por prancheta, um PDF com uma página por prancheta, e o relatório
+(o que saiu em vetor, o que virou imagem, o que ficou de fora). O PNG de cada prancheta, na pasta da peça, é o que o
+Otto renderiza. Instale antes as fontes da pasta "fontes" da peça. Abra o SVG e o PDF, um de cada vez, e anote para os dois.
+
+Ao abrir
+ 1. O arquivo abre sem erro e sem aviso? Se houver aviso (fonte ausente, perfil de cor), qual é o texto dele?
+ 2. No PDF: o Illustrator pergunta que página abrir, ou abre todas como pranchetas? O tamanho da prancheta é o da peça?
+
+Camadas e nomes
+ 3. No painel Camadas, os objetos têm o nome das camadas do Otto? (No SVG o nome vem do "id"; espaços e acentos chegam certos?)
+ 4. No PDF, as camadas do Otto viram camadas do Illustrator, ou cai tudo numa camada só, em grupos sem nome?
+ 5. Os grupos do Otto continuam grupos, com as camadas dentro?
+ 6. Há grupos de recorte (clipping) a mais em volta de tudo? Atrapalham para selecionar e mover?
+
+Texto (o risco principal)
+ 7. Clique num texto com a ferramenta de texto: ele é texto editável? Está inteiro, ou partido em um objeto por linha,
+    por palavra ou por letra? (O esperado: um objeto de texto por camada, com as linhas dentro.)
+ 8. A fonte, o tamanho e a cor estão certos no painel Caractere? Aparece a fonte certa, ou uma substituta marcada em rosa?
+ 9. A posição das linhas bate com o PNG? Em texto com trechos (preço em destaque), cada trecho tem o estilo dele?
+10. Texto girado continua editável e no lugar?
+
+Forma, vetor e foto
+11. As formas são caminhos editáveis (seta branca mostra os pontos)? A cor troca no painel?
+12. O degradê é um degradê editável do Illustrator (painel Gradiente), no SVG? E no PDF?
+13. O traço por dentro da forma (contorno) aparece igual ao PNG? Veio como contorno dentro de um grupo de recorte?
+14. A foto é uma imagem embutida inteira, com uma máscara de recorte no formato da caixa? Dá para mover a foto dentro da máscara?
+15. Vetor (logo, ícone): um grupo com um caminho para cada parte?
+
+Aparência
+16. Compare com o PNG. O relatório avisa que camada de ajuste fica de fora: fora isso, o que está diferente?
+17. As camadas que viraram imagem (sombra, brilho, filtro) estão no lugar e com a borda certa?
+18. Opacidade e modo de mesclagem (painel Transparência) estão nas camadas certas?
+
+Anote, por peça e por formato (SVG ou PDF), o número do item e o que viu. O que falhar muda de linha em docs/tecnico/psd.md.

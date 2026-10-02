@@ -1,0 +1,70 @@
+Conferência no Photoshop — respostas
+Peça: Recursos avançados (Feed 1080 × 1350, Quadrado 1080 × 1080 e o PSD de todas as pranchetas)
+Feita em 02/10/2026 no Photoshop 2025 (26.7), em português, com as fontes da pasta "fontes" instaladas.
+Como foi feita: os arquivos foram abertos de verdade no Photoshop; os avisos foram lidos da tela; as camadas foram lidas
+por script; a aparência foi medida exportando o que o Photoshop mostra e comparando, pixel a pixel, com o PNG de cada
+prancheta. "Diferença média" é a média da diferença por canal, numa escala de 0 a 255.
+
+Ao abrir
+ 1. Os três arquivos abrem sem erro. Aparecem dois avisos: "Perfil não correspondente incorporado" (incorporado: sRGB
+    IEC61966-2.1; ativo: Adobe RGB (1998)) e "É possível que algumas camadas de texto precisem ser atualizadas antes
+    que possam ser utilizadas para saída baseada em vetor. Deseja atualizar estas camadas agora?".
+ 2. Aparece. Com "Atualizar" o texto MUDA DE LUGAR (sobe); a quebra de linha continua igual:
+    - Feed: Título (150 px) sobe 42 px; Subtítulo (40 px) sobe 11 px e fica 37 px mais estreito; Texto do selo (34 px)
+      sobe 9 px.
+    - Quadrado: Título (120 px) sobe 33 px; Subtítulo (32 px) sobe 9 px e fica 31 px mais estreito; Texto do selo
+      (27 px) sobe 8 px.
+    O salto vertical é (ascendente da fonte − altura da maiúscula) × tamanho (Fraunces 0,278; Space Grotesk 0,284): a
+    caixa de texto está gravada com a primeira linha alinhada pela altura da maiúscula. O Subtítulo estreita porque
+    está em versalete: o versalete do Photoshop é menor que o que está nos pixels gravados no arquivo.
+ 3. Não. Fraunces-SemiBold, Fraunces-Regular, Fraunces-Bold e SpaceGrotesk-Bold aparecem como disponíveis.
+ 4. Pergunta, sim. O arquivo tem perfil sRGB IEC61966-2.1 embutido e o espaço de trabalho deste Photoshop é Adobe RGB.
+
+Aparência
+ 5. Antes de mexer: diferença média de 5,9 no Feed (31% dos pixels diferem de forma visível) e 4,7 no Quadrado (25%).
+    a) Foto: no Photoshop fica mais clara e com menos contraste que no PNG (diferença média de 13 na área da foto; um
+       preto que no PNG é 4,0,0 aparece como 21,15,12). Vem das duas camadas de ajuste presas à foto.
+    b) Faixa: no PNG tem um degradê; no Photoshop fica lisa. A escala da sobreposição de degradê está gravada como
+       10000%; com 100% passa a bater (diferença na faixa cai de 3,3 para 0,5).
+    c) Selo: diferença média de 8,5 na metade de cima (sombra interna e brilho externo um pouco diferentes).
+    O fundo com a textura "Papel" bate (diferença de 0,1 numa área lisa).
+ 6. Volta igual: desligar e ligar "Selo" e "Faixa" não muda nenhum pixel. Os efeitos gravados: Selo com sombra interna
+    (multiplicação, preto 35%, ângulo 120°, distância 6, tamanho 14) e brilho externo (branco 60%, tamanho 40); Faixa com
+    sobreposição de degradê. O tamanho bate de perto, com a diferença do item 5c.
+ 7. "Papel" (multiplicação, 60%) bate. "Foto: brilho e contraste" (brilho 0, contraste +10) e "Foto: saturação" (−15) não
+    batem: ver 5a.
+
+Texto
+ 8. Sem "Atualizar" na abertura: ao entrar em edição o texto pula, o mesmo salto do item 2. Depois de "Atualizar": não
+    pula; caixa e aparência ficam idênticas. Quebra de linha não muda.
+    (Medido regravando o texto pelo motor de texto do Photoshop, por script, e não com dois cliques do mouse.)
+ 9. Certos, e cada trecho tem o estilo dele:
+    - Título: Fraunces SemiBold, 150 px (120 no Quadrado), #0f3b2c, entrelinha 142,5 (114); três trechos, com o "p" do
+      meio em espaçamento −60 e o resto em −15.
+    - Subtítulo: Fraunces Regular, 40 px (32), #17171c, espaçamento 40, versalete; o trecho " R$ " em Fraunces Bold
+      #0f3b2c; o "1" volta ao Regular.
+    - Texto do selo: Space Grotesk Bold, 34 px (27), #0f3b2c, centralizado, girado −12°.
+
+Forma e vetor
+10. Sim. "Selo", "Faixa" e as três partes do logo são camadas de forma (cor sólida + máscara vetorial).
+11. Os pontos aparecem. Selo: 4 pontos curvos (elipse). Logo: o quadrado de cantos arredondados tem 8 pontos curvos e
+    está redondo. As formas não são "formas vivas": o painel Propriedades não mostra raio de canto.
+12. Sim: grupo "Logo" com três camadas de forma, "Logo · #1a1512 (1)", "Logo · #f6f0e6 (2)" (dois subcaminhos) e
+    "Logo · #ff5a3d (3)". Nenhuma tem traçado gravado: o Propriedades mostra só o preenchimento.
+
+Foto
+13. Sim. "Foto" abre Foto.jpg inteira (1280 × 853 px); "Papel" abre Papel.jpg inteira (1600 × 1600 px).
+14. Sim, máscara vetorial retangular nas duas.
+15. Não se aplica: nenhuma foto desta peça tem filtro inteligente.
+16. Dentro de uma prancheta nenhuma foto é usada duas vezes. No PSD de todas as pranchetas, a "Foto" do Feed e a do
+    Quadrado são o mesmo objeto inteligente; a "Papel" também.
+17. Não há máscara de sujeito. A "Foto" tem máscara de camada (o degradê de 270°), ativa e no lugar.
+
+Estrutura
+18. Não se aplica (parte da premissa de camadas do Otto). O que há: grupo "Logo"; máscara de recorte nas duas camadas
+    de ajuste, sobre "Foto".
+19. Sim. Duas pranchetas do Photoshop: "Feed", 1080 × 1350, em (0,0); "Quadrado", 1080 × 1080, em (1240,0). Documento
+    de 2320 × 1350. O conteúdo de cada uma é igual ao do PSD individual.
+
+O que falhou nesta peça: item 2/8 (texto pula; versalete estreita), item 5a/7 (ajustes da foto), item 5b (escala do
+degradê da Faixa) e o texto do item 4 do questionário (o arquivo sai com perfil sRGB embutido).

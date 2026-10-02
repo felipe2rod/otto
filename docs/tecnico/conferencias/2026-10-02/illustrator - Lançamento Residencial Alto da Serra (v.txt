@@ -1,0 +1,63 @@
+Conferência no Illustrator — respostas
+Peça: Lançamento Residencial Alto da Serra (v7) (Feed.svg 1080 × 1350, Story.svg 1080 × 1920 e o PDF de duas páginas)
+Feita em 02/10/2026 no Illustrator 2022 (26.1), em português, com as fontes da pasta "fontes" instaladas.
+Como foi feita: os arquivos foram abertos de verdade no Illustrator; os avisos foram lidos da tela; os objetos foram
+lidos por script; a aparência foi medida exportando cada prancheta em PNG e comparando, pixel a pixel, com o PNG da
+pasta. "Diferença média" vai de 0 a 255.
+
+Ao abrir
+ 1. SVG (os dois): abrem, com um aviso: "Não foi possível importar corretamente estes itens: O recorte será perdido no
+    percurso de ida e volta para Tiny". PDF: abre sem aviso (fora a janela do item 2). Nenhum aviso de fonte ausente nem
+    de perfil de cor.
+ 2. Pergunta. Abre a janela "Opções de importação de PDF", com "Intervalo: 1-1 (de 2)" marcado. Com OK direto vem só a
+    página 1. Com "Tudo", o Illustrator marca sozinho "Importar as páginas do PDF como links" e cria um documento novo
+    ("Sem título", em CMYK) com as duas pranchetas, mas cada página é um link, sem edição. Com "Tudo" e essa caixa
+    desmarcada, cria um documento novo em RGB com as duas pranchetas editáveis. O tamanho está certo: 1080 × 1350 e
+    1080 × 1920.
+
+Camadas e nomes
+ 3. Não se aplica (parte da premissa de camadas do Otto). O que há no SVG: os objetos chegam com nome, e acentos e
+    espaços chegam certos: "Grão", "Informação", "Fio superior", "Rodapé", "Fio", "Texto do botão", "Botão", "Subtítulo",
+    "Título", "Sobretítulo", "Foto", "Fundo" e, no Story, "Faixa superior".
+ 4. Não se aplica. O que há no PDF: uma camada só ("Camada 1") e nenhum objeto com nome. Importando as duas páginas,
+    cada página vira um grupo sem nome.
+ 5. Não se aplica. O que há: no SVG "Informação" continua grupo, com os oito objetos nomeados dentro; no PDF o grupo
+    some e tudo fica solto.
+ 6. SVG: não há recorte em volta de tudo; só um grupo de recorte, o da "Foto". PDF: cada imagem vem dentro de dois
+    grupos de recorte, um dentro do outro; textos e formas vêm soltos. Atrapalha para pegar a imagem.
+
+Texto (o risco principal)
+ 7. É texto editável, um objeto por LINHA (texto de ponto): Título em 2 objetos ("Viver perto", "do que importa"),
+    Subtítulo em 2, Sobretítulo, Texto do botão e Rodapé em 1 cada. São 7 objetos para 5 camadas. No SVG as linhas
+    ficam dentro de um grupo com o nome da camada; no PDF ficam soltas.
+    Atenção ao clique: no SVG a imagem "Grão" (do tamanho da prancheta) está por cima de todos os textos. Nas peças em
+    que testei isso (Capa e Recursos avançados), o clique da ferramenta Texto caía na imagem e criava um texto novo;
+    com a imagem travada, entrava no texto. Nesta peça não repeti o teste do clique.
+ 8. Certos, sem fonte substituta. Cor #1f2a24, salvo indicação. Sobretítulo: IBM Plex Sans SemiBold, 28 pt. Título:
+    Instrument Serif Regular, 128 pt (160 no Story). Subtítulo: IBM Plex Sans Regular, 36 pt. Texto do botão: IBM Plex
+    Sans Bold, 32 pt, #f2eee6. Rodapé: IBM Plex Sans Regular, 26 pt.
+ 9. Bate: no SVG as linhas ficam no lugar do PNG com erro de até 1 px. No PDF a posição vertical bate (até 1 px), mas
+    a largura de algumas linhas varia: "Viver perto" fica 6 px diferente e o Sobretítulo 4 px mais largo. Não há
+    trechos com estilo próprio nesta peça.
+10. Não se aplica: não há texto girado.
+
+Forma, vetor e foto
+11. Sim. "Fundo", "Fio", "Fio superior", "Botão" e, no Story, "Faixa superior" são caminhos editáveis com cor trocável.
+    O "Botão" tem 8 pontos curvos no SVG e 6 no PDF, com os cantos redondos nos dois.
+12. Não se aplica: não há degradê nesta peça.
+13. Não se aplica: nenhuma forma desta peça tem traço.
+14. Sim. "Foto" é a imagem inteira (1280 × 853 px), embutida, dentro de um grupo de recorte com um retângulo de 4
+    pontos; dá para mover a foto dentro da máscara. "Grão" é uma imagem embutida do tamanho da prancheta.
+15. Não se aplica: não há logo nem ícone vetorial.
+
+Aparência
+16. SVG: diferença média de 31,8 no Feed e 29,9 no Story. O "Grão" perde o modo sobrepor e vira um véu a 35% sobre a
+    peça inteira; some também o "Filtro dourado", que o relatório avisa que fica de fora.
+    PDF: diferença média de 5,5 no Feed e 4,5 no Story. Só falta o filtro dourado; o resto bate.
+17. Sim, nos dois formatos: o "Grão" está no lugar e cobre a prancheta inteira.
+18. Opacidade: certa nos dois (Grão a 35%). Modo de mesclagem: no PDF está certo (sobrepor, no grupo do Grão); no SVG
+    se perde, o Grão chega como Normal. O SVG traz "mix-blend-mode:overlay", que o Illustrator 2022 não aplica.
+
+O que falhou nesta peça: item 1 (aviso de recorte no SVG), item 2 (por padrão só abre a página 1), item 7 (um objeto
+por linha, e não por camada), itens 16 e 18 (modo de mesclagem perdido no SVG) e, só no PDF, itens 4, 5 e 6 (sem
+nomes, sem grupo, recortes aninhados).

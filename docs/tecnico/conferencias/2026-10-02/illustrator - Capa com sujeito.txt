@@ -1,0 +1,57 @@
+Conferência no Illustrator — respostas
+Peça: Capa com sujeito (Capa com sujeito.svg e Capa com sujeito.pdf, 1080 × 1350)
+Feita em 02/10/2026 no Illustrator 2022 (26.1), em português, com as fontes da pasta "fontes" instaladas.
+Como foi feita: os arquivos foram abertos de verdade no Illustrator; os avisos foram lidos da tela; os objetos foram
+lidos por script; a aparência foi medida exportando a prancheta em PNG e comparando, pixel a pixel, com o PNG da pasta.
+O item 7 foi testado com clique de verdade da ferramenta Texto. "Diferença média" vai de 0 a 255.
+
+Ao abrir
+ 1. SVG: abre, com um aviso: "Não foi possível importar corretamente estes itens: O recorte será perdido no percurso de
+    ida e volta para Tiny". PDF: abre sem aviso. Nenhum aviso de fonte ausente nem de perfil de cor.
+ 2. O PDF tem uma página só: abre direto, sem perguntar. Prancheta de 1080 × 1350, certa (no SVG também).
+
+Camadas e nomes
+ 3. Não se aplica (parte da premissa de camadas do Otto). O que há no SVG: os objetos chegam com nome, e acentos,
+    espaços e parênteses chegam certos: "Grão", "Subtítulo", "Película", "Foto (sujeito)", "Título", "Foto", "Fundo". Nos
+    textos o nome fica num grupo e o texto, dentro, sem nome.
+ 4. Não se aplica. O que há no PDF: uma camada só ("Camada 1") e nenhum objeto com nome.
+ 5. Não se aplica: a peça não tem grupos.
+ 6. SVG: não há recorte em volta de tudo; só um grupo de recorte, o da "Foto". PDF: cada imagem vem dentro de um ou
+    dois grupos de recorte, um dentro do outro (4 imagens, 6 grupos de recorte); os textos e o fundo vêm soltos.
+    Atrapalha para pegar a imagem, não para mover o conjunto.
+
+Texto (o risco principal)
+ 7. É texto editável, nos dois formatos: "JAZZ" é um objeto de texto e o subtítulo é outro (texto de ponto, uma linha
+    cada). MAS o clique da ferramenta Texto em cima do "JAZZ" cria um texto novo, em vez de entrar no que existe, no SVG
+    e no PDF. Motivo: há imagens por cima do texto na pilha ("Foto (sujeito)" e "Grão", do tamanho da prancheta) e é
+    nelas que o clique cai. Com as imagens travadas, o mesmo clique entra no texto e a letra digitada vai para dentro
+    de "JAZZ". Foi o que aconteceu na conferência anterior.
+ 8. Certos, sem fonte substituta. Título: Anton Regular, 470 pt, #f3ecdd. Subtítulo: Instrument Serif Regular, 56 pt,
+    #f3ecdd. No SVG o espaçamento do título é −10 em todas as letras; no PDF as três primeiras letras ficam com −9 e a
+    última com 0.
+ 9. Bate: no SVG as linhas ficam no lugar do PNG com erro de até 1 px; no PDF, até 2 px na largura. Não há trechos com
+    estilo próprio nesta peça.
+10. Não se aplica: não há texto girado.
+
+Forma, vetor e foto
+11. Sim. "Fundo" e "Película" são caminhos de 4 pontos, com cor trocável. No PDF a película virou imagem (o relatório
+    avisa) e só o fundo é caminho.
+12. SVG: sim, a "Película" é um degradê linear editável, com duas paradas (#1b1f4b a 95% e a 0%). PDF: não, virou imagem
+    (2160 × 802 px) dentro de um grupo de recorte.
+13. Não se aplica: nenhuma forma desta peça tem traço.
+14. Sim. "Foto" é a imagem inteira (853 × 1280 px), embutida, dentro de um grupo de recorte com um retângulo de 4
+    pontos; dá para mover a foto dentro da máscara. "Foto (sujeito)" e "Grão" são imagens embutidas do tamanho da
+    prancheta (2160 × 2700 px), sem máscara no SVG.
+15. Não se aplica: não há logo nem ícone vetorial.
+
+Aparência
+16. SVG: diferença média de 24,7. Além do duotone que fica de fora (a foto de fundo aparece nas cores originais, em
+    vermelho), o "Grão" perde o modo sobrepor e vira um véu cinza a 40% sobre a peça inteira.
+    PDF: diferença média de 12,7. Só falta o duotone do fundo; o resto bate.
+17. Sim, nos dois formatos: "Foto (sujeito)", "Grão" e, no PDF, a película estão no lugar e com a borda certa.
+18. Opacidade: certa nos dois (Grão a 40%). Modo de mesclagem: no PDF está certo (sobrepor, no grupo do Grão); no SVG
+    se perde, o Grão chega como Normal. O SVG traz "mix-blend-mode:overlay", que o Illustrator 2022 não aplica.
+
+O que falhou nesta peça: item 1 (aviso de recorte no SVG), item 7 (clique no texto cria texto novo, por causa das
+imagens por cima), itens 16 e 18 (modo de mesclagem perdido no SVG) e, só no PDF, itens 4 e 6 (sem nomes; recortes
+aninhados).

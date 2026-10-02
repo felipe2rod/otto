@@ -1,0 +1,80 @@
+Conferência no Photoshop — respostas
+Peça: Festival Jazz na Praça 2026 (v9, receitas) (Feed 1080 × 1350, Story 1080 × 1920 e o PSD de todas as pranchetas)
+Observação: apesar do nome da pasta, o conteúdo é a peça do tênis ("Corra mais leve", ventoesportes.com.br).
+Feita em 02/10/2026 no Photoshop 2025 (26.7), em português, com as fontes da pasta "fontes" instaladas.
+Como foi feita: os arquivos foram abertos de verdade no Photoshop; os avisos foram lidos da tela; as camadas foram lidas
+por script; a aparência foi medida exportando o que o Photoshop mostra e comparando, pixel a pixel, com o PNG de cada
+prancheta. "Diferença média" é a média da diferença por canal, numa escala de 0 a 255.
+
+Ao abrir
+ 1. ABRE COM ERRO. Antes de tudo o Photoshop mostra:
+    "Foi encontrado um problema ao ler a camada “Tênis herói” porque as configurações no arquivo não eram válidas.
+    Continuar?" (OK / Cancelar)
+    No PSD de todas as pranchetas: "Foram encontrados alguns problemas ao ler as camadas “Tênis herói” “Tênis herói”
+    porque as configurações no arquivo não eram válidas. Continuar?"
+    Com OK o arquivo abre. Com Cancelar não abre. "Tênis herói" é a única camada da peça com sombra projetada como
+    efeito; o mesmo erro aparece na peça da padaria, na outra camada que tem sombra projetada. Depois do OK a sombra
+    está lá (normal, preto 30%, ângulo 90°, distância 10, tamanho 30).
+    Em seguida vêm os dois avisos de sempre: perfil não correspondente (sRGB incorporado × Adobe RGB) e o pedido de
+    atualizar as camadas de texto.
+ 2. Aparece. Com "Atualizar" o texto MUDA DE LUGAR (sobe); a quebra de linha continua igual:
+    - Título (130 px): sobe 41 px e anda 3 px para a direita.
+    - Subtítulo (32 px): sobe 11 px.
+    - Rodapé (26 px): sobe 8 px.
+    - Texto CTA (26 px): não consegui medir isolado; pela regra dos outros, cerca de 8 px.
+    O salto é (ascendente da fonte − altura da maiúscula) × tamanho (Anton 0,317; IBM Plex Sans 0,327): a caixa de
+    texto está gravada com a primeira linha alinhada pela altura da maiúscula.
+ 3. Não. Anton-Regular, IBMPlexSans, IBMPlexSans-SmBld e IBMPlexSans-Bold aparecem como disponíveis.
+ 4. Pergunta, sim. O arquivo tem perfil sRGB IEC61966-2.1 embutido e o espaço de trabalho deste Photoshop é Adobe RGB.
+
+Aparência
+ 5. Antes de mexer: diferença média de 4,1 no Feed (9,7% dos pixels diferem de forma visível) e 2,9 no Story (6,8%).
+    A diferença grande é a camada "Luz lateral quente": no PNG é uma luz laranja suave na frente do tênis; no
+    Photoshop é uma mancha laranja quase opaca que cobre a metade da frente do tênis. Causa: a escala do degradê radial
+    está gravada como 10000% (o normal é 100%). Trocando para 100% a peça fica como o PNG (diferença na região cai de
+    13,7 para 4,7). O fundo com a "Luz atmosfera" bate (0,0).
+ 6. Volta igual: desligar e ligar "Tênis herói" não muda nenhum pixel. A sombra tem tamanho compatível com o PNG; a
+    conferência fina fica prejudicada pela mancha do item 5, que cai em cima da mesma região.
+ 7. "Luz atmosfera" (tela, 40%) bate; no Story, "Corrente de ar · base" bate (1,3). O lado do tênis herói que a luz
+    lateral não cobre difere em 5,2 (ajustes de contraste +12 e saturação +8). O "Tênis rajada" (60%, brilho −82,
+    contraste −15, saturação −35) fica mais claro que no PNG (diferença média de 12).
+
+Texto
+ 8. Sem "Atualizar" na abertura: ao entrar em edição o texto pula, o mesmo salto do item 2. Depois de "Atualizar": não
+    pula; caixa e aparência ficam idênticas. Quebra de linha não muda.
+    (Medido regravando o texto pelo motor de texto do Photoshop, por script, e não com dois cliques do mouse.)
+ 9. Certos, e cada trecho tem o estilo dele:
+    - Título: Anton Regular, 130 px, #f4efe3, entrelinha 117, espaçamento −15, tudo em maiúsculas.
+    - Subtítulo: IBM Plex Sans Regular, 32 px, #f4efe3; o trecho "20%" em IBM Plex Sans SemiBold #ff5b1f; o resto volta
+      ao Regular.
+    - Texto CTA: IBM Plex Sans Bold, 26 px, #17171c, centralizado.
+    - Rodapé: IBM Plex Sans Regular, 26 px, #f4efe3, centralizado, camada a 75%.
+
+Forma e vetor
+10. Sim. "Botão CTA" (cor sólida) e "Luz lateral quente" (degradê radial) são camadas de forma. "Luz atmosfera",
+    "Sombra de contato" e, no Story, as duas "Corrente de ar" são camadas de pixel, como o relatório avisa.
+11. Os pontos aparecem. O "Botão CTA" tem 8 pontos curvos e os cantos estão redondos; a "Luz lateral quente" tem 4
+    pontos curvos (elipse). Não são "formas vivas": o painel Propriedades não mostra o raio de 32.
+12. Não se aplica: não há logo nem ícone vetorial.
+
+Foto
+13. Sim. "Tênis rajada" e "Tênis herói" são objetos inteligentes embutidos; os dois abrem "Tênis rajada.jpg" inteira
+    (1280 × 853 px).
+14. Sim, máscara vetorial retangular nas duas.
+15. Sim. "Tênis rajada" tem o filtro inteligente "Desfoque de movimento" com ângulo −16° e distância 100 px. Reaplicar
+    com os mesmos valores quase não muda a aparência (diferença média de 0,09; o pixel que mais muda, 16). Não há
+    filtro inteligente em "Tênis herói".
+16. Sim. "Tênis rajada" e "Tênis herói" têm o mesmo identificador de objeto inteligente (de576c4a-…). No PSD de todas
+    as pranchetas, as quatro camadas (duas por prancheta) são o mesmo objeto.
+17. Sim. As duas camadas têm máscara de camada (ativa e vinculada) além da máscara vetorial, e o recorte do tênis fica
+    no lugar do PNG.
+
+Estrutura
+18. Não se aplica (parte da premissa de camadas do Otto). O que há: sem grupos; máscara de recorte nas quatro camadas
+    de ajuste (duas sobre cada tênis) e em "Luz lateral quente" (sobre "Tênis herói").
+19. Sim. Duas pranchetas do Photoshop: "Feed", 1080 × 1350, em (0,0); "Story", 1080 × 1920, em (1240,0). Documento de
+    2320 × 1920. O conteúdo de cada uma é igual ao do PSD individual.
+
+O que falhou nesta peça: item 1 (erro ao ler "Tênis herói"), item 2/8 (texto pula), item 5 (escala do degradê da "Luz
+lateral quente"), item 7 (tom do "Tênis rajada") e o texto do item 4 do questionário (o arquivo sai com perfil sRGB
+embutido).

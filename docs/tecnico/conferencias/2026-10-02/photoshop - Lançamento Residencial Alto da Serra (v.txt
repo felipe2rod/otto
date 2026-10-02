@@ -1,0 +1,66 @@
+Conferência no Photoshop — respostas
+Peça: Lançamento Residencial Alto da Serra (v7) (Feed 1080 × 1350, Story 1080 × 1920 e o PSD de todas as pranchetas)
+Feita em 02/10/2026 no Photoshop 2025 (26.7), em português, com as fontes da pasta "fontes" instaladas.
+Como foi feita: os arquivos foram abertos de verdade no Photoshop; os avisos foram lidos da tela; as camadas foram lidas
+por script; a aparência foi medida exportando o que o Photoshop mostra e comparando, pixel a pixel, com o PNG de cada
+prancheta. "Diferença média" é a média da diferença por canal, numa escala de 0 a 255.
+
+Ao abrir
+ 1. Os três arquivos abrem sem erro. Aparecem dois avisos: "Perfil não correspondente incorporado" (incorporado: sRGB
+    IEC61966-2.1; ativo: Adobe RGB (1998)) e "É possível que algumas camadas de texto precisem ser atualizadas antes
+    que possam ser utilizadas para saída baseada em vetor. Deseja atualizar estas camadas agora?".
+ 2. Aparece. Com "Atualizar" o texto MUDA DE LUGAR (sobe); a quebra de linha continua igual:
+    - Sobretítulo (28 px): sobe 9 px.
+    - Título (128 px no Feed, 160 no Story): sobe 35 px no Feed e 43 px no Story.
+    - Subtítulo (36 px): sobe 12 px.
+    - Rodapé (26 px): sobe 8 px.
+    - Texto do botão (32 px): não consegui medir isolado (o texto tem a cor do fundo da peça); pela regra dos outros,
+      cerca de 10 px.
+    O salto é (ascendente da fonte − altura da maiúscula) × tamanho (IBM Plex Sans 0,327; Instrument Serif 0,270): a
+    caixa de texto está gravada com a primeira linha alinhada pela altura da maiúscula.
+ 3. Não. IBMPlexSans, IBMPlexSans-SmBld, IBMPlexSans-Bold e InstrumentSerif-Regular aparecem como disponíveis.
+ 4. Pergunta, sim. O arquivo tem perfil sRGB IEC61966-2.1 embutido e o espaço de trabalho deste Photoshop é Adobe RGB.
+
+Aparência
+ 5. Antes de mexer, praticamente igual: diferença média de 3,2 no Feed (0,18% dos pixels diferem de forma visível) e 2,4
+    no Story (0,14%). O pouco que difere está na foto (1,7) e no fundo com grão e filtro (3,9).
+ 6. Não se aplica: esta peça não tem camada com efeito.
+ 7. Batem. "Filtro dourado" (filtro de fotografia, #c8a46a, preservando luminosidade) e "Grão" (sobrepor, 35%): ver os
+    números do item 5.
+
+Texto
+ 8. Sem "Atualizar" na abertura: ao entrar em edição o texto pula, o mesmo salto do item 2. Depois de "Atualizar": não
+    pula; caixa e aparência ficam idênticas. Quebra de linha não muda.
+    (Medido regravando o texto pelo motor de texto do Photoshop, por script, e não com dois cliques do mouse.)
+ 9. Certos. Cor #1f2a24, salvo indicação:
+    - Sobretítulo: IBM Plex Sans SemiBold, 28 px, espaçamento 160, tudo em maiúsculas.
+    - Título: Instrument Serif Regular, 128 px (160 no Story), entrelinha 121,6.
+    - Subtítulo: IBM Plex Sans Regular, 36 px, entrelinha 46,8.
+    - Texto do botão: IBM Plex Sans Bold, 32 px, #f2eee6, centralizado.
+    - Rodapé: IBM Plex Sans Regular, 26 px.
+    Não há trechos com estilo próprio nesta peça.
+
+Forma e vetor
+10. Sim. "Botão", "Fio", "Fio superior" e, no Story, "Faixa superior" são camadas de forma (cor sólida + máscara
+    vetorial). "Grão" é camada de pixel, como o relatório avisa.
+11. Os pontos aparecem. O "Botão" tem 8 pontos curvos e os cantos estão redondos. Não é "forma viva": o painel
+    Propriedades não mostra o raio de 44.
+12. Não se aplica: não há logo nem ícone vetorial.
+
+Foto
+13. Sim. "Foto" abre Foto.jpg inteira (1280 × 853 px).
+14. Sim, máscara vetorial retangular.
+15. Não se aplica: a foto não tem filtro inteligente.
+16. Dentro de uma prancheta a foto é usada uma vez só. No PSD de todas as pranchetas, a "Foto" do Feed e a do Story
+    são o mesmo objeto inteligente.
+17. Não se aplica: não há máscara de sujeito.
+
+Estrutura
+18. Não se aplica (parte da premissa de camadas do Otto). O que há: grupo "Informação" (modo atravessar) com os cinco
+    textos, o botão e os dois fios dentro; nenhuma máscara de recorte. "Filtro dourado" fica solto, acima do grupo, e
+    vale para tudo o que está embaixo.
+19. Sim. Duas pranchetas do Photoshop: "Feed", 1080 × 1350, em (0,0); "Story", 1080 × 1920, em (1240,0). Documento de
+    2320 × 1920. O conteúdo de cada uma é igual ao do PSD individual.
+
+O que falhou nesta peça: item 2/8 (texto pula ao atualizar ou editar) e o texto do item 4 do questionário (o arquivo
+sai com perfil sRGB embutido). É a peça que mais se parece com o PNG.

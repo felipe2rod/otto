@@ -1,0 +1,64 @@
+Conferência no Illustrator — respostas
+Peça: Festival Jazz na Praça 2026 (v9, receitas) (Feed.svg 1080 × 1350, Story.svg 1080 × 1920 e o PDF de duas páginas)
+Observação: apesar do nome da pasta, o conteúdo é a peça do tênis ("Corra mais leve", ventoesportes.com.br).
+Feita em 02/10/2026 no Illustrator 2022 (26.1), em português, com as fontes da pasta "fontes" instaladas.
+Como foi feita: os arquivos foram abertos de verdade no Illustrator; os avisos foram lidos da tela; os objetos foram
+lidos por script; a aparência foi medida exportando cada prancheta em PNG e comparando, pixel a pixel, com o PNG da
+pasta. O item 7 foi testado com clique de verdade da ferramenta Texto. "Diferença média" vai de 0 a 255.
+
+Ao abrir
+ 1. SVG (os dois): abrem sem erro e sem aviso (são os únicos SVG sem recorte vetorial). PDF: abre sem aviso (fora a
+    janela do item 2). Nenhum aviso de fonte ausente nem de perfil de cor.
+ 2. Pergunta. Abre a janela "Opções de importação de PDF", com "Intervalo: 1-1 (de 2)" marcado. Com OK direto vem só a
+    página 1. Com "Tudo", o Illustrator marca sozinho "Importar as páginas do PDF como links" e cria um documento novo
+    ("Sem título", em CMYK) com as duas pranchetas, mas cada página é um link, sem edição. Com "Tudo" e essa caixa
+    desmarcada, cria um documento novo em RGB com as duas pranchetas editáveis. O tamanho está certo: 1080 × 1350 e
+    1080 × 1920.
+
+Camadas e nomes
+ 3. Não se aplica (parte da premissa de camadas do Otto). O que há no SVG: os objetos chegam com nome, e acentos,
+    espaços e o ponto médio chegam certos: "Rodapé", "Texto CTA", "Botão CTA", "Subtítulo", "Título", "Tênis herói",
+    "Sombra de contato", "Tênis rajada", "Luz atmosfera", "Fundo" e, no Story, "Corrente de ar · base" e "Corrente de
+    ar · topo".
+ 4. Não se aplica. O que há no PDF: uma camada só ("Camada 1") e nenhum objeto com nome. Importando as duas páginas,
+    cada página vira um grupo sem nome.
+ 5. Não se aplica: a peça não tem grupos.
+ 6. SVG: nenhum grupo de recorte. PDF: cada imagem vem dentro de um ou dois grupos de recorte, um dentro do outro;
+    textos e formas vêm soltos. Atrapalha para pegar a imagem.
+
+Texto (o risco principal)
+ 7. É texto editável, partido por linha e por trecho de estilo (texto de ponto): Título em 2 objetos ("CORRA", "MAIS
+    LEVE"), Subtítulo em 3 ("Nova linha Vento 2, com ", "20%", " menos peso"), Texto CTA e Rodapé em 1 cada. São 7
+    objetos para 4 camadas. No SVG ficam dentro de um grupo com o nome da camada; no PDF ficam soltos.
+    O clique da ferramenta Texto em cima de "MAIS LEVE", no SVG, entra no texto e a letra digitada vai para dentro
+    dele. Aqui funciona porque não há imagem por cima dos textos.
+ 8. Certos, sem fonte substituta. Título: Anton Regular, 130 pt, #f4efe3 (já em maiúsculas no conteúdo). Subtítulo: IBM
+    Plex Sans Regular, 32 pt, #f4efe3. Texto CTA: IBM Plex Sans Bold, 26 pt, #17171c. Rodapé: IBM Plex Sans Regular,
+    26 pt, #f4efe3.
+ 9. Bate: no SVG as linhas ficam no lugar do PNG com erro de até 1 px; no PDF, até 2 px na largura. O trecho em
+    destaque tem o estilo dele: "20%" em IBM Plex Sans SemiBold #ff5b1f.
+10. Não se aplica: não há texto girado. (O "Tênis rajada", girado −16°, é imagem.)
+
+Forma, vetor e foto
+11. Sim. "Fundo" (4 pontos) e "Botão CTA" são caminhos editáveis com cor trocável. O botão tem 8 pontos curvos no SVG
+    e 6 no PDF, com os cantos redondos nos dois.
+12. Não há degradê em vetor nesta peça: a "Luz lateral quente" foi para dentro da imagem do "Tênis herói", como o
+    relatório avisa.
+13. Não se aplica: nenhuma forma desta peça tem traço.
+14. Não. As duas fotos viraram imagem já recortada, sem máscara, como o relatório avisa: "Tênis herói" (2070 × 1380 px)
+    e "Tênis rajada" (1996 × 1860 px). Não há foto original inteira para mover dentro de uma máscara.
+15. Não se aplica: não há logo nem ícone vetorial.
+
+Aparência
+16. É a peça que melhor bate. SVG: diferença média de 0,6 no Feed e 0,7 no Story. PDF: 0,9 e 0,7. O que sobra está na
+    borda dos textos. No SVG, o rodapé fica um pouco mais claro que no PNG (ver item 18).
+17. Sim, nos dois formatos: os dois tênis, a "Sombra de contato", a "Luz atmosfera" e as "Corrente de ar" estão no
+    lugar e com a borda certa.
+18. Opacidade das imagens: certa nos dois (Sombra de contato 45%, Tênis rajada 60%, Luz atmosfera 40%, Correntes 70% e
+    50%). Opacidade do "Rodapé" (75%): certa no PDF; no SVG se perde e o texto chega a 100%.
+    Modo de mesclagem: no PDF está certo (tela, na "Luz atmosfera" e nas "Corrente de ar"); no SVG se perde e chegam
+    como Normal. Nesta peça quase não se nota, porque são luzes sobre fundo escuro.
+
+O que falhou nesta peça: item 2 (por padrão só abre a página 1), item 7 (texto partido por linha e por trecho), item
+18 (modo de mesclagem e opacidade do rodapé perdidos no SVG) e, só no PDF, itens 4 e 6 (sem nomes; recortes
+aninhados).

@@ -1,6 +1,6 @@
 # 035 — Da POC ao MVP, com Docker
 
-Status: aceita (itens 1 a 5, pelo Felipe) / proposta (itens 6 e 7)
+Status: aceita (pelo Felipe; itens 1 a 5 em 2026-10-01, itens 6 e 7 em 2026-10-02)
 Data: 2026-10-01
 Quem decide: Felipe
 
@@ -23,8 +23,8 @@ Em 2026-10-01 o Felipe decidiu passar a POC para o MVP e usar Docker. Backend, R
 3. **O motor do MVP é o CanvasKit** (ADR 030 mantido). O MVP não sai com o Canvas 2D da POC.
 4. **Sem login por enquanto.** Entrada, convite, senha e e-mail ficam fora do MVP.
 5. **Importar PSD (ADR 028) e saída para o Illustrator em SVG e PDF (ADR 034) entram no MVP.**
-6. **Proposta: render de referência em CPU, prévia do editor em GPU.** O spike passou com ressalva. Em raster de CPU, Node e Chrome dão zero pixel diferente nas dez cenas. Os 60 quadros por segundo com 200 camadas só saem em WebGL, que difere do raster de CPU (quase sempre em 1 nível; bordas, desfoque e alguns modos passam disso). Proposta: agente, lint, exportação e goldens usam CPU, com tolerância zero; o canvas do editor é prévia em GPU, com limite próprio de diferença. Se aceita, o ADR 030 ganha essa redação.
-7. **Proposta: o banco nasce com `conta_id`, RLS e uma conta fixa**, para o login entrar depois sem migração (ADR 023).
+6. **Render de referência em CPU, prévia do editor em GPU.** O spike passou com ressalva. Em raster de CPU, Node e Chrome dão zero pixel diferente nas dez cenas. Os 60 quadros por segundo com 200 camadas só saem em WebGL, que difere do raster de CPU (quase sempre em 1 nível; bordas, desfoque e alguns modos passam disso). Agente, lint, exportação e goldens usam CPU, com tolerância zero; o canvas do editor é prévia em GPU, com limite próprio de diferença. O ADR 030 passa a ser lido com essa redação.
+7. **O banco nasce com `conta_id`, RLS e uma conta fixa**, para o login entrar depois sem migração (ADR 023).
 
 ## Consequências
 
@@ -34,6 +34,15 @@ Em 2026-10-01 o Felipe decidiu passar a POC para o MVP e usar Docker. Backend, R
 - O pacote do CanvasKit no npm não escreve PDF. O PDF do ADR 034 precisa de outra biblioteca, a escolher.
 - O servidor renderiza em CPU: 1,1 a 2,4 s por prancheta de 50 camadas, medido num processador de 2011.
 - `CLAUDE.md` deixa de dizer "POC descartável", "sem código de aplicação" e "spikes antes de qualquer tela".
+
+## Conferência no Photoshop e no Illustrator (2026-10-02)
+
+O Felipe abriu as cinco peças de teste no Photoshop 2025 e no Illustrator 2022. As respostas estão em `docs/tecnico/conferencias/2026-10-02/`.
+
+- **Photoshop: abre editável, com defeitos a corrigir.** Texto é camada de texto com fonte, tamanho, cor e trechos certos; forma é camada de forma; foto é objeto inteligente com a original e filtros inteligentes; pranchetas viram pranchetas. Defeitos: erro ao ler a camada que tem sombra projetada (e perda do traço interno), texto que sobe ao aceitar "Atualizar", escala de degradê gravada como 10000%, ajustes de foto mais fracos, versalete menor.
+- **Illustrator: o PDF bate na aparência, o SVG não.** O Illustrator 2022 ignora o modo de mesclagem do SVG, e a peça sai com um véu. O PDF chega sem nomes e numa camada só, com parte do texto contornada. Nos dois, o texto vem partido por linha e por trecho de estilo.
+- O portão do Photoshop está aberto para a fatia do agente; os defeitos são corrigidos em `packages/psd`.
+- **Decidido pelo Felipe:** na saída vetorial, o que está abaixo de uma camada de ajuste é achatado em imagem, para manter a cor. As fontes da biblioteca continuam indo no pacote.
 
 ## Gatilho de revisão
 
