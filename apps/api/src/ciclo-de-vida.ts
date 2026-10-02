@@ -10,6 +10,8 @@ import type { OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/comm
 import type { CasosDeUsoDeMiniatura } from './documento/application/casos-de-uso-de-miniatura';
 import type { CasosDeUsoDeExportacao } from './exportacao/application/casos-de-uso-de-exportacao';
 import { consumirExportacoes } from './exportacao/infrastructure/consumidor-de-exportacoes';
+import type { CasosDeUsoDeImportacao } from './importacao/application/casos-de-uso-de-importacao';
+import { consumirImportacoes } from './importacao/infrastructure/consumidor-de-importacoes';
 import { escopoDoTrabalho } from './plataforma/escopo/escopo-do-trabalho';
 import { type BarramentoDeEventos, FILAS } from './plataforma/fila/barramento-de-eventos';
 import { semConteudo } from './plataforma/log/sem-conteudo';
@@ -27,9 +29,16 @@ export class CicloDeVida implements OnApplicationBootstrap, OnApplicationShutdow
     private readonly fila: BarramentoDeEventos,
     private readonly exportacoes: CasosDeUsoDeExportacao,
     private readonly registro: { error(linha: Record<string, unknown>): void },
-    private readonly opcoes: { exportacoesAoMesmoTempo: number; motor: { fechar(): Promise<void> }; intervaloEntreTentativasMs?: number; tarefasAoMesmoTempo?: number },
+    private readonly opcoes: {
+      exportacoesAoMesmoTempo: number;
+      motor: { fechar(): Promise<void> };
+      intervaloEntreTentativasMs?: number;
+      tarefasAoMesmoTempo?: number;
+      importacoesAoMesmoTempo?: number;
+    },
     private readonly tarefas?: CasosDeUsoDeTarefa,
     private readonly miniaturas?: CasosDeUsoDeMiniatura,
+    private readonly importacoes?: CasosDeUsoDeImportacao,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -41,6 +50,8 @@ export class CicloDeVida implements OnApplicationBootstrap, OnApplicationShutdow
       await this.fila.iniciar();
       if (this.servico === 'worker') {
         await consumirExportacoes(this.fila, this.exportacoes, this.opcoes.exportacoesAoMesmoTempo);
+        // a importação de PSD usa as mesmas threads de render da exportação
+        if (this.importacoes) await consumirImportacoes(this.fila, this.importacoes, this.opcoes.importacoesAoMesmoTempo ?? 1);
         if (this.tarefas) await consumirTarefas(this.fila, this.tarefas, this.opcoes.tarefasAoMesmoTempo ?? 1);
         const miniaturas = this.miniaturas;
         // a miniatura da peça: um render pequeno, um por vez (é a mesma thread de render das tarefas)

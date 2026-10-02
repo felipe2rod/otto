@@ -205,3 +205,58 @@ describe('CicloDeVida e a tarefa do Otto', () => {
     expect(ordem).toEqual(['tarefas', 'fila', 'motor', 'banco']);
   });
 });
+
+describe('CicloDeVida com a importação de PSD', () => {
+  function montarComImportacoes(servico: 'api' | 'worker', fila: BarramentoEmMemoria, executar: (conta: string, id: string) => Promise<'feita' | 'ignorada' | 'ocupada'>) {
+    const limpas: string[] = [];
+    const importacoes = {
+      executar: (escopo: { contaId: string }, id: string) => executar(escopo.contaId, id),
+      limpar: async (escopo: { contaId: string }, id: string) => void limpas.push(`${escopo.contaId}:${id}`),
+    } as unknown as import('./importacao/application/casos-de-uso-de-importacao').CasosDeUsoDeImportacao;
+    const ciclo = new CicloDeVida(
+      servico,
+      { fechar: async () => undefined },
+      fila,
+      { executar: async () => undefined, limpar: async () => undefined } as unknown as CasosDeUsoDeExportacao,
+      { error: () => undefined },
+      { exportacoesAoMesmoTempo: 1, importacoesAoMesmoTempo: 1, motor: { fechar: async () => undefined } },
+      undefined,
+      undefined,
+      importacoes,
+    );
+    return { ciclo, limpas };
+  }
+
+  it('no worker, a importação e a limpeza dela rodam com o escopo da conta do trabalho; a API não consome', async () => {
+    for (const [servico, esperado] of [
+      ['worker', [`${CONTA}:${ID}`]],
+      ['api', []],
+    ] as const) {
+      const fila = new BarramentoEmMemoria();
+      const feitas: string[] = [];
+      const { ciclo, limpas } = montarComImportacoes(servico, fila, async (conta, id) => {
+        feitas.push(`${conta}:${id}`);
+        return 'feita';
+      });
+      await ciclo.onApplicationBootstrap();
+      await fila.publicar('importacao', { contaId: CONTA, id: ID });
+      await fila.publicar('limpeza-de-importacao', { contaId: CONTA, id: ID });
+      await esperar(20);
+      expect([feitas, limpas]).toEqual([esperado, esperado]);
+      await ciclo.onApplicationShutdown();
+    }
+  });
+
+  it('conta ocupada com outra importação: o trabalho é adiado e entregue de novo, sem se perder', async () => {
+    const fila = new BarramentoEmMemoria();
+    let vezes = 0;
+    const { ciclo } = montarComImportacoes('worker', fila, async () => (++vezes === 1 ? 'ocupada' : 'feita'));
+    await ciclo.onApplicationBootstrap();
+    await fila.publicar('importacao', { contaId: CONTA, id: ID });
+    await fila.ociosa();
+    fila.adiantar();
+    await fila.ociosa();
+    expect(vezes).toBe(2);
+    await ciclo.onApplicationShutdown();
+  });
+});

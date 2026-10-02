@@ -13,21 +13,34 @@ import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import type { Documento } from '@otto/documento';
-import type { RecursosDaExportacao } from '@otto/psd';
+import { type CodigoDeErroDeImportacao, ErroDeImportacao, type RecursosDaExportacao, type ResultadoDaImportacao } from '@otto/psd';
+import type { OpcoesDoMotorDeImportacao } from '../../../importacao/application/motor-de-importacao';
 import { type ArquivoGerado, type EntreEtapas, MotorDeExportacao, type OpcoesDoPdf, type OpcoesDoSvg } from '../../application/motor-de-exportacao';
 
 type OpcoesPsd = { nome: string; pranchetas: readonly string[]; arquivos: 'por-prancheta' | 'juntas' };
 type OpcoesPng = { nome: string; pranchetas: readonly string[]; escala: 1 | 2; semFundo: boolean };
 
-export type PedidoAThread = { id: number; doc: Documento; recursos: RecursosDaExportacao } & (
-  | { formato: 'psd'; opcoes: OpcoesPsd }
-  | { formato: 'png'; opcoes: OpcoesPng }
-  | { formato: 'svg'; opcoes: OpcoesDoSvg }
-  | { formato: 'pdf'; opcoes: OpcoesDoPdf }
-);
+export type PedidoAThread =
+  | ({ id: number; doc: Documento; recursos: RecursosDaExportacao } & (
+      | { formato: 'psd'; opcoes: OpcoesPsd }
+      | { formato: 'png'; opcoes: OpcoesPng }
+      | { formato: 'svg'; opcoes: OpcoesDoSvg }
+      | { formato: 'pdf'; opcoes: OpcoesDoPdf }
+    ))
+  /** A importação de PSD roda na mesma thread de render: o arquivo vem como bytes e volta a árvore, as imagens e o relatório. */
+  | { id: number; formato: 'importar-psd'; bytes: Uint8Array; opcoes: OpcoesDoMotorDeImportacao };
 type Pedido = PedidoAThread extends infer P ? (P extends unknown ? Omit<P, 'id'> : never) : never;
 
-export type RespostaDaThread = { id: number; ok: true; arquivos: ArquivoGerado[] } | { id: number; ok: false; erro: { nome: string; mensagem: string; pilha: string } };
+export type RespostaDaThread =
+  | { id: number; ok: true; arquivos: ArquivoGerado[] }
+  | { id: number; ok: true; importacao: ResultadoDaImportacao }
+  /** `codigo`: só no erro que carrega um (o arquivo que não pode ser importado). */
+  | { id: number; ok: false; erro: { nome: string; mensagem: string; pilha: string; codigo?: string } };
+
+/** Os bytes num buffer só deles, que pode ser entregue à thread sem cópia. undefined: são parte de um buffer maior. */
+function bufferProprio(bytes: Uint8Array): ArrayBuffer | undefined {
+  return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength && bytes.buffer instanceof ArrayBuffer ? bytes.buffer : undefined;
+}
 
 /** A thread da exportação terminou antes da resposta (foi encerrada, ou caiu por falta de memória). */
 export class MotorInterrompido extends Error {
@@ -52,7 +65,7 @@ interface Thread {
   worker: Worker;
   feitas: number;
   ociosidade?: NodeJS.Timeout;
-  emCurso?: { id: number; resolver: (arquivos: ArquivoGerado[]) => void; rejeitar: (erro: Error) => void };
+  emCurso?: { id: number; resolver: (resultado: ArquivoGerado[] | ResultadoDaImportacao) => void; rejeitar: (erro: Error) => void };
 }
 
 /** Em desenvolvimento e em teste a thread roda o TypeScript (com o tsx); empacotada, o arquivo vizinho gerado pelo build. */
@@ -82,26 +95,39 @@ export class MotorDeExportacaoEmThread extends MotorDeExportacao {
   }
 
   psd(doc: Documento, recursos: RecursosDaExportacao, opcoes: OpcoesPsd, _entreEtapas: EntreEtapas): Promise<ArquivoGerado[]> {
-    return this.rodar({ formato: 'psd', doc, recursos, opcoes });
+    return this.exportar({ formato: 'psd', doc, recursos, opcoes });
   }
   png(doc: Documento, recursos: RecursosDaExportacao, opcoes: OpcoesPng, _entreEtapas: EntreEtapas): Promise<ArquivoGerado[]> {
-    return this.rodar({ formato: 'png', doc, recursos, opcoes });
+    return this.exportar({ formato: 'png', doc, recursos, opcoes });
   }
   svg(doc: Documento, recursos: RecursosDaExportacao, opcoes: OpcoesDoSvg, _entreEtapas: EntreEtapas): Promise<ArquivoGerado[]> {
-    return this.rodar({ formato: 'svg', doc, recursos, opcoes });
+    return this.exportar({ formato: 'svg', doc, recursos, opcoes });
   }
   pdf(doc: Documento, recursos: RecursosDaExportacao, opcoes: OpcoesDoPdf, _entreEtapas: EntreEtapas): Promise<ArquivoGerado[]> {
-    return this.rodar({ formato: 'pdf', doc, recursos, opcoes });
+    return this.exportar({ formato: 'pdf', doc, recursos, opcoes });
   }
 
-  private async rodar(pedido: Pedido): Promise<ArquivoGerado[]> {
+  /**
+   * Importa um PSD numa thread de render. O arquivo é ENTREGUE à thread quando os bytes têm um buffer só deles
+   * (quem chama fica sem eles): um arquivo de 100 MB não existe duas vezes. As fontes vão por cópia.
+   */
+  importarPsd(bytes: Uint8Array, opcoes: OpcoesDoMotorDeImportacao): Promise<ResultadoDaImportacao> {
+    const proprio = bufferProprio(bytes);
+    return this.rodar({ formato: 'importar-psd', bytes, opcoes }, proprio ? [proprio] : []) as Promise<ResultadoDaImportacao>;
+  }
+
+  private exportar(pedido: Pedido): Promise<ArquivoGerado[]> {
+    return this.rodar(pedido, []) as Promise<ArquivoGerado[]>;
+  }
+
+  private async rodar(pedido: Pedido, entregar: ArrayBuffer[]): Promise<ArquivoGerado[] | ResultadoDaImportacao> {
     const thread = await this.pegarThread();
     const id = this.proximoId++;
     try {
-      return await new Promise<ArquivoGerado[]>((resolver, rejeitar) => {
+      return await new Promise<ArquivoGerado[] | ResultadoDaImportacao>((resolver, rejeitar) => {
         thread.emCurso = { id, resolver, rejeitar };
-        // sem lista de transferência: os recursos são COPIADOS. Quem chama guarda os bytes para a prancheta seguinte.
-        thread.worker.postMessage({ ...pedido, id } as PedidoAThread);
+        // na exportação, sem lista de transferência: os recursos são COPIADOS. Quem chama guarda os bytes para a prancheta seguinte.
+        thread.worker.postMessage({ ...pedido, id } as PedidoAThread, entregar);
       });
     } finally {
       delete thread.emCurso;
@@ -133,8 +159,12 @@ export class MotorDeExportacaoEmThread extends MotorDeExportacao {
     worker.on('message', (resposta: RespostaDaThread) => {
       const emCurso = thread.emCurso;
       if (!emCurso || emCurso.id !== resposta.id) return;
-      if (resposta.ok) return emCurso.resolver(resposta.arquivos);
-      const erro = new Error(resposta.erro.mensagem);
+      if (resposta.ok) return emCurso.resolver('importacao' in resposta ? resposta.importacao : resposta.arquivos);
+      // o arquivo que não pode ser importado atravessa como o erro que é, com o código
+      const erro =
+        resposta.erro.nome === 'ErroDeImportacao' && resposta.erro.codigo
+          ? new ErroDeImportacao(resposta.erro.codigo as CodigoDeErroDeImportacao, resposta.erro.mensagem)
+          : new Error(resposta.erro.mensagem);
       erro.name = resposta.erro.nome;
       erro.stack = resposta.erro.pilha;
       emCurso.rejeitar(erro);

@@ -881,6 +881,36 @@ describe('teto de tamanho', () => {
     expect(motor.chamadas.at(-1)?.opcoes).toMatchObject({ escalaDaImagem: 2 });
   });
 
+  it('o relatório do SVG e do PDF avisa quando as camadas que viram imagem saem em 1x, antes de exportar e depois', async () => {
+    const r = aplicarLote(
+      documentoVazio(),
+      [
+        { op: 'criarPrancheta', nome: 'Painel', largura: 5000, altura: 5000, fundo: '#ffffff' },
+        { op: 'criarPrancheta', nome: 'Feed', largura: 1080, altura: 1350, fundo: '#ffffff' },
+        // no SVG, camada com modo de mesclagem vira imagem
+        {
+          op: 'criarNo',
+          prancheta: 'Painel',
+          no: { tipo: 'forma', nome: 'Selo', forma: 'retangulo', x: 0, y: 0, largura: 100, altura: 100, preenchimento: '#ff0000', modoDeMesclagem: 'multiplicacao' },
+        },
+        {
+          op: 'criarNo',
+          prancheta: 'Feed',
+          no: { tipo: 'forma', nome: 'Selo', forma: 'retangulo', x: 0, y: 0, largura: 100, altura: 100, preenchimento: '#ff0000', modoDeMesclagem: 'multiplicacao' },
+        },
+      ],
+      { autoria: { tipo: 'designer' }, idDoLote: randomUUID(), gerarId: (indice) => `p${indice + 1}` },
+    );
+    if (!r.ok) throw new Error(r.erro.mensagem);
+    const doc = await documento(contaA, r.doc);
+    const avisos = async (pranchetas: string[]) => (await casos.relatorio(contaA, doc.id, { formato: 'svg', pranchetas })).avisos.map((a) => a.codigo);
+    expect(await avisos(['p1'])).toContain('imagem-em-resolucao-menor');
+    expect(await avisos(['p2'])).not.toContain('imagem-em-resolucao-menor');
+    const pedida = await casos.pedir(contaA, doc.id, { formato: 'svg', pranchetas: ['p1'] });
+    await casos.executar(contaA, pedida.id);
+    expect((await casos.consultar(contaA, pedida.id)).relatorio?.avisos.map((a) => a.codigo)).toContain('imagem-em-resolucao-menor');
+  });
+
   it('SVG e PDF de prancheta que não cabe nem em 1x são recusados', async () => {
     const doc = await comPrancheta(7000, 7000); // 49 MP
     for (const pedido of [{ formato: 'svg' }, { formato: 'pdf', arquivos: 'juntas' }] as const) {

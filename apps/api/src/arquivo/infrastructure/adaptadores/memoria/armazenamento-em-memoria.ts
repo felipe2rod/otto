@@ -10,6 +10,11 @@ export class ArmazenamentoEmMemoria extends ArmazenamentoDeArquivo {
   private readonly objetos = new Map<string, Uint8Array>();
   private readonly links = new AssinadorDeLinks('segredo-do-adaptador-falso-só-para-testes-0123456789');
 
+  /** As chaves guardadas agora. Para o teste conferir que nada ficou para trás. */
+  chaves(): string[] {
+    return [...this.objetos.keys()];
+  }
+
   async linkAssinado(escopo: EscopoDaConta, chave: string, opcoes: OpcoesDoLink): Promise<string> {
     conferirChave(escopo, chave, 'leitura');
     conferirValidade(opcoes.validadeEmSegundos);

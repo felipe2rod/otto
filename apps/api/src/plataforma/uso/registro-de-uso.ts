@@ -49,6 +49,38 @@ export type EventoDeUso =
   | { evento: 'imagens_buscadas'; banco: string; origem: 'editor' | 'otto'; resultados: number; doCache: boolean; duracaoMs: number }
   | { evento: 'imagem_trazida'; banco: string; origem: 'editor' | 'otto'; bytes: number; largura: number; altura: number; jaTinha: boolean }
   | { evento: 'textura_trazida'; textura: string }
+  // Importação de PSD. Nome de arquivo, de camada e de fonte são conteúdo: aqui só medidas, contagens e códigos.
+  | { evento: 'psd_enviado'; importacaoId: string; formato: 'psd' | 'psb'; bytes: number; largura: number; altura: number; camadas: number; fontes: number; fontesEmFalta: number }
+  | { evento: 'importacao_pedida'; importacaoId: string; comNome: boolean; comMarca: boolean; viramImagem: number; baixadas: number; substituidas: number }
+  | { evento: 'importacao_descartada'; importacaoId: string; motivo: 'desistencia' | 'vencimento'; bytes: number }
+  | {
+      evento: 'importacao_terminada';
+      importacaoId: string;
+      documentoId?: string;
+      resultado: 'pronta' | 'falhou';
+      /** Código da falha (`psd_recusado`, `falha_na_importacao`...). */
+      erro?: string;
+      /** Com `psd_recusado`: o código do pacote de PSD (`modo-de-cor`, `pixels-demais`...). */
+      motivo?: string;
+      /** 1 é o normal; 2 é uma retomada (o worker da primeira morreu). */
+      tentativa: number;
+      formato: 'psd' | 'psb';
+      bytes: number;
+      /** Registros de camada do arquivo. */
+      camadas: number;
+      pranchetas: number;
+      camadasEditaveis: number;
+      camadasComoImagem: number;
+      camadasIgnoradas: number;
+      imagens: number;
+      bytesDasImagens: number;
+      fontesEmFalta: number;
+      substituicoes: number;
+      avisos: number;
+      /** Do pedido de importação ao começo do trabalho. */
+      esperaMs: number;
+      duracaoMs: number;
+    }
   | { evento: 'tarefa_decidida'; tarefaId: string; documentoId: string; resultado: 'aceita' | 'aceita_em_parte' | 'desfeita' }
   | {
       evento: 'exportacao_terminada';

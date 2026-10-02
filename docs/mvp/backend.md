@@ -656,6 +656,7 @@ O fornecedor de inferência recebe conteúdo para executar a tarefa, e isso é i
 | Superfície | Risco | Controle | Teste que nasce antes do código |
 |---|---|---|---|
 | Envio de imagem | Arquivo enorme; imagem pequena em bytes e gigante em pixels | Limite de bytes aplicado no fluxo, antes de guardar na memória. Tipo pela assinatura do conteúdo. **Dimensões lidas do cabeçalho, sem decodificar.** A decodificação completa só acontece no worker, com limite de memória | PNG de poucos KB declarando 50.000 px de lado é recusado sem decodificar; arquivo com extensão de imagem e conteúdo de outra coisa é recusado |
+| Envio de PSD (seção 17.14) | Arquivo enorme; arquivo pequeno em bytes e gigante em pixels; arquivo cortado ou que mente sobre os próprios tamanhos; nome de camada, de fonte e de arquivo com instrução ou com caractere de controle | Corpo lido com teto **depois** da guarda de escopo; tipo pelos bytes; na requisição só a estrutura (`inspecionarPsd` e `fontesDoPsd`, sem decodificar pixel), com tetos de camadas, de grupos e de pixels; decodificação só no worker, numa thread de render, uma por conta; a chave de cada imagem criada é conferida contra o hash do conteúdo, e a árvore só cita imagem que veio junto; nomes são dado, guardados sob RLS e fora do log | PSD de 12 MB com cinco camadas de 36 megapixels importa em 16 s com o worker abaixo de 1 GB; arquivo em tons de cinza, cortado e acima dos tetos é recusado antes de guardar; `duas-contas` e `log-sem-conteudo` cobrem as rotas novas |
 | Envio de SVG | Bomba de entidades XML, entidade externa, milhares de caminhos | Analisador sem DTD e sem entidade externa; limite de 5 MB, de nós e de profundidade; o esquema já limita a 400 caminhos | Arquivo de entidades aninhadas e arquivo com entidade externa são recusados com `svg_invalido` |
 | Leitura de arquivo por hash | O hash virar autorização | Toda leitura passa pela linha em `arquivos` sob RLS. Hash referenciado num lote e ausente da conta e da biblioteca: lote recusado | Na suíte `duas-contas`: conta A manda `criarNo` com hash de arquivo da conta B e recebe `422` |
 | Lote de operações | Lote gigante para derrubar a API | Limite de corpo, de operações por lote e de nós por documento | Lote com 10.000 operações é recusado antes de aplicar |
@@ -1326,3 +1327,70 @@ Na árvore de trabalho de hoje a imagem **não** constrói: o teste de fronteira
 - Miniaturas de peças arquivadas ficam no armazenamento.
 - Uma thread de render por worker: dois renders de tarefas diferentes esperam um pelo outro.
 - A imagem de migração tem 2 GB.
+
+### 17.14 Importação de PSD
+
+A última funcionalidade do MVP no servidor (ADR 028, item 4). O pacote `@otto/psd` (especialista-grafico) lê o arquivo e monta a árvore; aqui estão as rotas, a fila, o worker, o isolamento e a limpeza. Módulo `apps/api/src/importacao`.
+
+**Fluxo.**
+
+| Passo | Rota | O que o servidor faz |
+|---|---|---|
+| Enviar | `POST /api/importacoes` (corpo: os bytes; `Content-Type: image/vnd.adobe.photoshop`; nome em `X-Otto-Nome-Do-Arquivo`) → `201` | Lê o corpo com teto, confere pelos bytes (`inspecionarPsd`), lista as fontes que o texto pede (`fontesDoPsd`), guarda o arquivo em `contas/<conta>/importacoes/<id>/original.psd` e cria a importação no estado `enviada`. A resposta já traz medidas, camadas e a situação de cada fonte |
+| Escolher e pedir | `POST /api/importacoes/:id/importar` (`{ nome?, marcaId?, fontes? }`) → `202` | Confere a marca e as escolhas, passa para `na_fila` e publica `{ contaId, id }` |
+| Acompanhar | `GET /api/importacoes/:id`, `GET /api/importacoes` | `na_fila` → `rodando` → `pronta` (com `documentoId` e `relatorio`) ou `falhou` (com `erro`) |
+| Desistir | `DELETE /api/importacoes/:id` → `204` | Só no estado `enviada`: apaga o arquivo |
+| Consultar depois | `GET /api/documentos/:id/importacao` | A importação que criou a peça, com o relatório |
+
+O contrato está em `packages/shared/src/importacao.ts`. Códigos novos: `psd_recusado` (422, com `detalhe.motivo` e `detalhe.mensagem`), `limite_de_importacoes` (429), `importacao_fora_do_estado` (409), `fonte_desconhecida` (422).
+
+**O teto do arquivo: 100 MB no MVP, e não os 300 MB do pacote.** A decisão foi teto menor, e não envio em fluxo direto para o armazenamento. Motivos: a porta `ArmazenamentoDeArquivo` recebe bytes (envio em fluxo pede método novo nos três adaptadores e link assinado de envio); a conferência do arquivo precisa dos bytes na API de qualquer jeito; e o worker segura o arquivo inteiro para importar. O que foi feito para o arquivo grande não derrubar a API: o corpo é lido **dentro da rota, depois da guarda de escopo**, com o espaço reservado uma vez só (o arquivo não existe duas vezes na memória); a API lê **dois envios de cada vez** (o terceiro recebe 429 sem ter o corpo lido); o hash é calculado em pedaços, cedendo a vez. `PSD_BYTES_MAXIMOS` sobe até 300 MB, com a memória da API junto. Os tetos de pixel também ficaram abaixo dos do pacote, para caber na memória do worker: 40 milhões de pixels por camada (`PSD_MEGAPIXELS_POR_CAMADA`; o pacote aceita 64) e 200 milhões na soma (`PSD_MEGAPIXELS_DE_TODAS_AS_CAMADAS`; o pacote aceita 400). Lado, pixels do documento, camadas e grupos são os padrões do pacote.
+
+**Fontes.** A importação guarda os nomes PostScript que o arquivo pede. A cada leitura, cada um é situado: `na_biblioteca` (o Otto tem a fonte com esse nome PostScript), `no_catalogo` (a família está no catálogo de fontes abertas, no peso pedido) ou `em_falta` (com `sugestao`, quando a família existe em outro peso). A família sai do nome PostScript por uma pista (`domain/pista-do-postscript.ts`); quem confirma é o nome PostScript do arquivo de fonte. No pedido, cada fonte pode ter uma escolha: `imagem`, `baixar` ou `substituir` (por família e peso). Sem escolha vale o padrão: a da biblioteca é usada, a do catálogo é baixada, a que falta vira imagem. O worker traz do catálogo antes de importar, entrega ao motor a família inteira de cada fonte usada e o mapa de trocas.
+
+**Fila e worker, no molde da exportação.**
+
+| | |
+|---|---|
+| Filas | `importacao` (expira em 15 min, 5 tentativas para falha de infraestrutura, sinal de vida de 30 s) e `limpeza-de-importacao` (com hora marcada) |
+| Uma por conta | Índice único parcial `importacoes_uma_rodando_por_conta` e a transição condicional `na_fila → rodando`. A segunda da conta devolve `adiar` |
+| Justiça entre contas | Publicada com a posição da conta (`naFrente`): quem tem menos na fila passa na frente |
+| Onde roda | Na **mesma reserva de threads de render da exportação** (`MotorDeExportacaoEmThread.importarPsd`): importação e exportação juntas nunca passam de `EXPORTACOES_AO_MESMO_TEMPO` threads por worker, que é o que dimensiona a memória do contêiner. O arquivo é entregue à thread sem cópia; a thread que cai derruba só a importação dela. `IMPORTACOES_AO_MESMO_TEMPO` (padrão 1) é quantas o processo pega da fila |
+| Queda no meio | Sinal de vida por relógio. A fila reentrega; a importação sem sinal há 20 s é retomada do zero, uma vez (`tentativas` 2); na segunda queda fecha como `interrompida`. **Uma importação cria no máximo uma peça** (índice único parcial em `documentos.importacao_id`): a retomada que encontra a peça criada fecha com ela |
+| O que parou | A consulta e a lista fecham a `na_fila` há mais de 30 min (`abandonada`), a `rodando` sem sinal há 5 min (`interrompida`) e a `enviada` vencida (`descartada`) |
+| Limpeza | O arquivo enviado é apagado assim que a importação termina, com ou sem peça. Se ninguém pede a importação, vence em 24 h: a limpeza agendada no envio descarta e apaga. A linha fica, com o relatório |
+| Limites por conta | 5 importações abertas (enviada, na fila ou rodando) |
+
+**A peça.** Nasce na versão 0, **sem lote no histórico**: a árvore que a importação montou é o ponto de partida, e desfazer não volta para antes dela. A autoria é a origem, guardada na peça: `documentos.importacao_id`, que sai em `DocumentoAberto.importacaoId` e `DocumentoDaLista.importacaoId`. O nome é o do pedido ou o do arquivo sem a extensão. A marca do pedido, conferida, vai para `documentos.marca_id`. A miniatura é pedida na hora. As imagens que a importação cria (fotos embutidas, camadas que vieram como imagem, máscaras) viram arquivos **da conta**, pela chave do conteúdo. O caso de uso confere que a chave de cada uma é o hash dos bytes e que a árvore só cita imagem que veio junto. Para o Otto é uma peça como outra: lê pela mesma bancada, e nome e texto de camada chegam a ele como material (ADR 029).
+
+**Banco.** Migração `20261006090000_importacao_de_psd` (com `down.sql`): tabela `importacoes`, com RLS e `FORCE`, sem `DELETE` para `otto_app`; coluna `documentos.importacao_id` com chave estrangeira composta. Índices: `(conta_id, estado)` para contar as abertas e achar as paradas; `(conta_id, criada_em DESC)` para a lista; único parcial em `(conta_id) WHERE estado = 'rodando'` para uma por vez por conta; único parcial em `documentos(importacao_id)` para uma peça por importação.
+
+**Uso sim, conteúdo não.** Eventos `psd_enviado`, `importacao_pedida`, `importacao_terminada` e `importacao_descartada`: medidas, contagens, códigos e durações. Nome de arquivo, de camada, de fonte e a frase de recusa ficam na linha da importação e na resposta, nunca no log (o teste `log-sem-conteudo` importa um PSD com sentinelas nos nomes de camada e no texto).
+
+**Medido** em 2026-10-02, no `compose` de desenvolvimento (dois workers, armazenamento compatível com S3, código rodando pelo `tsx`), pela API, do envio à peça aberta:
+
+| Arquivo | Tamanho | Envio (conferência e guarda) | Trabalho do worker | Do envio à peça aberta |
+|---|---|---|---|---|
+| Peça de três pranchetas exportada pelo Otto e importada de volta | 1,7 MB | 0,7 s | 0,6 a 1,4 s | 1,7 a 3,1 s |
+| PSDs de fora (200 a 2264 px, até 11 registros de camada) | 0,04 a 0,3 MB | 0,06 a 0,4 s | 0,2 a 2,7 s | 1,5 a 3,4 s |
+| Peças da POC exportadas pelo pacote (1080 px, 9 a 15 registros) | 9 a 15 MB | 0,4 a 1,0 s | 1,4 a 3,1 s | 2,4 a 7,6 s |
+| Peças de duas pranchetas (33 e 34 registros) | 18 e 23 MB | 1,0 e 1,6 s | 4,2 e 3,8 s | 6,1 e 9,9 s |
+| Cinco pranchetas de 4000 × 4000 com foto | 83 MB | 2,7 s | 4,1 s | 7,8 s |
+| Cinco camadas de pixel de 6000 × 6000 (pouco byte, muito pixel) | 12 MB | 1,3 s | 16,0 s | 18,1 s |
+
+A diferença entre a soma das duas colunas e o total é a espera na fila (0,2 a 2,2 s medidos) e o intervalo de consulta de quem acompanha. Na requisição, a conferência de um arquivo de 83 MB custa 3 ms de inspeção e 24 ms para listar as fontes. Memória, amostrada a cada 2 s: a API foi de 310 a 438 MB no envio de 83 MB; o worker chegou a 930 MB no arquivo de cinco camadas de 36 megapixels (teto do contêiner: 3 GB).
+
+**Nas imagens de produção.** Construídas de uma cópia limpa (o que está no git mais as mudanças desta rodada, fora `apps/web`): `otto-servidor` com 574 MB. No `compose.producao.yaml`, com valores descartáveis: a migração nova aplicou e as duas filas foram criadas; a peça exportada pelo Otto foi importada pela thread empacotada em 3,7 s do envio à peça aberta, e um PSD de fora com pranchetas em 1,4 s; o arquivo em tons de cinza foi recusado em 16 ms; as duas peças ganharam miniatura; nenhuma linha do log do servidor citou nome de arquivo ou de camada. Memória depois: API 182 MB, worker 364 MB. A pilha foi removida, e nada foi publicado.
+
+**Dois acertos pedidos pelo especialista-grafico.** `reduzirFoto` e `codificarJpeg` vêm de `@otto/render` (a cópia em `tarefa/infrastructure/render` saiu). O relatório do SVG e do PDF recebe a mesma `escalaDaImagem` da exportação, e avisa `imagem-em-resolucao-menor` quando as camadas que viram imagem saem em 1x. A thread de exportação passou a carregar a variante completa do motor (codifica JPEG), como o pacote pede para a saída vetorial.
+
+**Em aberto.**
+
+- **Envio em fluxo para o armazenamento**, para chegar aos 300 MB sem subir a memória da API: método novo na porta e link assinado de envio.
+- **O pior caso de memória não foi medido**: camadas grandes e todas diferentes (os PNGs prontos ficam em memória até serem guardados). O arquivo de teste tinha cinco camadas iguais, que viram uma imagem só.
+- **O freio de envios simultâneos é por processo** (dois por API). Com login, passa a ser por conta.
+- **Fonte cujo nome PostScript não segue "Família-Estilo"** não é reconhecida na biblioteca pela pista, e o texto dela vem como imagem. Falta à biblioteca uma busca por nome PostScript.
+- **Não há importação de fonte da conta**: o designer que tem a fonte licenciada não consegue enviá-la.
+- A versão 0 da peça importada não tem lote: "importação" não é uma autoria do histórico, é a origem da peça.
+- As frases do relatório, a de cada recusa e os dois textos de `importacao/textos.ts` não passaram pelo guardião da marca.
+- Nenhum PSD de designer de verdade foi importado: os arquivos de fora são os de teste da biblioteca.

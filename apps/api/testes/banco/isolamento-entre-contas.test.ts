@@ -75,6 +75,34 @@ describe('isolamento entre contas no banco', () => {
     );
   });
 
+  it('importação de PSD: a de B não aparece no escopo de A, não é gravada com a conta de B, e peça de A não aponta para importação de B', async () => {
+    const importacao = (id: string, conta: string) => ({
+      id,
+      contaId: conta,
+      nomeDoArquivo: 'segredo.psd',
+      bytes: 10,
+      sha256: 'a'.repeat(64),
+      formato: 'psd',
+      largura: 10,
+      altura: 10,
+      camadas: 1,
+      chaveDoObjeto: `contas/${conta}/importacoes/${id}/original.psd`,
+      expiraEm: new Date(Date.now() + 86_400_000),
+    });
+    const deB = randomUUID();
+    await prisma.executar(escopoB, (tx) => tx.importacao.create({ data: importacao(deB, contaB) }));
+    expect(await prisma.executar(escopoA, (tx) => tx.importacao.findMany())).toEqual([]);
+    expect(await prisma.executar(escopoA, (tx) => tx.$queryRaw`SELECT id FROM importacoes WHERE 1 = 1`)).toEqual([]);
+    expect((await prisma.executar(escopoA, (tx) => tx.importacao.updateMany({ where: { id: deB }, data: { estado: 'descartada' } }))).count).toBe(0);
+    await expect(prisma.executar(escopoA, (tx) => tx.importacao.create({ data: importacao(randomUUID(), contaB) }))).rejects.toThrow(/row-level security/);
+    // peça de A dizendo que nasceu da importação de B: passa pelo WITH CHECK e para na chave composta
+    await expect(prisma.executar(escopoA, (tx) => tx.documento.create({ data: { id: randomUUID(), contaId: contaA, nome: 'intrusa', versaoDoFormato: 1, importacaoId: deB } }))).rejects.toThrow(
+      /foreign key|Foreign key/,
+    );
+    // otto_app não apaga importação: o registro fica
+    await expect(prisma.executar(escopoB, (tx) => tx.importacao.deleteMany({ where: { id: deB } }))).rejects.toThrow(/permission denied|permissão/i);
+  });
+
   it('o escopo não vaza pela conexão: depois de A, uma transação de B só vê B', async () => {
     for (let i = 0; i < 12; i++) {
       const [deA, deB] = await Promise.all([prisma.executar(escopoA, (tx) => tx.documento.findMany()), prisma.executar(escopoB, (tx) => tx.documento.findMany())]);

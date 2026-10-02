@@ -2,7 +2,9 @@
 // sentinela em tudo que é conteúdo e procura as frases no log. Achou: o teste falha.
 // Também confere o que o log TEM de ter: conta, correlação, rota como modelo, status e duração.
 import { randomUUID } from 'node:crypto';
-import { ArquivoEnviado } from '@otto/shared';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { ArquivoEnviado, Importacao, TIPO_DO_PSD } from '@otto/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type ApiDeTeste, type ClienteDeTeste, ENTRADA_DE_BRIEFING, PNG, subirApi } from './subir';
 
@@ -44,7 +46,14 @@ const SENTINELAS = {
   paginaDaImagem: 'banco-de-mentira.invalid/fotos',
   enderecoDoArquivoNoBanco: '/get/1001',
   buscaDeFonte: 'SENTINELA-BUSCA-NO-CATALOGO-4f4f',
+  // importação de PSD: o nome do arquivo e o nome dado à peça (os nomes de camada e o texto de dentro do PSD são
+  // os sentinelas da peça exportada, lá em cima)
+  nomeDoPsd: 'SENTINELA-PSD-DO-CLIENTE-8d8d.psd',
+  nomeDaPecaImportada: 'SENTINELA-PECA-IMPORTADA-6c6c',
+  nomeDoPsdRecusado: 'SENTINELA-PSD-RECUSADO-1b1b.psd',
 } as const;
+
+const PSD_EM_TONS_DE_CINZA = readFileSync(path.resolve(import.meta.dirname, '../../../../packages/psd/recursos-de-teste/psd-de-fora/grayscale.psd'));
 
 let api: ApiDeTeste;
 let A: ClienteDeTeste;
@@ -55,6 +64,8 @@ let tarefaId: string;
 let tarefaRecusadaId: string;
 let tarefaDoFormularioId: string;
 let marcaId: string;
+let importacaoId: string;
+let pecaImportadaId: string;
 
 beforeAll(async () => {
   api = await subirApi();
@@ -101,7 +112,34 @@ beforeAll(async () => {
   await A.get(`/api/exportacoes/${exportacao.id}`);
   const link = (await A.get(`/api/exportacoes/${exportacao.id}/arquivos/0`)).headers.location as string;
   tokenDoLink = link.split('/').at(-1) as string;
-  await A.cru.get(link);
+  // o PSD que o Otto exportou, com os sentinelas nos nomes de camada e no texto: é ele que volta pela importação
+  const baixado = await A.cru
+    .get(link)
+    .buffer(true)
+    .parse((res, fim) => {
+      const partes: Buffer[] = [];
+      res.on('data', (parte: Buffer) => partes.push(parte));
+      res.on('end', () => fim(null, Buffer.concat(partes)));
+    });
+  const psdDoOtto = baixado.body as Buffer;
+  const enviarPsd = (bytes: Buffer, nome: string) => A.post('/api/importacoes').set('Content-Type', TIPO_DO_PSD).set('X-Otto-Nome-Do-Arquivo', encodeURIComponent(nome)).send(bytes);
+  const enviada = Importacao.parse((await enviarPsd(psdDoOtto, S.nomeDoPsd)).body);
+  importacaoId = enviada.id;
+  // o texto do PSD pede a Anton: a escolha de fonte também cita nome de fonte, e não pode ir para o log
+  await A.post(`/api/importacoes/${enviada.id}/importar`).send({
+    nome: S.nomeDaPecaImportada,
+    fontes: enviada.fontes.map((f) => ({ postScript: f.postScript, fazer: 'substituir', por: { familia: 'Anton', peso: 400 } })),
+  });
+  await api.fila.ociosa();
+  pecaImportadaId = Importacao.parse((await A.get(`/api/importacoes/${enviada.id}`)).body).documentoId as string;
+  await A.get(`/api/documentos/${pecaImportadaId}`);
+  await A.get(`/api/documentos/${pecaImportadaId}/importacao`);
+  await A.get('/api/importacoes');
+  // recusas: o arquivo que a v1 não importa (a resposta leva a frase; o log, só o código), pedido torto, e desistência
+  await enviarPsd(PSD_EM_TONS_DE_CINZA, S.nomeDoPsdRecusado);
+  const desistida = Importacao.parse((await enviarPsd(psdDoOtto, S.nomeDoPsd)).body);
+  await A.post(`/api/importacoes/${desistida.id}/importar`).send({ nome: S.nomeDaPecaImportada, fontes: [{ postScript: S.alvoQueNaoExiste, fazer: 'imagem' }] });
+  await A.delete(`/api/importacoes/${desistida.id}`);
   await A.post(`/api/documentos/${doc.id}/exportacoes`).send({ formato: 'psd', pranchetas: [S.alvoQueNaoExiste] });
   await A.post(`/api/documentos/${doc.id}/desfazer`).send({ versaoBase: 1 });
   await A.post(`/api/documentos/${doc.id}/duplicar`).send({ nome: S.nomeNovo });
@@ -284,6 +322,55 @@ describe('o log carrega o que precisa', () => {
 
   it('o envio de arquivo registra tipo, bytes e medidas', () => {
     expect(api.log.find((l) => l.evento === 'arquivo_enviado')).toMatchObject({ contaId: api.contaA.contaId, tipo: 'image/png', bytes: PNG.byteLength, largura: 600, altura: 800 });
+  });
+});
+
+describe('a importação de PSD no log: uso sim, conteúdo não (ADR 031)', () => {
+  it('a peça importada tem mesmo os sentinelas por dentro (senão este teste não provaria nada)', async () => {
+    const peca = JSON.stringify((await A.get(`/api/documentos/${pecaImportadaId}`)).body);
+    expect(peca).toContain(SENTINELAS.nomeDaCamada);
+    expect(peca).toContain(SENTINELAS.textoDaCamada);
+    expect(peca).toContain(SENTINELAS.nomeDaPecaImportada);
+    const importacao = JSON.stringify((await A.get(`/api/importacoes/${importacaoId}`)).body);
+    expect(importacao).toContain(SENTINELAS.nomeDoPsd);
+    expect(importacao).toContain(SENTINELAS.nomeDaCamada);
+  });
+
+  it('o envio registra formato, bytes, medidas e contagens; o pedido, só o que foi escolhido em números', () => {
+    const enviado = api.log.find((l) => l.evento === 'psd_enviado');
+    expect(enviado).toMatchObject({ contaId: api.contaA.contaId, importacaoId, formato: 'psd', largura: 1080, altura: 1350, fontes: 1, fontesEmFalta: 0 });
+    expect(enviado?.bytes).toBeGreaterThan(1000);
+    expect(api.log.find((l) => l.evento === 'importacao_pedida')).toMatchObject({ importacaoId, comNome: true, comMarca: false, viramImagem: 0, baixadas: 0, substituidas: 1 });
+  });
+
+  it('o fim registra resultado, tentativa, contagens de camada e de imagem, espera e duração', () => {
+    const fim = api.log.find((l) => l.evento === 'importacao_terminada');
+    expect(fim).toMatchObject({ contaId: api.contaA.contaId, importacaoId, documentoId: pecaImportadaId, resultado: 'pronta', tentativa: 1, formato: 'psd', pranchetas: 1, fontesEmFalta: 0 });
+    for (const campo of ['camadasEditaveis', 'camadasComoImagem', 'camadasIgnoradas', 'imagens', 'bytesDasImagens', 'avisos', 'esperaMs', 'duracaoMs']) expect(typeof fim?.[campo]).toBe('number');
+    // só os campos declarados: nenhum texto livre
+    for (const valor of Object.values(fim ?? {})) expect(['string', 'number', 'boolean']).toContain(typeof valor);
+  });
+
+  it('a recusa registra o código, não a frase nem o nome do arquivo; a desistência registra o motivo e os bytes', () => {
+    const recusas = api.log.filter((l) => l.evento === 'requisicao' && l.rota === '/api/importacoes' && l.status === 422);
+    expect(recusas.length).toBe(1);
+    expect(recusas[0]).toMatchObject({ codigo: 'psd_recusado' });
+    expect(api.log.find((l) => l.evento === 'importacao_descartada')).toMatchObject({ motivo: 'desistencia' });
+  });
+
+  it('as rotas aparecem como modelo, e a chave do objeto do arquivo enviado não aparece', () => {
+    const rotas = new Set(api.log.filter((l) => l.evento === 'requisicao').map((l) => `${l.metodo} ${l.rota}`));
+    for (const rota of [
+      'POST /api/importacoes',
+      'POST /api/importacoes/:id/importar',
+      'GET /api/importacoes/:id',
+      'GET /api/importacoes',
+      'DELETE /api/importacoes/:id',
+      'GET /api/documentos/:id/importacao',
+    ]) {
+      expect(rotas).toContain(rota);
+    }
+    for (const linha of api.logCru) expect(linha).not.toMatch(/\/importacoes\/[0-9a-f-]{36}\/original/);
   });
 });
 

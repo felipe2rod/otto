@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { aplicarLote, type Documento, documentoVazio } from '@otto/documento';
+import { ErroDeImportacao } from '@otto/psd';
 import { afterAll, describe, expect, it } from 'vitest';
 import { MotorDeExportacaoEmThread, MotorInterrompido } from './motor-em-thread';
 
@@ -90,10 +91,11 @@ describe('MotorDeExportacaoEmThread', { timeout: 60_000 }, () => {
 
   it('a thread que morre no meio rejeita a exportação dela com MotorInterrompido, e a seguinte roda numa thread nova', async () => {
     const doc = arvore(2000);
-    const emCurso = motor.png(doc, recursos(), { nome: 'x', pranchetas: ['n0', 'n1'], escala: 2, semFundo: false }, semPausa);
+    // a rejeição é colhida já: ela chega enquanto se espera as threads terminarem
+    const emCurso = motor.png(doc, recursos(), { nome: 'x', pranchetas: ['n0', 'n1'], escala: 2, semFundo: false }, semPausa).catch((erro: unknown) => erro);
     await new Promise((ok) => setTimeout(ok, 150));
     await motor.derrubarThreads();
-    await expect(emCurso).rejects.toBeInstanceOf(MotorInterrompido);
+    expect(await emCurso).toBeInstanceOf(MotorInterrompido);
     const [png] = await motor.png(arvore(), recursos(), { nome: 'depois', pranchetas: ['n0'], escala: 1, semFundo: false }, semPausa);
     expect(png?.nome).toBe('depois.png');
   });
@@ -126,5 +128,49 @@ describe('MotorDeExportacaoEmThread', { timeout: 60_000 }, () => {
     await outro.png(arvore(), recursos(), { nome: 'x', pranchetas: ['n0'], escala: 1, semFundo: false }, semPausa);
     await outro.fechar();
     await expect(outro.png(arvore(), recursos(), { nome: 'x', pranchetas: ['n0'], escala: 1, semFundo: false }, semPausa)).rejects.toBeInstanceOf(MotorInterrompido);
+  });
+});
+
+describe('importação de PSD pela mesma thread de render', { timeout: 60_000 }, () => {
+  const motor = new MotorDeExportacaoEmThread({ threads: 1 });
+  afterAll(() => motor.fechar());
+  const PSD = path.resolve(import.meta.dirname, '../../../../../../packages/psd');
+  const golden = () => new Uint8Array(readFileSync(path.join(PSD, 'goldens/peca.psd')));
+  const anton = () => ({ familia: 'Anton', peso: 400, postScript: 'Anton-Regular', bytes: Uint8Array.from(FONTE) });
+
+  it('importa na thread e devolve a árvore, as imagens com os bytes e o relatório', async () => {
+    const fonte = anton();
+    const r = await motor.importarPsd(golden(), { fontes: [fonte], substituicoes: {} });
+    expect(r.doc.pranchetas.map((p) => p.nome)).toEqual(['Feed', 'Story']);
+    expect(r.relatorio.arquivo.formato).toBe('psd');
+    expect(r.imagens.length).toBeGreaterThan(0);
+    for (const imagem of r.imagens) expect(imagem.bytes.byteLength).toBeGreaterThan(0);
+    // a fonte de quem chama continua inteira (vai por cópia); o arquivo foi entregue à thread
+    expect(fonte.bytes.byteLength).toBe(FONTE.byteLength);
+    expect(motor.threadsCriadas).toBe(1);
+  });
+
+  it('o arquivo que não pode ser importado chega como ErroDeImportacao, com o código, e a thread continua de pé', async () => {
+    const cinza = new Uint8Array(readFileSync(path.join(PSD, 'recursos-de-teste/psd-de-fora/grayscale.psd')));
+    const erro = await motor.importarPsd(cinza, { fontes: [], substituicoes: {} }).catch((e: unknown) => e);
+    expect(erro).toBeInstanceOf(ErroDeImportacao);
+    expect(erro).toMatchObject({ codigo: 'modo-de-cor' });
+    expect((await motor.importarPsd(golden(), { fontes: [anton()], substituicoes: {} })).doc.pranchetas).toHaveLength(2);
+    expect(motor.threadsCriadas).toBe(1);
+  });
+
+  it('o laço principal continua respondendo enquanto a importação roda', async () => {
+    let voltas = 0;
+    const relogio = setInterval(() => voltas++, 5);
+    await motor.importarPsd(golden(), { fontes: [anton()], substituicoes: {} });
+    clearInterval(relogio);
+    expect(voltas).toBeGreaterThan(3);
+  });
+
+  it('a thread que cai no meio rejeita a importação como interrompida', async () => {
+    const pedido = motor.importarPsd(golden(), { fontes: [anton()], substituicoes: {} }).catch((erro: unknown) => erro);
+    await new Promise((ok) => setTimeout(ok, 20));
+    await motor.derrubarThreads();
+    expect(await pedido).toBeInstanceOf(MotorInterrompido);
   });
 });

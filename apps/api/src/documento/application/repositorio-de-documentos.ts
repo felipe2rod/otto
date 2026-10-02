@@ -14,6 +14,16 @@ export interface RegistroDeDocumento {
   marcaId?: string;
   /** A versão que a miniatura guardada mostra. Ausente: ainda não há miniatura. */
   miniaturaVersao?: number;
+  /** A importação de PSD de onde a peça nasceu. */
+  importacaoId?: string;
+}
+
+export interface NovoDocumento {
+  id: string;
+  nome: string;
+  arvore: Documento;
+  deExemplo?: boolean;
+  importacaoId?: string;
 }
 
 export interface DocumentoGuardado extends RegistroDeDocumento {
@@ -87,8 +97,13 @@ export interface ResumoDoHistorico {
 }
 
 export abstract class RepositorioDeDocumentos {
-  /** `deExemplo`: a peça de exemplo semeada na conta nova. */
-  abstract criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento; deExemplo?: boolean }): Promise<DocumentoGuardado>;
+  /**
+   * `deExemplo`: a peça de exemplo semeada na conta nova. `importacaoId`: a importação de PSD (DA CONTA) de onde a
+   * peça nasce; uma importação cria no máximo uma peça, e a segunda tentativa lança.
+   */
+  abstract criar(escopo: EscopoDaConta, novo: NovoDocumento): Promise<DocumentoGuardado>;
+  /** A peça que nasceu de uma importação, arquivada ou não. undefined se não há, nesta conta. */
+  abstract daImportacao(escopo: EscopoDaConta, importacaoId: string): Promise<RegistroDeDocumento | undefined>;
   /** A conta já teve a peça de exemplo? Conta também a arquivada: o exemplo não volta sozinho. */
   abstract temExemplo(escopo: EscopoDaConta): Promise<boolean>;
   /** Não arquivados, do alterado mais recentemente para o mais antigo. */

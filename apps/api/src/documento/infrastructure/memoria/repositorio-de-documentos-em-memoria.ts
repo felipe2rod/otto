@@ -7,6 +7,7 @@ import {
   type DocumentoGuardado,
   type DocumentoTravado,
   type LoteGravado,
+  type NovoDocumento,
   type NovoLote,
   type Pagina,
   type RegistroDeDocumento,
@@ -45,9 +46,22 @@ export class RepositorioDeDocumentosEmMemoria extends RepositorioDeDocumentos {
     return this.comExemplo.has(escopo.contaId);
   }
 
-  async criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento; deExemplo?: boolean }): Promise<DocumentoGuardado> {
+  async daImportacao(escopo: EscopoDaConta, importacaoId: string): Promise<RegistroDeDocumento | undefined> {
+    const g = [...this.docs.values()].find((d) => d.contaId === escopo.contaId && d.registro.importacaoId === importacaoId);
+    return g ? { ...g.registro } : undefined;
+  }
+
+  async criar(escopo: EscopoDaConta, novo: NovoDocumento): Promise<DocumentoGuardado> {
+    if (novo.importacaoId && [...this.docs.values()].some((d) => d.registro.importacaoId === novo.importacaoId)) throw new Error('a importação já criou uma peça');
     if (novo.deExemplo) this.comExemplo.add(escopo.contaId);
-    const registro: RegistroDeDocumento = { id: novo.id, nome: novo.nome, versao: 0, pranchetas: novo.arvore.pranchetas.length, alteradoEm: this.agora() };
+    const registro: RegistroDeDocumento = {
+      id: novo.id,
+      nome: novo.nome,
+      versao: 0,
+      pranchetas: novo.arvore.pranchetas.length,
+      alteradoEm: this.agora(),
+      ...(novo.importacaoId ? { importacaoId: novo.importacaoId } : {}),
+    };
     this.docs.set(novo.id, { contaId: escopo.contaId, registro, arquivado: false, arvores: new Map([[0, novo.arvore]]), lotes: [] });
     return { ...registro, arvore: novo.arvore };
   }

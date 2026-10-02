@@ -197,3 +197,20 @@ describe('alavancas de custo e o balde do fornecedor', () => {
     expect(lerConfiguracao(valida).agente).toMatchObject({ restoMinimoNoFornecedor: 3_000_000, capacidadeDoFornecedor: 4_500_000, reposicaoPorHoraNoFornecedor: 900_000 });
   });
 });
+
+describe('importação de PSD', () => {
+  it('o teto do envio é de 100 MB e os de pixel ficam abaixo dos do pacote de PSD; uma importação por vez por processo', () => {
+    const config = lerConfiguracao(valida);
+    expect(config.importacao).toEqual({ bytesDoArquivo: 100 * 1024 * 1024, psd: { pixelsDaMaiorCamada: 40_000_000, pixelsDeTodasAsCamadas: 200_000_000 } });
+    expect(config.worker.importacoesAoMesmoTempo).toBe(1);
+  });
+
+  it('são configuráveis, e nunca acima do que o pacote de PSD aguenta', () => {
+    const config = lerConfiguracao({ ...valida, PSD_BYTES_MAXIMOS: '1048576', PSD_MEGAPIXELS_POR_CAMADA: '10', PSD_MEGAPIXELS_DE_TODAS_AS_CAMADAS: '50', IMPORTACOES_AO_MESMO_TEMPO: '2' });
+    expect(config.importacao).toEqual({ bytesDoArquivo: 1_048_576, psd: { pixelsDaMaiorCamada: 10_000_000, pixelsDeTodasAsCamadas: 50_000_000 } });
+    expect(config.worker.importacoesAoMesmoTempo).toBe(2);
+    expect(erroDe({ ...valida, PSD_BYTES_MAXIMOS: String(301 * 1024 * 1024) }).variaveis).toEqual(['PSD_BYTES_MAXIMOS']);
+    expect(erroDe({ ...valida, PSD_MEGAPIXELS_POR_CAMADA: '65' }).variaveis).toEqual(['PSD_MEGAPIXELS_POR_CAMADA']);
+    expect(erroDe({ ...valida, PSD_MEGAPIXELS_DE_TODAS_AS_CAMADAS: '401' }).variaveis).toEqual(['PSD_MEGAPIXELS_DE_TODAS_AS_CAMADAS']);
+  });
+});

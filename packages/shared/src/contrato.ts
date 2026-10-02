@@ -111,6 +111,20 @@ export const CODIGOS_DE_ERRO = {
   imagemNaoBuscada: 'imagem_nao_buscada',
   /** 429. A conta chegou ao limite de buscas ou de imagens trazidas por dia. detalhe: { limite }. */
   limiteDeImagens: 'limite_de_imagens',
+  /**
+   * 422. O arquivo enviado não pode ser importado como PSD. detalhe: { motivo, mensagem }: `motivo` é um de
+   * MOTIVOS_DE_PSD_RECUSADO (importacao.ts) e `mensagem` é a frase pronta, em português.
+   */
+  psdRecusado: 'psd_recusado',
+  /**
+   * 429. A conta já tem importações demais abertas. detalhe: { limite }. Com `motivo: "envios_ao_mesmo_tempo"`,
+   * o servidor já está recebendo o máximo de arquivos de uma vez: tente de novo em alguns segundos.
+   */
+  limiteDeImportacoes: 'limite_de_importacoes',
+  /** 409. A ação não vale no estado em que a importação está. detalhe: { estado }. */
+  importacaoForaDoEstado: 'importacao_fora_do_estado',
+  /** 422. A troca de fonte cita uma família que o Otto não tem nem acha no catálogo. detalhe: { familia }. */
+  fonteDesconhecida: 'fonte_desconhecida',
   /** 500. */
   erroInterno: 'erro_interno',
 } as const;
@@ -161,6 +175,8 @@ export const DocumentoDaLista = z.object({
   tarefa: TarefaResumida.optional(),
   /** A marca com que a peça foi criada pelo formulário de briefing. GET /api/documentos?marca=<id> filtra por ela. */
   marcaId: Id.optional(),
+  /** Presente quando a peça nasceu de um PSD importado. O relatório está em GET /api/documentos/:id/importacao. */
+  importacaoId: Id.optional(),
   /**
    * Endereço da miniatura (JPEG da primeira prancheta, até 480 px), ou nulo enquanto não há. O endereço muda
    * quando a miniatura muda (leva a versão): pode ser guardado em cache para sempre. É feita pelo worker ao
@@ -195,6 +211,8 @@ export const DocumentoAberto = z.object({
    */
   fontes: z.array(z.object({ familia: z.string(), pesos: z.array(z.int()) })).default([]),
   tarefaAtiva: TarefaResumida.optional(),
+  /** Presente quando a peça nasceu de um PSD importado. O relatório está em GET /api/documentos/:id/importacao. */
+  importacaoId: Id.optional(),
   /** Alterações do Otto aguardando revisão. */
   conjuntoPendente: z.object({ tarefaId: Id, versaoInicial: Versao, tocados: z.array(z.string()) }).optional(),
 });

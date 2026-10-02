@@ -17,10 +17,13 @@ export class MotorDeExportacaoComRender extends MotorDeExportacao {
   /** Quantas vezes o WebAssembly foi carregado neste processo. Deve ficar em 1. */
   cargasDoMotor = 0;
 
-  private carregar(): Promise<Motor> {
+  /** O motor deste processo (ou thread), carregado na primeira vez. Quem importa PSD na mesma thread usa o mesmo. */
+  carregar(): Promise<Motor> {
     if (!this.motor) {
       this.cargasDoMotor++;
-      this.motor = carregarCanvasKit();
+      // A variante completa codifica JPEG: é em JPEG que vai, no SVG e no PDF, toda imagem sem transparência
+      // (com a padrão o arquivo sai certo, em PNG, várias vezes maior). Os pixels são os mesmos nas duas.
+      this.motor = carregarCanvasKit('completa');
       // se a carga falhar, a próxima chamada tenta de novo em vez de guardar a falha
       this.motor.catch(() => {
         this.motor = undefined;

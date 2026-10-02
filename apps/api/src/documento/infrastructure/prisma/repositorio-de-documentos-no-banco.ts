@@ -9,6 +9,7 @@ import {
   type DocumentoGuardado,
   type DocumentoTravado,
   type LoteGravado,
+  type NovoDocumento,
   type NovoLote,
   type Pagina,
   type RegistroDeDocumento,
@@ -42,6 +43,7 @@ interface LinhaDeDocumento {
   alteradoEm: Date;
   marcaId: string | null;
   miniaturaVersao: number | null;
+  importacaoId: string | null;
 }
 
 const registro = (l: LinhaDeDocumento): RegistroDeDocumento => ({
@@ -52,6 +54,7 @@ const registro = (l: LinhaDeDocumento): RegistroDeDocumento => ({
   alteradoEm: l.alteradoEm,
   ...(l.marcaId ? { marcaId: l.marcaId } : {}),
   ...(l.miniaturaVersao !== null ? { miniaturaVersao: l.miniaturaVersao } : {}),
+  ...(l.importacaoId ? { importacaoId: l.importacaoId } : {}),
 });
 
 const loteGravado = (l: { tocados: unknown } & Omit<LoteGravado, 'tocados'>): LoteGravado => ({ ...l, tocados: Array.isArray(l.tocados) ? l.tocados.map(String) : [] });
@@ -70,7 +73,13 @@ export class RepositorioDeDocumentosNoBanco extends RepositorioDeDocumentos {
     return this.prisma.executar(escopo, async (tx) => (await tx.documento.count({ where: { contaId: escopo.contaId, deExemplo: true } })) > 0);
   }
 
-  async criar(escopo: EscopoDaConta, novo: { id: string; nome: string; arvore: Documento; deExemplo?: boolean }): Promise<DocumentoGuardado> {
+  async daImportacao(escopo: EscopoDaConta, importacaoId: string): Promise<RegistroDeDocumento | undefined> {
+    if (!UUID.test(importacaoId)) return undefined;
+    const linha = await this.prisma.executar(escopo, (tx) => tx.documento.findFirst({ where: { contaId: escopo.contaId, importacaoId } }));
+    return linha ? registro(linha) : undefined;
+  }
+
+  async criar(escopo: EscopoDaConta, novo: NovoDocumento): Promise<DocumentoGuardado> {
     return this.prisma.executar(escopo, async (tx) => {
       const linha = await tx.documento.create({
         data: {
@@ -81,6 +90,7 @@ export class RepositorioDeDocumentosNoBanco extends RepositorioDeDocumentos {
           versaoDoFormato: novo.arvore.versaoDoFormato,
           pranchetas: novo.arvore.pranchetas.length,
           deExemplo: novo.deExemplo ?? false,
+          ...(novo.importacaoId ? { importacaoId: novo.importacaoId } : {}),
         },
       });
       await tx.versaoDeDocumento.create({ data: { contaId: escopo.contaId, documentoId: novo.id, versao: 0, arvore: emJson(novo.arvore), bytes: bytesDe(novo.arvore) } });

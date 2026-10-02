@@ -5,6 +5,7 @@ import 'reflect-metadata';
 import { type DynamicModule, type INestApplication, Module } from '@nestjs/common';
 import { APP_GUARD, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { criarFormatoPsd } from '@otto/psd';
 import { LIMITES, TIPOS_DE_IMAGEM } from '@otto/shared';
 import { ArmazenamentoDeArquivo } from './arquivo/application/armazenamento-de-arquivo';
 import { CasosDeUsoDeArquivo } from './arquivo/application/casos-de-uso-de-arquivo';
@@ -46,6 +47,13 @@ import { CasosDeUsoDeImagens } from './imagem/application/casos-de-uso-de-imagen
 import { criarBancoDeImagens } from './imagem/infrastructure/adaptadores/criar-banco-de-imagens';
 import { CacheDeBuscasNoBanco } from './imagem/infrastructure/prisma/cache-de-buscas-no-banco';
 import { ControladorDeImagens } from './imagem/presentation/controlador-de-imagens';
+import { CasosDeUsoDeImportacao, type FalhaNaImportacao } from './importacao/application/casos-de-uso-de-importacao';
+import { MotorDeImportacao } from './importacao/application/motor-de-importacao';
+import { RepositorioDeImportacoes } from './importacao/application/repositorio-de-importacoes';
+import { RepositorioDeImportacoesNoBanco } from './importacao/infrastructure/prisma/repositorio-de-importacoes-no-banco';
+import { MotorDeImportacaoComRender } from './importacao/infrastructure/render/motor-de-importacao-com-render';
+import { MotorDeImportacaoEmThread } from './importacao/infrastructure/render/motor-de-importacao-em-thread';
+import { ControladorDeImportacoes } from './importacao/presentation/controlador-de-importacoes';
 import { type Configuracao, type ConfiguracaoDoArmazenamento, ConfiguracaoInvalida, lerConfiguracao } from './plataforma/config/configuracao';
 import { FiltroDeErros } from './plataforma/erros/filtro-de-erros';
 import { ResolvedorDeContaFixa } from './plataforma/escopo/adaptadores/resolvedor-de-conta-fixa';
@@ -115,6 +123,7 @@ export class ModuloRaiz {
               ControladorDeBriefings,
               ControladorDeImagens,
               ControladorDeTexturas,
+              ControladorDeImportacoes,
             ]
           : [ControladorDeSaude],
       providers: [
@@ -177,6 +186,67 @@ export class ModuloRaiz {
         // As threads do motor só nascem na primeira exportação: na API, nunca. No worker, uma por exportação
         // ao mesmo tempo.
         { provide: MotorDeExportacao, useFactory: () => new MotorDeExportacaoEmThread({ threads: config.worker.exportacoesAoMesmoTempo }) },
+        { provide: RepositorioDeImportacoes, useFactory: (prisma: PrismaComEscopo) => new RepositorioDeImportacoesNoBanco(prisma), inject: [PrismaComEscopo] },
+        // A importação de PSD roda nas mesmas threads de render da exportação: as duas juntas nunca passam do número
+        // de threads do worker. Na API o motor nunca é chamado.
+        {
+          provide: MotorDeImportacao,
+          useFactory: (motor: MotorDeExportacao) => (motor instanceof MotorDeExportacaoEmThread ? new MotorDeImportacaoEmThread(motor) : new MotorDeImportacaoComRender()),
+          inject: [MotorDeExportacao],
+        },
+        {
+          provide: CasosDeUsoDeImportacao,
+          useFactory: (
+            importacoes: RepositorioDeImportacoes,
+            documentos: RepositorioDeDocumentos,
+            arquivos: RepositorioDeArquivos,
+            armazenamento: ArmazenamentoDeArquivo,
+            fontes: BibliotecaDeFontes,
+            catalogo: CatalogoDeFontes | null,
+            sobDemanda: CasosDeUsoDeFontes,
+            marcas: RepositorioDeCadastros,
+            fila: BarramentoDeEventos,
+            motor: MotorDeImportacao,
+            miniaturas: CasosDeUsoDeMiniatura,
+            uso: RegistroDeUso,
+            registro: Registro,
+          ) =>
+            new CasosDeUsoDeImportacao({
+              importacoes,
+              documentos,
+              arquivos,
+              armazenamento,
+              fontes,
+              ...(catalogo ? { catalogo } : {}),
+              sobDemanda,
+              marcas,
+              fila,
+              motor,
+              // a leitura do PSD na requisição: só a estrutura, para listar as fontes que o arquivo pede
+              formato: criarFormatoPsd(),
+              miniaturas,
+              gerarId: uuidV7,
+              uso,
+              limites: config.importacao,
+              // só o tipo do erro: a mensagem pode citar nome de camada ou de fonte
+              aoFalhar: (falha: FalhaNaImportacao) => registro.warn({ evento: 'falha_na_importacao', importacaoId: falha.importacaoId, etapa: falha.etapa, ...semConteudo(falha.erro) }),
+            }),
+          inject: [
+            RepositorioDeImportacoes,
+            RepositorioDeDocumentos,
+            RepositorioDeArquivos,
+            ArmazenamentoDeArquivo,
+            BibliotecaDeFontes,
+            CatalogoDeFontes,
+            CasosDeUsoDeFontes,
+            RepositorioDeCadastros,
+            BarramentoDeEventos,
+            MotorDeImportacao,
+            CasosDeUsoDeMiniatura,
+            RegistroDeUso,
+            Registro,
+          ],
+        },
         { provide: MedidorDeTexto, useFactory: (fontes: BibliotecaDeFontes) => new MedidorComCanvasKit(fontes), inject: [BibliotecaDeFontes] },
         // A miniatura da peça é desenhada pela bancada de render do worker (na thread de render).
         { provide: RenderDeMiniatura, useFactory: (bancada: BancadaDoOtto) => new MiniaturaPelaBancada(bancada), inject: [BancadaDoOtto] },
@@ -355,6 +425,7 @@ export class ModuloRaiz {
             tarefas: CasosDeUsoDeTarefa,
             bancada: BancadaDoOtto,
             miniaturas: CasosDeUsoDeMiniatura,
+            importacoes: CasosDeUsoDeImportacao,
           ) =>
             new CicloDeVida(
               servico,
@@ -365,13 +436,15 @@ export class ModuloRaiz {
               {
                 exportacoesAoMesmoTempo: config.worker.exportacoesAoMesmoTempo,
                 tarefasAoMesmoTempo: config.worker.tarefasAoMesmoTempo,
+                importacoesAoMesmoTempo: config.worker.importacoesAoMesmoTempo,
                 // as threads de render: as da exportação e a da tarefa do Otto
                 motor: { fechar: async () => void (await Promise.all([motorDeExportacao.fechar(), bancada.fechar()])) },
               },
               tarefas,
               miniaturas,
+              importacoes,
             ),
-          inject: [PrismaComEscopo, BarramentoDeEventos, CasosDeUsoDeExportacao, Registro, MotorDeExportacao, CasosDeUsoDeTarefa, BancadaDoOtto, CasosDeUsoDeMiniatura],
+          inject: [PrismaComEscopo, BarramentoDeEventos, CasosDeUsoDeExportacao, Registro, MotorDeExportacao, CasosDeUsoDeTarefa, BancadaDoOtto, CasosDeUsoDeMiniatura, CasosDeUsoDeImportacao],
         },
       ],
     };

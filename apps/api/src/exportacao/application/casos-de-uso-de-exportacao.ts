@@ -194,7 +194,7 @@ export class CasosDeUsoDeExportacao {
     if (!doc) throw new NaoEncontrado();
     const pranchetas = this.pranchetasDoPedido(doc.arvore, pedido.pranchetas);
     const achados = await this.acharRecursos(escopo, soAsPranchetas(doc.arvore, pranchetas));
-    const relatorio = relatorioPara(doc.arvore, pedido, achados, pranchetas);
+    const relatorio = relatorioPara(doc.arvore, pedido, achados, pranchetas, this.escalaDaImagem(doc.arvore, pranchetas));
     if (!pedido.pacote) return relatorio;
     return { ...relatorio, pacote: { fontes: fontesDoPacote(fontesUsadas(relatorio, achados), (f) => achados.fontes.find((a) => a.registro === f)?.bytes) } };
   }
@@ -347,7 +347,8 @@ export class CasosDeUsoDeExportacao {
 
         if (feitas.length > 0) {
           // o relatório do que de fato saiu, com os nomes de arquivo de verdade
-          const doNucleo = { ...relatorioDoNucleo(doc, e.opcoes, usados, feitas), arquivos: [...nomes] };
+          // a mesma escala com que as camadas viraram imagem: se alguma prancheta saiu em 1x, o relatório avisa
+          const doNucleo = { ...relatorioDoNucleo(doc, e.opcoes, usados, feitas, this.escalaDaImagem(doc, feitas)), arquivos: [...nomes] };
           const fontes = pacote ? fontesDoPacote(fontesUsadas(doNucleo, usados), (f) => bytesJaLidos.get(`fonte:${f.sha256}`)) : undefined;
           // PNG fora de pacote não tem relatório: não há camada nem fonte para conferir
           if (e.opcoes.formato !== 'png') relatorio = { ...doNucleo, ...(fontes ? { pacote: { fontes } } : {}) };
@@ -592,16 +593,17 @@ function opcoesGuardadas(pedido: PedidoDeExportacao, pranchetas: string[]): Opco
 }
 
 /** O relatório do núcleo para o formato: o do PSD, o vetorial (SVG e PDF) ou, no PNG, só o que vale para imagem chapada. */
-function relatorioDoNucleo(doc: Documento, forma: FormaDoPedido, achados: RecursosAchados, pranchetas: readonly string[]): RelatorioDoNucleo {
+function relatorioDoNucleo(doc: Documento, forma: FormaDoPedido, achados: RecursosAchados, pranchetas: readonly string[], escalaDaImagem: 1 | 2): RelatorioDoNucleo {
   const recursos = conhecidos(achados);
-  if (forma.formato === 'svg' || forma.formato === 'pdf') return relatorioDeExportacaoVetorial(doc, recursos, { pranchetas, formato: forma.formato });
+  if (forma.formato === 'svg' || forma.formato === 'pdf') return relatorioDeExportacaoVetorial(doc, recursos, { pranchetas, formato: forma.formato, escalaDaImagem });
   if (forma.formato === 'psd') return relatorioDeExportacao(doc, recursos, { pranchetas, arquivos: forma.arquivos });
   // PNG não tem camada, fonte a instalar nem token: sobra o que falta e de onde veio cada imagem
   const completo = relatorioDeExportacao(doc, recursos, { pranchetas, arquivos: 'por-prancheta' });
   return { ...completo, camadas: [], tokens: [], fontes: [], avisos: completo.avisos.filter((a) => AVISOS_QUE_VALEM_PARA_PNG.includes(a.codigo)) };
 }
 
-const relatorioPara = (doc: Documento, forma: FormaDoPedido, achados: RecursosAchados, pranchetas: readonly string[]): RelatorioDeExportacao => relatorioDoNucleo(doc, forma, achados, pranchetas);
+const relatorioPara = (doc: Documento, forma: FormaDoPedido, achados: RecursosAchados, pranchetas: readonly string[], escalaDaImagem: 1 | 2): RelatorioDeExportacao =>
+  relatorioDoNucleo(doc, forma, achados, pranchetas, escalaDaImagem);
 
 /** As fontes que o relatório diz que o arquivo usa, com o registro de cada uma na biblioteca. */
 function fontesUsadas(relatorio: { fontes: readonly { postScript: string }[] }, achados: RecursosAchados): FonteAchada[] {

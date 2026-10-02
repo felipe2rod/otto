@@ -37,6 +37,12 @@ export function chaveDeMiniatura(escopo: EscopoDaConta, documentoId: string, ver
   return `contas/${escopo.contaId}/miniaturas/${documentoId}-${versao}.jpg`;
 }
 
+/** Chave do PSD enviado para importação: contas/{conta}/importacoes/{importação}/original.{psd|psb}. Apagado depois de importar. */
+export function chaveDeImportacao(escopo: EscopoDaConta, importacaoId: string, formato: 'psd' | 'psb'): string {
+  if (!SEGMENTO.test(importacaoId) || (formato !== 'psd' && formato !== 'psb')) throw new ChaveDeObjetoInvalida();
+  return `contas/${escopo.contaId}/importacoes/${importacaoId}/original.${formato}`;
+}
+
 /**
  * Confere a chave contra o escopo. Todo adaptador chama isto antes de tocar o armazenamento.
  * - chave malformada (segmento vazio, "..", barra invertida, absoluta): ChaveDeObjetoInvalida;

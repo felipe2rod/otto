@@ -47,6 +47,20 @@ const Esquema = z
     // Quantas exportações cada processo de worker roda ao mesmo tempo. Cada uma ocupa um núcleo e tem a
     // própria memória de render (até 0,9 GB medido): o teto de memória do contêiner sai daqui.
     EXPORTACOES_AO_MESMO_TEMPO: z.coerce.number().int().min(1).max(8).default(2),
+    // ---- importação de PSD ----
+    // O pacote de PSD aguenta 300 MB. No MVP a API recebe o arquivo inteiro em memória e o worker o importa numa
+    // thread de render: o teto padrão é 100 MB, e os de pixel ficam abaixo dos do pacote (64 e 400 milhões) para
+    // caber, com folga, na memória do worker. Ver docs/mvp/backend.md, 17.14.
+    PSD_BYTES_MAXIMOS: z.coerce
+      .number()
+      .int()
+      .min(1024)
+      .max(300 * 1024 * 1024)
+      .default(100 * 1024 * 1024),
+    PSD_MEGAPIXELS_POR_CAMADA: z.coerce.number().int().min(1).max(64).default(40),
+    PSD_MEGAPIXELS_DE_TODAS_AS_CAMADAS: z.coerce.number().int().min(1).max(400).default(200),
+    // Quantas importações cada processo de worker roda ao mesmo tempo (de contas diferentes).
+    IMPORTACOES_AO_MESMO_TEMPO: z.coerce.number().int().min(1).max(4).default(1),
     // ---- a tarefa do Otto ----
     // Quantas tarefas cada processo de worker roda ao mesmo tempo (de contas diferentes). É quase só espera
     // de rede; o que pesa é o render de conferência, que roda no laço principal do worker.
@@ -120,7 +134,9 @@ export interface Configuracao {
   readonly contaFixaId: ContaId;
   readonly armazenamento: ConfiguracaoDoArmazenamento;
   readonly limites: { readonly bytesPorArquivo: number; readonly ladoMaximoDeImagem: number; readonly megapixelsNoMaximo: number };
-  readonly worker: { readonly exportacoesAoMesmoTempo: number; readonly tarefasAoMesmoTempo: number };
+  readonly worker: { readonly exportacoesAoMesmoTempo: number; readonly tarefasAoMesmoTempo: number; readonly importacoesAoMesmoTempo: number };
+  /** Os tetos do PSD enviado: o do envio, e os de pixel que ficam por cima dos padrões de @otto/psd. */
+  readonly importacao: { readonly bytesDoArquivo: number; readonly psd: { readonly pixelsDaMaiorCamada: number; readonly pixelsDeTodasAsCamadas: number } };
   readonly agente: ConfiguracaoDoAgente;
   /** A chave é segredo: não vai para log, evento nem resposta. */
   readonly bancoDeImagens: { readonly adaptador: 'nenhum' } | { readonly adaptador: 'pixabay'; readonly chave: string };
@@ -188,7 +204,11 @@ export function lerConfiguracao(env: Record<string, string | undefined>, servico
     nivelDeLog: e.NIVEL_DE_LOG,
     banco: Object.freeze({ urlDoApp: e.BANCO_URL_APP }),
     contaFixaId: e.CONTA_FIXA_ID,
-    worker: Object.freeze({ exportacoesAoMesmoTempo: e.EXPORTACOES_AO_MESMO_TEMPO, tarefasAoMesmoTempo: e.TAREFAS_AO_MESMO_TEMPO }),
+    worker: Object.freeze({ exportacoesAoMesmoTempo: e.EXPORTACOES_AO_MESMO_TEMPO, tarefasAoMesmoTempo: e.TAREFAS_AO_MESMO_TEMPO, importacoesAoMesmoTempo: e.IMPORTACOES_AO_MESMO_TEMPO }),
+    importacao: Object.freeze({
+      bytesDoArquivo: e.PSD_BYTES_MAXIMOS,
+      psd: Object.freeze({ pixelsDaMaiorCamada: e.PSD_MEGAPIXELS_POR_CAMADA * 1_000_000, pixelsDeTodasAsCamadas: e.PSD_MEGAPIXELS_DE_TODAS_AS_CAMADAS * 1_000_000 }),
+    }),
     agente: Object.freeze({
       modelo: Object.freeze(
         servico === 'api'

@@ -12,6 +12,8 @@ export interface RepositorioSobTeste {
   contaB: EscopoDaConta;
   /** Cria uma marca na conta e devolve o id. Só o adaptador do banco precisa (a chave estrangeira confere). */
   criarMarca?(escopo: EscopoDaConta): Promise<string>;
+  /** Cria uma importação de PSD na conta e devolve o id. Só o adaptador do banco precisa (a chave estrangeira confere). */
+  criarImportacao?(escopo: EscopoDaConta): Promise<string>;
 }
 
 const arvoreCom = (nome: string): Documento => ({ ...documentoVazio(), pranchetas: [{ id: randomUUID(), nome, tipo: 'prancheta', largura: 100, altura: 100, fundo: '#ffffff', filhos: [] }] });
@@ -36,11 +38,13 @@ export function contratoDoRepositorioDeDocumentos(nome: string, criar: () => Pro
     let B: EscopoDaConta;
 
     let criarMarca: (escopo: EscopoDaConta) => Promise<string>;
+    let criarImportacao: (escopo: EscopoDaConta) => Promise<string>;
 
     beforeAll(async () => {
       const sob = await criar();
       ({ repositorio: r, contaA: A, contaB: B } = sob);
       criarMarca = sob.criarMarca ?? (async () => randomUUID());
+      criarImportacao = sob.criarImportacao ?? (async () => randomUUID());
     });
 
     const novo = (escopo: EscopoDaConta, nomeDoDoc = 'doc', arvore = documentoVazio()) => r.criar(escopo, { id: randomUUID(), nome: nomeDoDoc, arvore });
@@ -104,6 +108,28 @@ export function contratoDoRepositorioDeDocumentos(nome: string, criar: () => Pro
       expect(await r.temExemplo(outra)).toBe(false);
       await r.arquivar(nova, exemplo.id);
       expect(await r.temExemplo(nova)).toBe(true);
+    });
+
+    it('a peça que nasce de uma importação: guarda de onde veio, é achada pela importação, e a importação não cria uma segunda', async () => {
+      const { contaA: conta, contaB: outra } = await criar();
+      const importacaoId = await criarImportacao(conta);
+      expect(await r.daImportacao(conta, importacaoId)).toBeUndefined();
+      const criada = await r.criar(conta, { id: randomUUID(), nome: 'importada', arvore: arvoreCom('Feed'), importacaoId });
+      expect(criada).toMatchObject({ versao: 0, pranchetas: 1, importacaoId });
+      expect(await r.daImportacao(conta, importacaoId)).toMatchObject({ id: criada.id, importacaoId });
+      expect((await r.abrir(conta, criada.id))?.importacaoId).toBe(importacaoId);
+      expect((await r.listar(conta, { limite: 10 })).itens.find((d) => d.id === criada.id)?.importacaoId).toBe(importacaoId);
+      // nasce sem lote: a versão 0 é a árvore que a importação montou
+      expect((await r.historico(conta, criada.id, { limite: 10 }))?.itens).toEqual([]);
+      // a segunda peça da mesma importação não entra
+      await expect(r.criar(conta, { id: randomUUID(), nome: 'de novo', arvore: documentoVazio(), importacaoId })).rejects.toThrow();
+      // de outra conta, não se acha; e a arquivada continua sendo a peça da importação
+      expect(await r.daImportacao(outra, importacaoId)).toBeUndefined();
+      await r.arquivar(conta, criada.id);
+      expect(await r.daImportacao(conta, importacaoId)).toMatchObject({ id: criada.id });
+      expect(await r.daImportacao(conta, 'não-é-uuid')).toBeUndefined();
+      // a peça comum não tem importação
+      expect((await r.criar(conta, { id: randomUUID(), nome: 'comum', arvore: documentoVazio() })).importacaoId).toBeUndefined();
     });
 
     it('a marca da peça: é definida, vem na lista e filtra a lista; a peça de outra conta não é marcada', async () => {

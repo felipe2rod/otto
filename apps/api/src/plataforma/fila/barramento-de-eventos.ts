@@ -18,6 +18,10 @@ export const FILAS = {
   tarefaDoOtto: 'tarefa-do-otto',
   /** Renderiza a miniatura de uma peça (a primeira prancheta, reduzida). `id` é o do documento. */
   miniaturaDaPeca: 'miniatura-da-peca',
+  /** Importa um PSD enviado e cria a peça. `id` é o da importação. */
+  importacao: 'importacao',
+  /** Apaga o arquivo de uma importação que venceu sem ser pedida, ou que terminou e ficou com o arquivo. `id` é o da importação. Publicado com hora marcada. */
+  limpezaDeImportacao: 'limpeza-de-importacao',
 } as const;
 export type NomeDaFila = (typeof FILAS)[keyof typeof FILAS];
 
@@ -59,6 +63,11 @@ export const REGRAS_DAS_FILAS: Record<NomeDaFila, RegrasDaFila> = {
   // A miniatura é um render pequeno, que pode ser refeito a qualquer hora: falhou, tenta de novo algumas vezes e
   // desiste (a próxima edição pede outra).
   [FILAS.miniaturaDaPeca]: { expiraEmSegundos: 120, tentativas: 3, reentregaEmSegundos: 10, adiamentoEmSegundos: 5 },
+  // A importação de PSD segue o molde da exportação: o trabalho pesado roda numa thread de render, o sinal de vida
+  // sai por relógio, e o arquivo que não pode ser importado é fechado pelo caso de uso (não é tentado de novo).
+  // As tentativas são para falha de infraestrutura e para o worker que morreu no meio (uma retomada).
+  [FILAS.importacao]: { expiraEmSegundos: 900, tentativas: 5, reentregaEmSegundos: 5, adiamentoEmSegundos: 3, sinalDeVidaEmSegundos: 30 },
+  [FILAS.limpezaDeImportacao]: { expiraEmSegundos: 300, tentativas: 144, reentregaEmSegundos: 600, adiamentoEmSegundos: 600 },
   // apagar objetos é rápido; se o armazenamento estiver fora, tenta de novo a cada 10 minutos por um dia
   [FILAS.limpezaDeExportacao]: { expiraEmSegundos: 300, tentativas: 144, reentregaEmSegundos: 600, adiamentoEmSegundos: 600 },
 };

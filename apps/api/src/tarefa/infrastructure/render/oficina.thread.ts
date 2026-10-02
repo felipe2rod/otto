@@ -5,9 +5,8 @@
 // como dado e devolve bytes. Cada tarefa tem a sua sessão do motor aqui dentro.
 import { parentPort } from 'node:worker_threads';
 import { verificarDocumento } from '@otto/documento';
-import { criarMeiosDeVerificacao, criarSessao, renderizarPrancheta, type Sessao } from '@otto/render';
+import { codificarJpeg, criarMeiosDeVerificacao, criarSessao, reduzirFoto, renderizarPrancheta, type Sessao } from '@otto/render';
 import { carregarCanvasKit } from '@otto/render/node';
-import { codificarJpeg, reduzirFoto } from './imagem-para-o-modelo';
 import type { PedidoAOficina, RespostaDaOficina, ResultadoDaOficina } from './oficina-de-render';
 
 const porta = parentPort;
@@ -16,6 +15,8 @@ if (!porta) throw new Error('este arquivo só roda como thread de render');
 // a variante completa codifica JPEG; os pixels são os mesmos da padrão (docs/tecnico/spike-render.md)
 const motor = carregarCanvasKit('completa');
 const sessoes = new Map<number, Sessao>();
+/** A qualidade do JPEG do render que o modelo vê (a mesma da avaliação). */
+const QUALIDADE_DO_RENDER = 85;
 
 const sessaoDe = (id: number): Sessao => {
   const sessao = sessoes.get(id);
@@ -42,7 +43,9 @@ async function atender(pedido: PedidoAOficina): Promise<ResultadoDaOficina> {
       const regiao = { x: Math.max(0, x), y: Math.max(0, y), w: Math.max(1, Math.min(w, p.largura - Math.max(0, x))), h: Math.max(1, Math.min(h, p.altura - Math.max(0, y))) };
       const escala = Math.min(1, pedido.pedido.ladoMaximo / Math.max(regiao.w, regiao.h));
       const render = renderizarPrancheta(sessao, pedido.doc, p, { escala, ...(pedido.pedido.regiao ? { regiao } : {}) });
-      return { tipo: 'imagem', jpeg: codificarJpeg(sessao, render), largura: render.largura, altura: render.altura };
+      const jpeg = codificarJpeg(sessao, render, QUALIDADE_DO_RENDER);
+      if (!jpeg) throw new Error('este motor não codifica JPEG: carregue a variante completa');
+      return { tipo: 'imagem', jpeg, largura: render.largura, altura: render.altura };
     }
     case 'verificar':
       return { tipo: 'avisos', avisos: verificarDocumento(pedido.doc, criarMeiosDeVerificacao(sessaoDe(pedido.sessao)), pedido.prancheta) };

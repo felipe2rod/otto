@@ -48,6 +48,10 @@ const STATUS_POR_CODIGO: Record<CodigoDeErro, number> = {
   [C.bancoDeImagensIndisponivel]: 503,
   [C.imagemNaoBuscada]: 422,
   [C.limiteDeImagens]: 429,
+  [C.psdRecusado]: 422,
+  [C.limiteDeImportacoes]: 429,
+  [C.importacaoForaDoEstado]: 409,
+  [C.fonteDesconhecida]: 422,
   [C.erroInterno]: 500,
 };
 

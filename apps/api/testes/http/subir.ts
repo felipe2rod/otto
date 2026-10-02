@@ -27,6 +27,10 @@ import { consumirExportacoes } from '../../src/exportacao/infrastructure/consumi
 import { MotorDeExportacaoComRender } from '../../src/exportacao/infrastructure/render/motor-de-exportacao-com-render';
 import { BancoDeImagens } from '../../src/imagem/application/banco-de-imagens';
 import { BancoDeMentira } from '../../src/imagem/infrastructure/adaptadores/memoria/banco-de-mentira';
+import { CasosDeUsoDeImportacao } from '../../src/importacao/application/casos-de-uso-de-importacao';
+import { MotorDeImportacao } from '../../src/importacao/application/motor-de-importacao';
+import { consumirImportacoes } from '../../src/importacao/infrastructure/consumidor-de-importacoes';
+import { MotorDeImportacaoComRender } from '../../src/importacao/infrastructure/render/motor-de-importacao-com-render';
 import { lerConfiguracao } from '../../src/plataforma/config/configuracao';
 import type { EscopoDaConta } from '../../src/plataforma/escopo/escopo-da-conta';
 import { escopoDoTrabalho } from '../../src/plataforma/escopo/escopo-do-trabalho';
@@ -156,12 +160,16 @@ export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { 
     // thread tem o teste dele (motor-em-thread.test.ts) e roda de verdade no worker do compose.
     .overrideProvider(MotorDeExportacao)
     .useValue(new MotorDeExportacaoComRender())
+    // a importação de PSD, pelo mesmo motivo: o motor de verdade, no próprio laço
+    .overrideProvider(MotorDeImportacao)
+    .useValue(new MotorDeImportacaoComRender())
     .overrideProvider(Registro)
     .useValue(registro)
     .compile();
   const app = configurarAplicacao(modulo.createNestApplication({ bodyParser: false }));
   await app.init();
   if (opcoes.consumirFila !== false) await consumirExportacoes(fila, app.get(CasosDeUsoDeExportacao));
+  if (opcoes.consumirFila !== false) await consumirImportacoes(fila, app.get(CasosDeUsoDeImportacao));
   // a miniatura da peça, com o consumidor do worker e a thread de render de verdade
   await fila.consumir(FILAS.miniaturaDaPeca, { concorrencia: 1 }, async (trabalho) => void (await app.get(CasosDeUsoDeMiniatura).gerar(escopoDoTrabalho(trabalho), trabalho.id)));
   const ligarTarefas = () => consumirTarefas(fila, app.get(CasosDeUsoDeTarefa), 2);

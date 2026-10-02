@@ -140,6 +140,7 @@ export class CasosDeUsoDeDocumento {
       ...historico,
       fontes,
       ...(viva ? { tarefaAtiva: { id: viva.id, estado: viva.estado, ...(viva.fim ? { fim: viva.fim } : {}) } } : {}),
+      ...(d.importacaoId ? { importacaoId: d.importacaoId } : {}),
       ...(viva?.estado === 'em_revisao' ? { conjuntoPendente: { tarefaId: viva.id, versaoInicial: viva.versaoInicial, tocados: viva.tocados } } : {}),
     };
   }
@@ -183,6 +184,7 @@ export class CasosDeUsoDeDocumento {
       alteradoEm: r.alteradoEm.toISOString(),
       ...(vivas.has(r.id) ? { tarefa: vivas.get(r.id) } : {}),
       ...(r.marcaId ? { marcaId: r.marcaId } : {}),
+      ...(r.importacaoId ? { importacaoId: r.importacaoId } : {}),
       // o endereço leva a versão: muda quando a miniatura muda. Peça sem prancheta não tem miniatura.
       miniatura: r.miniaturaVersao !== undefined && r.pranchetas > 0 ? `/api/documentos/${r.id}/miniatura?v=${r.miniaturaVersao}` : null,
     });

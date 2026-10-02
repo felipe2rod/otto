@@ -45,6 +45,7 @@ model Conta {
 
   documentos Documento[]
   arquivos   Arquivo[]
+  importacoes Importacao[]
 
   @@map("contas")
 }
@@ -67,8 +68,11 @@ model Documento {
   /// A versão que a miniatura guardada mostra.
   miniaturaVersao  Int?      @map("miniatura_versao")
   miniaturaPedidaEm DateTime? @map("miniatura_pedida_em") @db.Timestamptz(3)
+  /// A importação de PSD de onde a peça nasceu. Uma importação cria no máximo uma peça (índice único parcial na migração).
+  importacaoId     String?   @map("importacao_id") @db.Uuid
 
   conta   Conta               @relation(fields: [contaId], references: [id])
+  importacao Importacao?      @relation(fields: [importacaoId, contaId], references: [id, contaId])
   versoes     VersaoDeDocumento[]
   lotes       LoteDeOperacoes[]
   exportacoes Exportacao[]
@@ -254,6 +258,64 @@ model ArquivoDeExportacao {
   // é a leitura do download: exportação e índice
   @@id([exportacaoId, indice])
   @@map("arquivos_de_exportacao")
+}
+
+enum EstadoDaImportacao {
+  enviada
+  na_fila
+  rodando
+  pronta
+  falhou
+  descartada
+
+  @@map("estado_da_importacao")
+}
+
+/// Um PSD enviado para virar peça (ADR 028, item 4): o que a conferência viu, o pedido, o andamento e o relatório.
+/// Nome do arquivo, fontes e relatório são conteúdo: ficam sob RLS e nunca vão para log (ADR 031).
+/// `chaveDoObjeto` nunca vem do cliente e nunca volta para ele.
+model Importacao {
+  id            String              @id @db.Uuid
+  contaId       String              @map("conta_id") @db.Uuid
+  estado        EstadoDaImportacao  @default(enviada)
+  nomeDoArquivo String              @map("nome_do_arquivo")
+  bytes         Int
+  sha256        String              @db.Char(64)
+  formato       String
+  largura       Int
+  altura        Int
+  camadas       Int
+  /// nomes PostScript que o texto do arquivo pede
+  fontes        Json                @default("[]")
+  /// { nome?, marcaId?, fontes: [...] }: o pedido de importação
+  pedido        Json?
+  chaveDoObjeto String              @map("chave_do_objeto")
+  relatorio     Json?
+  erroCodigo    String?             @map("erro_codigo")
+  erroMotivo    String?             @map("erro_motivo")
+  erroMensagem  String?             @map("erro_mensagem")
+  duracaoMs     Int?                @map("duracao_ms")
+  /// quantas vezes começou a rodar (2 = retomada depois de um worker morrer)
+  tentativas    Int                 @default(0)
+  batimentoEm   DateTime?           @map("batimento_em") @db.Timestamptz(3)
+  criadaEm      DateTime            @default(now()) @map("criada_em") @db.Timestamptz(3)
+  pedidaEm      DateTime?           @map("pedida_em") @db.Timestamptz(3)
+  iniciadaEm    DateTime?           @map("iniciada_em") @db.Timestamptz(3)
+  terminadaEm   DateTime?           @map("terminada_em") @db.Timestamptz(3)
+  /// até quando o arquivo enviado espera o pedido de importação
+  expiraEm      DateTime            @map("expira_em") @db.Timestamptz(3)
+  arquivoRemovidoEm DateTime?       @map("arquivo_removido_em") @db.Timestamptz(3)
+
+  conta      Conta       @relation(fields: [contaId], references: [id])
+  documentos Documento[]
+
+  // alvo da chave estrangeira composta de documentos
+  @@unique([id, contaId])
+  // quantas a conta tem abertas e quais pararam
+  @@index([contaId, estado])
+  // a lista das recentes da conta
+  @@index([contaId, criadaEm(sort: Desc)])
+  @@map("importacoes")
 }
 
 enum EstadoDaTarefa {

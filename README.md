@@ -78,6 +78,37 @@ Em qualquer um: `"pranchetas":[ids]` exporta só essas, e `"pacote":true` entreg
 
 Os arquivos ficam 7 dias. Cada exportação agenda a própria limpeza na fila; o worker apaga os arquivos no vencimento e o registro fica.
 
+### Importar um PSD
+
+A importação também sai da fila. O envio confere o arquivo pelos bytes (sem decodificar pixel) e já diz que fontes o texto dele pede; o designer escolhe o que fazer com as que faltam e pede a importação; o worker importa numa thread de render e cria uma peça nova. O arquivo enviado é apagado quando a importação termina (ou em 24 h, se ninguém pedir).
+
+```bash
+API=http://localhost:8080/api
+# enviar (201): o que o arquivo é e a situação de cada fonte
+IMP=$(curl -s -X POST "$API/importacoes" -H 'X-Otto-Cliente: editor' -H 'Content-Type: image/vnd.adobe.photoshop' \
+  -H 'X-Otto-Nome-Do-Arquivo: peca.psd' --data-binary @peca.psd)
+echo "$IMP" | jq '{estado, arquivo, fontes}'
+ID=$(echo "$IMP" | jq -r .id)
+
+# pedir (202). Sem corpo vale o padrão: fonte do catálogo é baixada, fonte que falta vira imagem
+curl -s -X POST "$API/importacoes/$ID/importar" -H 'X-Otto-Cliente: editor' -H 'Content-Type: application/json' \
+  -d '{"nome":"Campanha","fontes":[{"postScript":"Gotham-Black","fazer":"substituir","por":{"familia":"Anton","peso":400}}]}'
+
+curl -s "$API/importacoes/$ID" | jq '{estado, documentoId, erro, avisos: [.relatorio.avisos[]?.codigo]}'   # repita até pronta ou falhou
+DOC=$(curl -s "$API/importacoes/$ID" | jq -r .documentoId)
+curl -s "$API/documentos/$DOC" | jq '{nome, versao, importacaoId}'      # a peça nova, na versão 0
+curl -s "$API/documentos/$DOC/importacao" | jq .relatorio               # o relatório, a qualquer hora
+```
+
+| Variável | Padrão | O que é |
+|---|---|---|
+| `PSD_BYTES_MAXIMOS` | 104857600 (100 MB) | Teto do arquivo enviado. O pacote de PSD aguenta 300 MB; a API recebe o arquivo inteiro em memória |
+| `PSD_MEGAPIXELS_POR_CAMADA` | 40 | Maior camada, em milhões de pixels |
+| `PSD_MEGAPIXELS_DE_TODAS_AS_CAMADAS` | 200 | Soma das camadas, em milhões de pixels |
+| `IMPORTACOES_AO_MESMO_TEMPO` | 1 | Quantas importações cada worker pega da fila ao mesmo tempo |
+
+O contrato inteiro está em `packages/shared/src/importacao.ts`.
+
 ### Workers
 
 ```bash
@@ -218,10 +249,10 @@ docker compose run --rm teste pnpm format                        # Biome, corrig
 | Endereço | O que é |
 |---|---|
 | http://localhost:8080 | Site público, estático |
-| http://localhost:8080/editor | Peças: a lista da conta. "Nova peça" leva ao formulário de briefing; "Peça em branco" fica ao lado. Renomear, duplicar, excluir e "nova peça com este briefing" no menu de cada peça; o estado da tarefa do Otto em cada cartão (a que parou no meio não aparece como pronta) |
-| http://localhost:8080/editor/novo | **Formulário de briefing**, o caminho padrão para criar (ADR 033), em três blocos: a marca, esta peça (título, formatos até três, imagens por envio ou do banco, com o aviso de quanto a foto será ampliada em cada formato) e mais opções (cuidado em três níveis, estilo, restrições). Rascunho no navegador, briefing salvo ("começar de", "salvar como briefing") e reuso (`?briefing=`, `?peca=`, `?marca=`). Não carrega o editor nem o motor |
+| http://localhost:8080/editor | Peças: a lista da conta, com a miniatura de cada peça e o filtro por marca (`?marca=<id>`). "Nova peça" leva ao formulário de briefing; "Peça em branco" fica ao lado. Renomear, duplicar, excluir e "nova peça com este briefing" no menu de cada peça; o estado da tarefa do Otto em cada cartão (a que parou no meio não aparece como pronta) |
+| http://localhost:8080/editor/novo | **Formulário de briefing**, o caminho padrão para criar (ADR 033), em três blocos: a marca, esta peça (título, formatos até três, imagens por envio ou do banco, com o aviso de quanto a foto será ampliada em cada formato) e mais opções (cuidado em três níveis, estilo, restrições). Peça e tarefa nascem numa chamada só (`POST /api/documentos/com-tarefa`): pedido recusado não deixa peça vazia. O rodapé diz atrás de que peça o pedido entra na fila. Rascunho no navegador (abrir de um briefing salvo ou de uma peça avisa antes de passar por cima dele), briefing salvo ("começar de", "salvar como briefing") e reuso (`?briefing=`, `?peca=`, `?marca=`). Não carrega o editor nem o motor |
 | http://localhost:8080/editor/marcas | Marcas: o cadastro do cliente (cores com papel, fontes, logo como o Otto o entendeu, ícones, rodapé e restrições). Marca sem identidade é um estado válido |
-| http://localhost:8080/editor/p/:id | O editor da peça, ligado à API: mover (arraste e setas), redimensionar e girar pela alça (uma ou várias camadas, Shift trava a proporção e o giro em 15°), seleção múltipla (Shift+clique), duplicar (Ctrl+J), agrupar e desagrupar (Ctrl+G, Ctrl+Shift+G), editar texto no canvas (dois cliques ou Enter), inserir imagem ou SVG (botão ou soltar no canvas), buscar imagem no banco de imagens (a imagem vira camada, com banco, autor e licença), trocar imagem, fonte da biblioteca ou do catálogo (baixa ao escolher), painéis de Camadas (arrastar reordena, põe e tira de grupo e leva a outra prancheta) e Propriedades, renomear a peça, desfazer e refazer, e **Exportar** (relatório antes do botão; PSD, PDF, SVG ou PNG; pacote .zip com arquivos, fontes e relatório; escolha de pranchetas, andamento por prancheta, download, exportações recentes e retomada depois de recarregar). **Painel do Otto** à esquerda: pedir (ajuste rápido ou pedido maior, com os limites da conta), o "pode" (direção e plano: aprovar, ajustar, cancelar), a espera (etapas, tempo, o que ele diz, interromper; a peça fica só para leitura, com o motivo), a revisão (camadas dele marcadas no canvas e em Camadas, segurar para ver o antes, pendências, aceitar, desfazer tudo, descartar prancheta, tentar de novo) e a retomada ao reabrir a peça |
+| http://localhost:8080/editor/p/:id | O editor da peça, ligado à API: mover (arraste e setas), redimensionar e girar pela alça (uma ou várias camadas, Shift trava a proporção e o giro em 15°), seleção múltipla (Shift+clique), duplicar (Ctrl+J), agrupar e desagrupar (Ctrl+G, Ctrl+Shift+G), editar texto no canvas (dois cliques ou Enter), inserir imagem ou SVG (botão ou soltar no canvas), buscar imagem no banco de imagens (a imagem vira camada, com banco, autor e licença), texturas (a escolhida vira camada cobrindo a prancheta, com o modo de mesclagem e a opacidade de costume), trocar imagem, fonte da biblioteca ou do catálogo (baixa ao escolher), painéis de Camadas (arrastar reordena, põe e tira de grupo e leva a outra prancheta) e Propriedades, renomear a peça, desfazer e refazer, e **Exportar** (relatório antes do botão; PSD, PDF, SVG ou PNG; pacote .zip com arquivos, fontes e relatório; escolha de pranchetas, andamento por prancheta, download, exportações recentes e retomada depois de recarregar). **Painel do Otto** à esquerda: pedir (ajuste rápido ou pedido maior, com os limites da conta; quando só o ajuste cabe, só ele pode ser pedido), o "pode" (direção e plano: aprovar, ajustar, cancelar), a espera (etapas, tempo, o que ele diz, interromper; a peça fica só para leitura, com o motivo), a revisão (camadas dele marcadas no canvas e em Camadas, segurar para ver o antes, pendências, aceitar, desfazer tudo, descartar prancheta, tentar de novo) e a retomada ao reabrir a peça |
 | http://localhost:8080/editor/bancada | **Só em desenvolvimento.** O editor com um documento de exemplo fixo, sem API: o motor de render desenhando, clicar seleciona, arrastar move. Não existe no build de produção |
 
 ```bash
@@ -250,7 +281,7 @@ docker compose run --rm navegador pnpm --filter @otto/web e2e -g "gira"        #
 
 - **Onde ficam:** `apps/web/e2e/*.e2e.ts`, com o apoio em `apps/web/e2e/apoio/`. O resultado (relatório, captura e rastro de cada falha) sai em `apps/web/e2e/resultado/`, fora do git. Para ver um rastro: `npx playwright show-trace <arquivo>.zip` numa máquina com navegador.
 - **Dados:** cada teste cria a peça que usa, pela API, e a arquiva ao terminar. Nenhum depende das peças que já existem na conta nem as altera. Ficam para trás as imagens enviadas e as exportações (que somem sozinhas em 7 dias).
-- **Tarefas do Otto:** `otto.e2e.ts` e `briefing.e2e.ts` rodam com o modelo roteirizado (confira `MODELO_DO_AGENTE=roteirizado` no worker; com outro valor esses testes gastariam inferência de verdade). A conta roda uma tarefa por vez. No fim de cada teste a tarefa viva da peça é cancelada ou desfeita antes de arquivar, e a marca e o briefing salvo que o teste criou são apagados.
+- **Tarefas do Otto:** `otto.e2e.ts` e `briefing.e2e.ts` rodam com o modelo roteirizado, um roteiro por tipo de pedido (briefing e pedido maior pedem o "pode"; criar e ajuste, não) (confira `MODELO_DO_AGENTE=roteirizado` no worker; com outro valor esses testes gastariam inferência de verdade). A conta roda uma tarefa por vez. No fim de cada teste a tarefa viva da peça é cancelada ou desfeita antes de arquivar, e a marca e o briefing salvo que o teste criou são apagados.
 - **Banco de imagens e catálogo de fontes:** são simulados nos testes (a rota é interceptada no navegador, com um banco de nome de teste). A suíte não depende do banco de imagens nem do catálogo de verdade. A imagem "trazida" é um PNG que o próprio teste envia para a conta.
 - **Sem placa de vídeo:** o Chromium do contêiner desenha o canvas em WebGL por software. Nenhum teste daqui mede quadros por segundo.
 - **Endereços:** o navegador do contêiner usa `localhost:8080` e `localhost:8081`, como o designer; o serviço `navegador` os mapeia para `borda` e `armazenamento` na rede do compose. É por isso que o link assinado de download abre dentro do contêiner.

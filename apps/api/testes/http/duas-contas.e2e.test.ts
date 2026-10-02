@@ -2,6 +2,8 @@
 // de B, tenta-se alcançar o que é de A por cada rota. O esperado é sempre o 404 de "não existe",
 // com corpo idêntico ao de id inexistente (nunca 403, que confirmaria a existência), e nada alterado.
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   ArquivoEnviado,
   BriefingSalvo,
@@ -11,14 +13,17 @@ import {
   Exportacao,
   Historico,
   ImagemTrazida,
+  Importacao,
   LimitesDeTarefa,
   ListaDeBriefings,
   ListaDeDocumentos,
+  ListaDeImportacoes,
   ListaDeMarcas,
   ListaDePendencias,
   Marca,
   Tarefa,
   TexturaTrazida,
+  TIPO_DO_PSD,
   VetorImportado,
 } from '@otto/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -326,6 +331,92 @@ describe('com a sessão de B, a marca, o briefing salvo e as imagens de A não e
       operacoes: [criarPrancheta(), { op: 'criarNo', prancheta: 'Feed', no: { ...texturaDeA.no, nome: 'Textura', x: 0, y: 0, largura: 100, altura: 100 } }],
     });
     expect({ status: r.status, codigo: ErroDaApi.parse(r.body).codigo }).toEqual({ status: 422, codigo: CODIGOS_DE_ERRO.arquivoDesconhecido });
+  });
+});
+
+describe('com a sessão de B, a importação de PSD de A não existe', () => {
+  // um PSD de fora, só com camadas de pixel: as imagens que a importação cria não existem em nenhuma outra conta
+  const PSD = readFileSync(path.resolve(import.meta.dirname, '../../../../packages/psd/recursos-de-teste/psd-de-fora/layer-mask.psd'));
+  const enviar = (cliente: ClienteDeTeste) => cliente.post('/api/importacoes').set('Content-Type', TIPO_DO_PSD).set('X-Otto-Nome-Do-Arquivo', 'segredo-de-A.psd').send(PSD);
+  let esperando: Importacao;
+  let pronta: Importacao;
+
+  beforeAll(async () => {
+    esperando = Importacao.parse((await enviar(A)).body);
+    const outra = Importacao.parse((await enviar(A)).body);
+    expect((await A.post(`/api/importacoes/${outra.id}/importar`).send({})).status).toBe(202);
+    await api.fila.ociosa();
+    pronta = Importacao.parse((await A.get(`/api/importacoes/${outra.id}`)).body);
+    expect(pronta.estado).toBe('pronta');
+  });
+
+  it.each([
+    ['GET /api/importacoes/:id (esperando)', () => B.get(`/api/importacoes/${esperando.id}`)],
+    ['GET /api/importacoes/:id (pronta)', () => B.get(`/api/importacoes/${pronta.id}`)],
+    ['POST /api/importacoes/:id/importar', () => B.post(`/api/importacoes/${esperando.id}/importar`).send({})],
+    ['DELETE /api/importacoes/:id', () => B.delete(`/api/importacoes/${esperando.id}`)],
+    ['GET /api/documentos/:id/importacao', () => B.get(`/api/documentos/${pronta.documentoId}/importacao`)],
+    ['GET /api/documentos/:id (a peça importada)', () => B.get(`/api/documentos/${pronta.documentoId}`)],
+  ])('%s responde o mesmo 404 de id inexistente, sem pôr nada na fila e sem tocar o armazenamento', async (_rota, chamar) => {
+    const [publicados, leituras, guardados] = [api.fila.publicados.length, api.armazenamento.leituras, api.armazenamento.chaves().length];
+    const r = await chamar();
+    expect({ status: r.status, body: r.body }).toEqual(inexistente);
+    expect([api.fila.publicados.length, api.armazenamento.leituras, api.armazenamento.chaves().length]).toEqual([publicados, leituras, guardados]);
+  });
+
+  it('a lista de B não tem as importações de A, e o limite de abertas de A não conta para B', async () => {
+    expect(ListaDeImportacoes.parse((await B.get('/api/importacoes')).body).itens).toEqual([]);
+    const deB = Importacao.parse((await enviar(B)).body);
+    expect(ListaDeImportacoes.parse((await B.get('/api/importacoes')).body).itens.map((i) => i.id)).toEqual([deB.id]);
+    expect(ListaDeImportacoes.parse((await A.get('/api/importacoes')).body).itens.map((i) => i.id)).not.toContain(deB.id);
+    // o mesmo conteúdo, enviado por B, é OUTRO objeto, na conta de B
+    expect(api.armazenamento.chaves().filter((c) => c.includes(`/importacoes/${deB.id}/`))).toEqual([`contas/${api.contaB.contaId}/importacoes/${deB.id}/original.psd`]);
+    expect((await B.delete(`/api/importacoes/${deB.id}`)).status).toBe(204);
+  });
+
+  it('trabalho na fila com a conta trocada não é processado: nem a importação nem a limpeza de A rodam como se fossem de B', async () => {
+    expect((await A.post(`/api/importacoes/${esperando.id}/importar`).send({})).status).toBe(202);
+    await api.fila.ociosa();
+    const feita = Importacao.parse((await A.get(`/api/importacoes/${esperando.id}`)).body);
+    expect(feita.estado).toBe('pronta');
+    const [pecasDeB, guardados] = [ListaDeDocumentos.parse((await B.get('/api/documentos')).body).itens.length, api.armazenamento.chaves().length];
+    const novaDeA = Importacao.parse((await enviar(A)).body);
+    // alguém consegue pôr na fila o id de A com a conta de B
+    await api.fila.publicar('importacao', { contaId: api.contaB.contaId, id: novaDeA.id });
+    await api.fila.publicar('limpeza-de-importacao', { contaId: api.contaB.contaId, id: novaDeA.id });
+    await api.fila.ociosa();
+    expect(Importacao.parse((await A.get(`/api/importacoes/${novaDeA.id}`)).body)).toEqual(novaDeA);
+    expect(ListaDeDocumentos.parse((await B.get('/api/documentos')).body).itens).toHaveLength(pecasDeB);
+    // o arquivo enviado por A continua lá (um a mais que antes do envio)
+    expect(api.armazenamento.chaves()).toHaveLength(guardados + 1);
+    expect((await A.delete(`/api/importacoes/${novaDeA.id}`)).status).toBe(204);
+  });
+
+  it('as imagens que a importação criou são de A: B não as lê pelo hash nem as põe numa peça dela', async () => {
+    const peca = DocumentoAberto.parse((await A.get(`/api/documentos/${pronta.documentoId}`)).body);
+    const citados = [...new Set([...JSON.stringify(peca.arvore).matchAll(/"arquivo":"([0-9a-f]{64})"/g)].map((m) => m[1] as string))];
+    expect(citados.length).toBeGreaterThan(0);
+    for (const hash of citados) {
+      expect((await A.get(`/api/arquivos/${hash}`)).status).toBe(200);
+      const deB = await B.get(`/api/arquivos/${hash}`);
+      expect({ status: deB.status, body: deB.body }).toEqual(inexistente);
+    }
+    const sha256 = citados[0] as string;
+    const versaoBase = DocumentoAberto.parse((await B.get(`/api/documentos/${docDeB.id}`)).body).versao;
+    const r = await B.post(`/api/documentos/${docDeB.id}/lotes`).send({
+      id: randomUUID(),
+      versaoBase,
+      descricao: 'tenta usar a imagem de A',
+      operacoes: [
+        criarPrancheta('Roubo'),
+        { op: 'criarNo', prancheta: 'Roubo', no: { tipo: 'imagem', nome: 'Foto', x: 0, y: 0, largura: 10, altura: 10, arquivo: sha256, larguraOriginal: 10, alturaOriginal: 10 } },
+      ],
+    });
+    expect([r.status, r.body.codigo]).toEqual([422, CODIGOS_DE_ERRO.arquivoDesconhecido]);
+  });
+
+  it('A, que é dona, consulta o relatório pela peça', async () => {
+    expect(Importacao.parse((await A.get(`/api/documentos/${pronta.documentoId}/importacao`)).body).relatorio).toBeDefined();
   });
 });
 
