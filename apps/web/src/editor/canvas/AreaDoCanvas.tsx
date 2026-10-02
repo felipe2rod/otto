@@ -104,6 +104,8 @@ export function AreaDoCanvas(props: PropriedadesDaArea) {
       area.style.setProperty('--fundo-x', `${camera.x % passo}px`);
       area.style.setProperty('--fundo-y', `${camera.y % passo}px`);
       area.dataset.ferramenta = ferramentaEmUso(iface.armazem.obter());
+      // para os testes de navegador: com a câmera, um ponto do documento vira um ponto da tela
+      area.dataset.camera = `${camera.x},${camera.y},${camera.zoom}`;
 
       const ctx = tela.getContext('2d');
       if (!ctx) return;

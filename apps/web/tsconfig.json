@@ -7,6 +7,6 @@
     "plugins": [{ "name": "next" }],
     "types": ["node"]
   },
-  "include": ["next-env.d.ts", "src", "scripts", "testes", "next.config.ts", "vitest.config.ts", ".next/types/**/*.ts"],
+  "include": ["next-env.d.ts", "src", "scripts", "testes", "e2e", "next.config.ts", "vitest.config.ts", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
 }

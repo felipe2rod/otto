@@ -61,6 +61,8 @@ const SEM_PECA: EstadoDaPecaAberta = { salvamento: 'salvo', pendentes: 0, versao
 const CATALOGO_DESATUALIZADO = 'catalogo_desatualizado';
 const SEM_HISTORICO: Historico = { podeDesfazer: false, podeRefazer: false };
 const INTERVALO_DE_NOVA_TENTATIVA = 5000;
+/** Quanto esperar antes de cada novo pedido de uma fonte ou imagem que não chegou. Depois da última, só à mão. */
+const ESPERAS_PARA_PEDIR_RECURSO_DE_NOVO = [5_000, 15_000, 45_000, 120_000] as const;
 const DURACAO_DO_AVISO = 7000;
 
 const emCampoDeTexto = (alvo: EventTarget | null): boolean => alvo instanceof HTMLElement && (alvo.closest('input, textarea, select') !== null || alvo.isContentEditable);
@@ -100,6 +102,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   const mensagem = useArmazem(aviso, (a) => a);
   const semConexao = useArmazem(estado, (e) => e.salvamento === 'sem-conexao');
   const fontesEmFalta = useArmazem(faltas, (f) => f.emFalta.fontes);
+  const temRecursoEmFalta = useArmazem(faltas, (f) => f.emFalta.fontes.length + f.emFalta.imagens.length > 0);
   const arquivosEmEnvio = useArmazem(enviando, (e) => e);
   const podeEditar = useArmazem(somenteLeitura, (v) => !v);
 
@@ -281,10 +284,33 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   }, [pecaAberta, exportador, fonte]);
 
   /** Pede ao motor as fontes e imagens outra vez (o que não chegou é tentado de novo). */
-  const tentarRecursosDeNovo = async () => {
+  const [tentarRecursosDeNovo] = useState(() => async () => {
     const doc = documento.obter();
     if (doc) await motorRef.current?.prepararRecursos(doc).catch(() => undefined);
-  };
+  });
+
+  // Fonte ou imagem que não chegou (a API caiu por uns segundos, a rede oscilou) é pedida de novo
+  // sozinha, com espera crescente, e para quando chega ou depois de algumas tentativas. Sem isto a
+  // camada ficava cinza (ou sem texto) até o designer recarregar a página.
+  useEffect(() => {
+    if (!temRecursoEmFalta) return;
+    let cancelado = false;
+    let relogio: ReturnType<typeof setTimeout> | undefined;
+    const tentar = (vez: number) => {
+      const espera = ESPERAS_PARA_PEDIR_RECURSO_DE_NOVO[vez];
+      if (espera === undefined) return;
+      relogio = setTimeout(() => {
+        void tentarRecursosDeNovo().then(() => {
+          if (!cancelado) tentar(vez + 1);
+        });
+      }, espera);
+    };
+    tentar(0);
+    return () => {
+      cancelado = true;
+      clearTimeout(relogio);
+    };
+  }, [temRecursoEmFalta, tentarRecursosDeNovo]);
 
   /** O nome da peça é do registro, não da árvore: renomear não é lote nem passo do histórico. */
   const renomearPeca = async (novo: string) => {

@@ -1,9 +1,10 @@
+/* Altura fixa, metade da coluna: se o painel crescesse com a seleção, o de Camadas (logo abaixo)
+   descia a cada clique, e o segundo clique de um duplo clique caía em outra linha. */
 .painel {
   display: flex;
   flex-direction: column;
-  flex: 0 1 auto;
-  min-height: 120px;
-  max-height: 62%;
+  flex: 0 0 50%;
+  min-height: 0;
 }
 
 .cabecalho {

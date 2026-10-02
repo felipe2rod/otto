@@ -221,6 +221,15 @@ describe('área do canvas', () => {
   });
 });
 
+describe('área do canvas: o que os testes de navegador leem', () => {
+  it('a câmera fica num atributo da área, atualizado a cada quadro: é como um teste converte ponto do documento em ponto da tela', async () => {
+    const { visao, tela } = montar();
+    const area = tela.container.querySelector('[data-area-do-canvas]') as HTMLElement;
+    act(() => visao.camera.definir({ x: 12.5, y: -30, zoom: 0.35 }));
+    await waitFor(() => expect(area.dataset.camera).toBe('12.5,-30,0.35'));
+  });
+});
+
 describe('área do canvas: editar texto no lugar', () => {
   const titulo = EXEMPLO.pranchetas[0]?.filhos.find((n) => n.tipo === 'texto' && n.nome === 'Título');
   if (titulo?.tipo !== 'texto') throw new Error('o documento de exemplo precisa do Título');

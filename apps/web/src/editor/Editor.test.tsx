@@ -468,6 +468,44 @@ describe('casca do editor: a sessão ligada à API', () => {
     expect(screen.queryByText(textos.avisos.fonteEmFalta('Didot 700'))).toBeNull();
   });
 
+  // Achado pelos testes de navegador: a API caiu por alguns segundos bem na hora de buscar uma imagem,
+  // e a camada ficou cinza para sempre, mesmo com a API de volta. Só recarregar a página resolvia.
+  it('imagem (ou fonte) que não chegou é pedida de novo sozinha, algumas vezes, e para quando chega', async () => {
+    const { motor } = await abrirESelecionar();
+    vi.useFakeTimers();
+    try {
+      const pedidos = () => vi.mocked(motor.prepararRecursos).mock.calls.length;
+      const antes = pedidos();
+      act(() => avisarFalta?.({ fontes: [], imagens: [{ arquivo: 'b'.repeat(64), camadas: ['Feed/Foto'] }] }));
+      expect(pedidos()).toBe(antes);
+
+      await act(async () => vi.advanceTimersByTimeAsync(5_000));
+      expect(pedidos()).toBe(antes + 1);
+      await act(async () => vi.advanceTimersByTimeAsync(15_000));
+      expect(pedidos()).toBe(antes + 2);
+
+      // chegou: não pede mais
+      act(() => avisarFalta?.({ fontes: [], imagens: [] }));
+      await act(async () => vi.advanceTimersByTimeAsync(120_000));
+      expect(pedidos()).toBe(antes + 2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('se o recurso não chega nunca, as tentativas automáticas param: não fica pedindo para sempre', async () => {
+    const { motor } = await abrirESelecionar();
+    vi.useFakeTimers();
+    try {
+      const antes = vi.mocked(motor.prepararRecursos).mock.calls.length;
+      act(() => avisarFalta?.({ fontes: [{ familia: 'Didot', peso: 700, camadas: ['Feed/Título'] }], imagens: [] }));
+      await act(async () => vi.advanceTimersByTimeAsync(600_000));
+      expect(vi.mocked(motor.prepararRecursos).mock.calls.length).toBe(antes + 4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('Ctrl+J duplica a camada selecionada e seleciona a cópia', async () => {
     const { lotes } = await abrirESelecionar();
     await act(async () => fireEvent.keyDown(window, { key: 'j', ctrlKey: true }));
