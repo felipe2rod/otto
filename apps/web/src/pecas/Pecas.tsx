@@ -3,7 +3,9 @@
 // Peças: a lista da conta, com criar, renomear, duplicar e excluir (docs/mvp/experiencia.md, 3.2).
 // A primeira página vem pronta do servidor; as ações falam com a API daqui, pelo mesmo cliente do
 // editor. "Nova peça" leva ao formulário de briefing. Miniatura e filtro por marca dependem da API.
-import { type FormEvent, useState } from 'react';
+import type { Marca } from '@otto/shared';
+import { type FormEvent, useEffect, useState } from 'react';
+import { type ApiDeCadastros, criarApiDeCadastros } from '../api/cadastros';
 import { criarCliente } from '../api/cliente';
 import { type ApiDePecas, criarApiDePecas, type PecaDaLista, type ResultadoDaLista } from '../api/pecas';
 import { erros } from '../textos/erros';
@@ -26,10 +28,24 @@ export interface PropriedadesDePecas {
   agora: string;
   api?: ApiDePecas;
   irPara?: (endereco: string) => void;
+  /** A marca do filtro (a lista inicial já veio só com as peças dela). */
+  marcaId?: string;
+  cadastros?: Pick<ApiDeCadastros, 'marcas'>;
 }
 
-export function Pecas({ inicial, agora, api: apiDeFora, irPara = (endereco) => window.location.assign(endereco) }: PropriedadesDePecas) {
+export function Pecas({ inicial, agora, api: apiDeFora, irPara = (endereco) => window.location.assign(endereco), marcaId, cadastros: cadastrosDeFora }: PropriedadesDePecas) {
   const [apiPadrao] = useState(() => apiDeFora ?? criarApiDePecas(criarCliente()));
+  const [cadastros] = useState(() => cadastrosDeFora ?? criarApiDeCadastros(criarCliente()));
+  /** As marcas da conta, para o filtro. Vazio (ou falha na leitura): a lista aparece sem o filtro. */
+  const [marcas, setMarcas] = useState<Marca[]>([]);
+  useEffect(() => {
+    let desmontado = false;
+    void cadastros.marcas().then((lidas) => !desmontado && setMarcas(lidas ?? []));
+    return () => {
+      desmontado = true;
+    };
+  }, [cadastros]);
+  const marcaDoFiltro = marcas.find((m) => m.id === marcaId);
   const api = apiDeFora ?? apiPadrao;
   const [pecas, setPecas] = useState(inicial.estado === 'ok' ? inicial.pecas : []);
   const [cursor, setCursor] = useState(inicial.estado === 'ok' ? inicial.proximoCursor : null);
@@ -73,7 +89,7 @@ export function Pecas({ inicial, agora, api: apiDeFora, irPara = (endereco) => w
   const carregarMais = async () => {
     if (!cursor) return;
     setOcupado(true);
-    const r = await api.listar(cursor);
+    const r = await api.listar(cursor, marcaId);
     setOcupado(false);
     if (r.estado === 'erro') return setAviso(textos.erro);
     setPecas((lista) => [...lista, ...r.pecas]);
@@ -105,7 +121,23 @@ export function Pecas({ inicial, agora, api: apiDeFora, irPara = (endereco) => w
 
   return (
     <>
-      <div className={estilos.acoesDaLista}>{botoesDeNova}</div>
+      <div className={estilos.acoesDaLista}>
+        {/* o filtro recarrega a lista pelo servidor: a marca vai no endereço, e a página pode ser guardada ou enviada */}
+        {marcas.length > 0 && (
+          <label className={estilos.filtro}>
+            <span>{textos.filtro.rotulo}</span>
+            <select aria-label={textos.filtro.rotulo} value={marcaDoFiltro?.id ?? ''} onChange={(e) => irPara(e.target.value ? `/editor?marca=${encodeURIComponent(e.target.value)}` : '/editor')}>
+              <option value="">{textos.filtro.todas}</option>
+              {marcas.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {botoesDeNova}
+      </div>
       {aviso && (
         <div className={estilos.aviso} role="alert">
           <p>{aviso}</p>
@@ -114,7 +146,17 @@ export function Pecas({ inicial, agora, api: apiDeFora, irPara = (endereco) => w
           </button>
         </div>
       )}
-      {pecas.length === 0 ? (
+      {pecas.length === 0 && marcaId ? (
+        // filtro sem resultado não é conta vazia: diz de que marca, e oferece a peça nova dela
+        <div className={estilos.vazio}>
+          <p>{marcaDoFiltro ? textos.filtro.nenhuma(marcaDoFiltro.nome) : null}</p>
+          {marcaDoFiltro && (
+            <a className={estilos.botao} href={`/editor/novo?marca=${encodeURIComponent(marcaDoFiltro.id)}`}>
+              {textos.filtro.novaPara(marcaDoFiltro.nome)}
+            </a>
+          )}
+        </div>
+      ) : pecas.length === 0 ? (
         <p className={estilos.vazio}>{textos.vazio}</p>
       ) : (
         <ul className={estilos.grade} aria-label={textos.lista}>
@@ -156,6 +198,7 @@ interface PropriedadesDoCartao {
 function Cartao({ peca, quando, modo, ocupado, aoMudarModo, aoRenomear, aoDuplicar, aoExcluir }: PropriedadesDoCartao) {
   const estado = estadoNaTela(peca);
   const [nome, setNome] = useState(peca.nome);
+  const [semMiniatura, setSemMiniatura] = useState(false);
   const enviar = (e: FormEvent) => {
     e.preventDefault();
     aoRenomear(nome);
@@ -169,8 +212,15 @@ function Cartao({ peca, quando, modo, ocupado, aoMudarModo, aoRenomear, aoDuplic
   return (
     <li className={estilos.item}>
       <a className={estilos.cartao} href={`/editor/p/${encodeURIComponent(peca.id)}`} data-pede-acao={estado ? 'sim' : undefined}>
-        {/* sem miniatura ainda: o contorno do formato, como a tela faz quando a miniatura não carrega */}
-        <span className={estilos.miniatura} aria-hidden="true" />
+        {/* sem miniatura (ou se ela não carregar): o contorno do formato, e o cartão continua clicável */}
+        {peca.miniatura && !semMiniatura ? (
+          <span className={estilos.miniatura} data-com-imagem="sim">
+            {/* biome-ignore lint/performance/noImgElement: JPEG pequeno da API, com cache imutável; não passa pelo otimizador de imagens */}
+            <img src={peca.miniatura} alt="" loading="lazy" onError={() => setSemMiniatura(true)} />
+          </span>
+        ) : (
+          <span className={estilos.miniatura} aria-hidden="true" data-sem-miniatura />
+        )}
         <span className={estilos.nome}>{peca.nome}</span>
         <span className={estilos.medida}>{textos.formatos(peca.formatos)}</span>
         {/* o estado não depende só da cor: tem a marca e o texto */}

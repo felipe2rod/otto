@@ -1,7 +1,18 @@
 // Banco de imagens (ADR 032) e catálogo de fontes (docs/mvp/backend.md, 17.12).
 // O editor não conhece banco nem catálogo pelo nome: mostra o `nome` que o servidor devolve e manda de
 // volta o `id`. A prévia é rota nossa; o endereço do arquivo no banco nunca chega aqui.
-import { FonteDaBiblioteca, type FonteDaLista, ImagemTrazida, ListaDeFontes, type OrientacaoDeImagem, type PedidoDeTrazerImagem, ResultadoDaBuscaDeImagens } from '@otto/shared';
+import {
+  FonteDaBiblioteca,
+  type FonteDaLista,
+  ImagemTrazida,
+  ListaDeFontes,
+  ListaDeTexturas,
+  type OrientacaoDeImagem,
+  type PedidoDeTrazerImagem,
+  ResultadoDaBuscaDeImagens,
+  type Textura,
+  TexturaTrazida,
+} from '@otto/shared';
 import { type Feito, recusa } from './cadastros';
 import type { Cliente } from './cliente';
 
@@ -39,6 +50,26 @@ export function criarApiDeFontes(cliente: Cliente): ApiDeFontes {
     },
     async trazer(familia, peso) {
       return (await cliente.ler(FonteDaBiblioteca, `/api/fontes/${encodeURIComponent(familia)}/${peso}`)).ok;
+    },
+  };
+}
+
+export interface ApiDeTexturas {
+  /** Indefinido se a leitura falhou. */
+  listar(): Promise<Textura[] | undefined>;
+  /** A textura vira arquivo da conta; o nó volta pronto, com o modo de mesclagem e a opacidade de costume. */
+  trazer(nome: string): Promise<Feito<{ textura: TexturaTrazida }>>;
+}
+
+export function criarApiDeTexturas(cliente: Cliente): ApiDeTexturas {
+  return {
+    async listar() {
+      const r = await cliente.ler(ListaDeTexturas, '/api/texturas');
+      return r.ok ? r.dados.itens : undefined;
+    },
+    async trazer(nome) {
+      const r = await cliente.escrever(TexturaTrazida, 'POST', `/api/texturas/${encodeURIComponent(nome)}/trazer`, {});
+      return r.ok ? { ok: true, textura: r.dados } : recusa(r);
     },
   };
 }

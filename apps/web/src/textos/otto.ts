@@ -38,6 +38,8 @@ export const otto = {
       pedido: 'Adaptar formato, variações, mexer em várias pranchetas. Passa por um plano, e pede o seu "pode" se for grande.',
       criar: 'A peça está vazia: o Otto define uma direção, mostra para você e monta as pranchetas depois do seu "pode".',
     },
+    /** O limite de hoje não deixa começar tarefa grande, mas um ajuste rápido ainda cabe. */
+    soAjuste: 'Hoje só cabe ajuste rápido. Pedido maior volta amanhã.',
     enviar: 'Pedir',
     atalho: 'Ctrl+Enter',
     enviando: 'Pedindo…',
@@ -65,6 +67,7 @@ export const otto = {
 
   espera: {
     naFila: 'Na fila. Começo em instantes.',
+    naFilaAtras: (pecas: readonly string[]): string => `Na fila, atrás de ${lista(pecas)}. Começo quando terminar lá.`,
     ha: (tempo: string): string => `há ${tempo}`,
     etapas: 'Etapas',
     /** O nome de cada etapa, como coisa sendo feita. */

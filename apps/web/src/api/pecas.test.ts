@@ -44,6 +44,16 @@ describe('listar as peças', () => {
     expect(rodando.estado === 'ok' && rodando.pecas[0]?.tarefaParou).toBeUndefined();
   });
 
+  it('traz o endereço da miniatura (nulo vira ausente) e a marca da peça; com filtro, pede só as peças da marca', async () => {
+    const MARCA = '0199a000-0000-7000-8000-00000000000a';
+    const miniatura = `/api/documentos/${ID}/miniatura?v=14`;
+    const { api, fetch } = montar(() => json(200, { itens: [{ ...item, miniatura, marcaId: MARCA }, item], proximoCursor: null }));
+    const r = await api.listar(undefined, MARCA);
+    expect(r.estado === 'ok' && r.pecas[0]).toMatchObject({ miniatura, marcaId: MARCA });
+    expect(r.estado === 'ok' && r.pecas[1]).not.toHaveProperty('miniatura');
+    expect(chamada(fetch).url).toBe(`/api/documentos?limite=100&marca=${MARCA}`);
+  });
+
   it('lista vazia é ok; falha e resposta fora do contrato são erro, nunca lista vazia', async () => {
     expect(await montar(() => json(200, { itens: [], proximoCursor: null })).api.listar()).toEqual({ estado: 'ok', pecas: [], proximoCursor: null });
     expect(await montar(() => json(500)).api.listar()).toEqual({ estado: 'erro' });
@@ -62,6 +72,18 @@ describe('criar, renomear, duplicar e arquivar', () => {
     const { api, fetch } = montar(() => json(201, aberto));
     expect(await api.criar()).toEqual({ ok: true, peca: { id: ID, nome: 'Lançamento', formatos: 0, alteradoEm: expect.any(String) } });
     expect(chamada(fetch)).toEqual({ url: '/api/documentos', metodo: 'POST', corpo: '{}' });
+  });
+
+  it('criar a peça com a tarefa é UMA chamada: devolve o id da peça; recusada, nenhuma peça fica para trás', async () => {
+    const tarefa = { tipo: 'criar' as const, pedido: 'cartaz do novo horário' };
+    const resposta = {
+      documento: { id: ID, nome: 'Novo horário' },
+      tarefa: { id: ID, documentoId: ID, tipo: 'criar', estado: 'na_fila', entrada: tarefa, versaoInicial: 0, lotes: 0, tocados: [], ultimoEvento: -1, criadaEm: '2026-10-02T12:00:00.000Z' },
+    };
+    const { api, fetch } = montar(() => json(202, resposta));
+    expect(await api.criarComTarefa({ nome: 'Novo horário', tarefa })).toEqual({ ok: true, pecaId: ID });
+    expect(chamada(fetch)).toEqual({ url: '/api/documentos/com-tarefa', metodo: 'POST', corpo: JSON.stringify({ nome: 'Novo horário', tarefa }) });
+    expect(await montar(() => json(429, { codigo: 'limite_diario' })).api.criarComTarefa({ tarefa })).toEqual({ ok: false, codigo: 'limite_diario' });
   });
 
   it('renomear manda PATCH com o nome e devolve o nome que o servidor guardou', async () => {

@@ -1,6 +1,6 @@
 // Barra de ferramentas: três ferramentas e duas ações (inserir arquivo, buscar imagem). É pouco e é honesto: não há ferramenta de texto que não cria
 // texto. A barra existe para as próximas entrarem no lugar esperado (experiencia.md, 4.1).
-import { imagens as textosDeImagens } from '../../textos/briefing';
+import { imagens as textosDeImagens, texturas as textosDeTexturas } from '../../textos/briefing';
 import { editor as textos } from '../../textos/editor';
 import { useArmazem } from '../nucleo/armazem';
 import type { Ferramenta, Interface } from '../nucleo/interface';
@@ -16,12 +16,15 @@ export function BarraDeFerramentas({
   podeInserir = false,
   aoInserir,
   aoBuscarImagem,
+  aoAbrirTexturas,
 }: {
   interface: Interface;
   podeInserir?: boolean;
   aoInserir?: (arquivos: File[]) => void;
   /** Abre a busca no banco de imagens. Ausente: o editor não tem banco (a bancada), e o botão não existe. */
   aoBuscarImagem?: (() => void) | undefined;
+  /** Abre as texturas. Ausente: o editor não tem a biblioteca de texturas, e o botão não existe. */
+  aoAbrirTexturas?: (() => void) | undefined;
 }) {
   const ativa = useArmazem(iface.armazem, (e) => e.ferramenta);
   return (
@@ -64,6 +67,11 @@ export function BarraDeFerramentas({
       {aoBuscarImagem && (
         <button type="button" className={estilos.ferramenta} aria-label={textosDeImagens.abrir} title={textosDeImagens.abrir} disabled={!podeInserir} data-abre-imagens onClick={aoBuscarImagem}>
           <span aria-hidden="true">⌕</span>
+        </button>
+      )}
+      {aoAbrirTexturas && (
+        <button type="button" className={estilos.ferramenta} aria-label={textosDeTexturas.abrir} title={textosDeTexturas.abrir} disabled={!podeInserir} data-abre-texturas onClick={aoAbrirTexturas}>
+          <span aria-hidden="true">▒</span>
         </button>
       )}
     </div>

@@ -11,9 +11,9 @@ export interface Servicos {
   arquivos: ApiDeArquivos;
   fontes: ApiDeFontes;
   imagens: ApiDeImagens;
-  pecas: Pick<ApiDePecas, 'criar'>;
+  pecas: Pick<ApiDePecas, 'criar' | 'criarComTarefa'>;
   /** As tarefas de uma peça. Os limites da conta não dependem da peça. */
-  tarefas(pecaId: string): Pick<ApiDeTarefas, 'pedir' | 'limites' | 'daPeca'>;
+  tarefas(pecaId: string): Pick<ApiDeTarefas, 'limites' | 'daPeca'>;
 }
 
 export function criarServicos(): Servicos {

@@ -7,7 +7,7 @@
 // O estado mora no controle (nucleo/controleDoOtto.ts), fora do React; aqui só se desenha e se chama
 // a ação. Nada de modelo, token ou custo na tela: o designer vê o tempo e o que foi feito.
 import type { No } from '@otto/documento';
-import { briefingDaTarefa, type PedidoDeTarefa, type Pendencia, type PendenciaDaPeca, type Tarefa } from '@otto/shared';
+import { briefingDaTarefa, type LimitesDeTarefa, type PedidoDeTarefa, type Pendencia, type PendenciaDaPeca, type Tarefa } from '@otto/shared';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { erros } from '../../textos/erros';
 import { duracao, otto as textos } from '../../textos/otto';
@@ -71,7 +71,7 @@ export function PainelDoOtto({ otto, aoVerOAntes, aviso, agora = Date.now }: Pro
         {!atual || !tarefa ? (
           <Pedido otto={otto} limites={estado.limites} ocupado={estado.ocupado} />
         ) : andando ? (
-          <Espera otto={otto} atual={atual} ocupado={estado.ocupado} semAoVivo={estado.semAoVivo} aviso={aviso} />
+          <Espera otto={otto} atual={atual} ocupado={estado.ocupado} semAoVivo={estado.semAoVivo} aviso={aviso} limites={estado.limites} />
         ) : tarefa.estado === 'aguardando_confirmacao' ? (
           <Pode otto={otto} atual={atual} ocupado={estado.ocupado} />
         ) : tarefa.estado === 'em_revisao' ? (
@@ -110,7 +110,10 @@ function Pedido({ otto, limites, ocupado }: { otto: ControleDoOtto; limites: Ret
         : semLimite
           ? textos.pedir.semLimite.limite_diario
           : undefined;
-  const podeEnviar = texto.trim() !== '' && !ocupado && !semLimite;
+  // um ajuste gasta muito menos que uma tarefa que cria peça: pode caber quando o resto não cabe
+  const soAjuste = semLimite !== undefined && limites?.podeAjustar === true && !vazia;
+  const cabe = !semLimite || (soAjuste && tipo === 'ajuste');
+  const podeEnviar = texto.trim() !== '' && !ocupado && cabe;
 
   const enviar = async () => {
     if (!podeEnviar) return;
@@ -164,10 +167,16 @@ function Pedido({ otto, limites, ocupado }: { otto: ControleDoOtto; limites: Ret
           }
         }}
       />
-      {motivoDoLimite && (
-        <p className={estilos.alerta} role="alert">
-          {motivoDoLimite}
+      {soAjuste ? (
+        <p className={estilos.alerta} role="status">
+          {textos.pedir.soAjuste}
         </p>
+      ) : (
+        motivoDoLimite && (
+          <p className={estilos.alerta} role="alert">
+            {motivoDoLimite}
+          </p>
+        )
       )}
       <div className={estilos.acoes}>
         {limites && <span className={estilos.discreto}>{textos.pedir.tarefasHoje(limites.tarefasHoje, limites.tarefasPorDia)}</span>}
@@ -219,17 +228,33 @@ function nomeDaEtapa(etapa: NonNullable<Tarefa['etapa']>): string {
   return t[etapa.etapa];
 }
 
-function Espera({ otto, atual, ocupado, semAoVivo, aviso }: { otto: ControleDoOtto; atual: TarefaNaTela; ocupado: boolean; semAoVivo: boolean; aviso: PropriedadesDoPainelDoOtto['aviso'] }) {
+function Espera({
+  otto,
+  atual,
+  ocupado,
+  semAoVivo,
+  aviso,
+  limites,
+}: {
+  otto: ControleDoOtto;
+  atual: TarefaNaTela;
+  ocupado: boolean;
+  semAoVivo: boolean;
+  aviso: PropriedadesDoPainelDoOtto['aviso'];
+  limites?: LimitesDeTarefa | undefined;
+}) {
   const { tarefa } = atual;
   const estadoDoAviso = useArmazem(aviso.estado, (e) => e);
   const etapas = etapasNaTela(tarefa);
   const naFila = tarefa.estado === 'na_fila';
+  // as peças da conta que estão na frente desta (a própria tarefa também vem na lista)
+  const naFrente = (limites?.naFrente ?? []).filter((t) => t.tarefaId !== tarefa.id && t.documentoId !== tarefa.documentoId).map((t) => t.nome);
   // o que ele acabou de dizer fica à vista; o resto do passo a passo, fechado logo abaixo
   const ultimaFala = atual.registro.findLast((l) => l.evento.tipo === 'mensagem')?.evento;
   return (
     <div className={estilos.bloco}>
       <PedidoFeito tarefa={tarefa} />
-      {naFila && <p className={estilos.apoio}>{textos.espera.naFila}</p>}
+      {naFila && <p className={estilos.apoio}>{naFrente.length > 0 ? textos.espera.naFilaAtras(naFrente) : textos.espera.naFila}</p>}
       {/* Etapas com nome, sem barra de porcentagem: o ciclo do Otto não é previsível, e barra que chuta mente. */}
       {etapas.length > 0 && (
         <ol className={estilos.etapas} aria-label={textos.espera.etapas}>

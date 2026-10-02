@@ -126,6 +126,41 @@ describe('painel do Otto: pedir', () => {
     expect(botaoDePedir()).toHaveProperty('disabled', true);
   });
 
+  it('hoje só cabe ajuste: o ajuste rápido pode ser pedido, o pedido maior não, e a tela diz por quê', () => {
+    const { otto } = montar({ estado: { limites: { ...LIMITES, podeEnviar: false, motivo: 'limite_diario', podeAjustar: true } } });
+    fireEvent.change(campoDoPedido(), { target: { value: 'título em azul' } });
+    expect(screen.getByText(textos.pedir.soAjuste)).toBeDefined();
+    expect(botaoDePedir()).toHaveProperty('disabled', false);
+    fireEvent.click(screen.getByRole('radio', { name: textos.pedir.tipos.pedido }));
+    expect(botaoDePedir()).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('radio', { name: textos.pedir.tipos.ajuste }));
+    fireEvent.click(botaoDePedir());
+    expect(otto.pedir).toHaveBeenCalledWith({ tipo: 'ajuste', pedido: 'título em azul' });
+  });
+
+  it('sem limite e sem caber ajuste (ou em peça vazia, que não tem ajuste): nada pode ser pedido', () => {
+    montar({ estado: { limites: { ...LIMITES, podeEnviar: false, motivo: 'limite_diario', podeAjustar: false } } });
+    fireEvent.change(campoDoPedido(), { target: { value: 'x' } });
+    expect(botaoDePedir()).toHaveProperty('disabled', true);
+    cleanup();
+    montar({ documento: 'vazio', estado: { limites: { ...LIMITES, podeEnviar: false, motivo: 'limite_diario', podeAjustar: true } } });
+    fireEvent.change(campoDoPedido(), { target: { value: 'x' } });
+    expect(botaoDePedir()).toHaveProperty('disabled', true);
+  });
+
+  it('na fila: diz atrás de que peça a tarefa está (a própria peça não conta)', () => {
+    const naFila = tarefa({ estado: 'na_fila' });
+    const naFrente = [
+      { tarefaId: '0199a000-0000-7000-8000-0000000000b1', documentoId: '0199a000-0000-7000-8000-0000000000c1', nome: 'Cartaz do jazz', estado: 'rodando' as const },
+      { tarefaId: naFila.id, documentoId: naFila.documentoId, nome: 'Esta peça', estado: 'na_fila' as const },
+    ];
+    montar({ estado: { atual: novaTarefaNaTela(naFila), limites: { ...LIMITES, naFila: 2, naFrente } } });
+    expect(screen.getByText(textos.espera.naFilaAtras(['Cartaz do jazz']))).toBeDefined();
+    cleanup();
+    montar({ estado: { atual: novaTarefaNaTela(naFila), limites: { ...LIMITES, naFila: 1, naFrente: [naFrente[1] as (typeof naFrente)[1]] } } });
+    expect(screen.getByText(textos.espera.naFila)).toBeDefined();
+  });
+
   it('pedido recusado: a frase vem do código, e dá para fechar', () => {
     const { otto } = montar({ estado: { recusa: { codigo: 'tarefa_em_andamento' } } });
     expect(screen.getByRole('alert').textContent).toContain(erros.doCodigo('tarefa_em_andamento'));

@@ -7,7 +7,7 @@
 // catálogo de fontes são SIMULADOS aqui: os testes não dependem do banco de imagens nem do catálogo de
 // verdade. A resposta simulada usa um banco com nome de teste: a tela mostra o nome que o servidor manda.
 import type { Locator, Page } from '@playwright/test';
-import { briefing as textos, fontes as textosDeFontes, imagens as textosDeImagens, marcas as textosDeMarcas } from '../src/textos/briefing';
+import { briefing as textos, fontes as textosDeFontes, imagens as textosDeImagens, marcas as textosDeMarcas, texturas as textosDeTexturas } from '../src/textos/briefing';
 import { editor as textosDoEditor } from '../src/textos/editor';
 import { otto as textosDoOtto } from '../src/textos/otto';
 import { pecas as textosDePecas } from '../src/textos/pecas';
@@ -186,6 +186,69 @@ test.describe('briefing', () => {
     // o rodapé veio da marca: não é repetido no formulário, e aparece como sendo dela
     await expect(page.getByRole('textbox', { name: textos.campos.rodape })).toHaveValue('');
     await expect(page.getByRole('textbox', { name: textos.campos.rodape })).toHaveAttribute('placeholder', textos.campos.rodapeDaMarca('@marcadeteste'));
+
+    // ---------- a lista de peças: o filtro por marca e a miniatura ----------
+    await page.goto(`/editor?marca=${marca?.id}`);
+    const cartoes = page.getByRole('list', { name: textosDePecas.lista }).getByRole('listitem');
+    await expect(cartoes).toHaveCount(1);
+    await expect(cartoes.first()).toContainText(nomeDaPeca);
+    await expect(page.getByRole('combobox', { name: textosDePecas.filtro.rotulo, exact: true })).toHaveValue(marca?.id ?? '');
+    // a miniatura é feita ao fim da tarefa: aparece quando o worker terminar (a lista é relida a cada tentativa)
+    await expect(async () => {
+      await page.reload();
+      const imagem = cartoes.first().locator('img');
+      await expect(imagem).toHaveCount(1, { timeout: 2000 });
+      expect(await imagem.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    }).toPass({ timeout: 60_000 });
+    // "todas as marcas" volta à lista inteira
+    await page.getByRole('combobox', { name: textosDePecas.filtro.rotulo, exact: true }).selectOption('');
+    await page.waitForURL(/\/editor$/);
+  });
+
+  test('o Otto não aceitou o pedido: a tela diz por quê, o formulário fica como estava, e nenhuma peça vazia é criada', async ({ page, api }) => {
+    const nomeDaPeca = codigo('e2e recusada');
+    // o servidor diz que o Otto está ocupado em outra peça, e recusa o pedido pelo limite
+    await page.route('**/api/tarefas/limites', (rota) =>
+      rota.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          podeEnviar: true,
+          podeAjustar: true,
+          tarefasHoje: 3,
+          tarefasPorDia: 30,
+          naFila: 1,
+          naFilaNoMaximo: 3,
+          naFrente: [{ tarefaId: '0199a000-0000-7000-8000-0000000000b1', documentoId: '0199a000-0000-7000-8000-0000000000c1', nome: 'Cartaz do jazz', estado: 'rodando' }],
+        }),
+      }),
+    );
+    let pedidos = 0;
+    await page.route('**/api/documentos/com-tarefa', async (rota) => {
+      pedidos++;
+      await rota.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ codigo: 'limite_diario' }) });
+    });
+    const criadas: string[] = [];
+    page.on('request', (pedido) => {
+      if (pedido.method() === 'POST' && new URL(pedido.url()).pathname === '/api/documentos') criadas.push(pedido.url());
+    });
+
+    await abrirOFormulario(page);
+    await titulo(page).fill('Abrimos às 7h');
+    await page.getByRole('textbox', { name: textos.campos.nome }).fill(nomeDaPeca);
+    await formato(page, 'Feed').click();
+    await fonteDasImagens(page, 'nenhuma').check();
+    // antes do clique: entra na fila, atrás de qual peça
+    await expect(page.getByText(textos.rodape.atrasDe(['Cartaz do jazz']))).toBeVisible();
+    await page.getByRole('button', { name: textos.rodape.criarNaFila }).click();
+
+    await expect(page.getByRole('alert').filter({ hasText: /\S/ })).toBeVisible();
+    expect(pedidos).toBe(1);
+    await expect(page).toHaveURL(/\/editor\/novo$/);
+    await expect(titulo(page)).toHaveValue('Abrimos às 7h');
+    // peça e tarefa nascem juntas ou não nascem: nada foi criado à parte
+    expect(criadas).toEqual([]);
+    expect((await api.listar()).some((p) => p.nome === nomeDaPeca)).toBe(false);
   });
 
   test('briefing salvo: salvar pela metade, começar dele, e a peça dele conta o uso; o menu da peça reabre o mesmo briefing', async ({ page, editor, api, descartar }) => {
@@ -206,8 +269,16 @@ test.describe('briefing', () => {
     expect((await api.briefing(salvo.id)).dados).toMatchObject({ versao: 1, imagens: { fonte: 'nenhuma' } });
 
     // em outra visita: começar em branco e escolher o briefing salvo
-    await page.evaluate(() => window.localStorage.clear());
+    // O que foi digitado acima ficou como rascunho neste navegador. Abrir o formulário a partir do
+    // briefing salvo NÃO passa por cima dele sem avisar: a tela diz, e o designer decide.
+    await abrirOFormulario(page, `?briefing=${salvo.id}`);
+    await expect(page.locator('[data-rascunho-guardado]')).toBeVisible();
+    await expect(formato(page, 'Feed')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: textos.rascunho.descartar }).click();
+    await expect(page.locator('[data-rascunho-guardado]')).toHaveCount(0);
+    // sem rascunho, o formulário abre em branco, e "começar de" carrega o briefing
     await abrirOFormulario(page);
+    await expect(page.locator('[data-rascunho-recuperado]')).toHaveCount(0);
     await expect(formato(page, 'Feed')).toHaveAttribute('aria-pressed', 'false');
     await page.getByRole('combobox', { name: textos.comecarDe.rotulo }).selectOption(salvo.id);
     await expect(formato(page, 'Feed')).toHaveAttribute('aria-pressed', 'true');
@@ -354,6 +425,10 @@ test.describe('briefing', () => {
 
     await editor.abrir(peca);
     await editor.linha('Legenda').click();
+    // o nome acessível de cada campo é só o rótulo: não leva junto o texto digitado nem a opção escolhida
+    await expect(page.getByRole('textbox', { name: textosDoEditor.propriedades.conteudo, exact: true })).toHaveValue('linha de apoio');
+    await expect(page.getByRole('combobox', { name: textosDoEditor.propriedades.peso, exact: true })).toHaveCount(1);
+    await expect(page.getByRole('textbox', { name: textosDoEditor.propriedades.x, exact: true })).toHaveCount(1);
     const fonte = page.getByRole('combobox', { name: textosDoEditor.propriedades.fonte, exact: true });
     const noCatalogo = fonte.locator(`optgroup[label="${textosDeFontes.doCatalogo}"] option[value="${FAMILIA}"]`);
     await expect(noCatalogo).toHaveCount(1);
@@ -371,5 +446,30 @@ test.describe('briefing', () => {
     // chegou: agora ela é da biblioteca
     await expect(noCatalogo).toHaveCount(0);
     await expect(fonte.locator(`optgroup[label="${textosDeFontes.naBiblioteca}"] option[value="${FAMILIA}"]`)).toHaveCount(1);
+  });
+
+  test('textura no editor: a escolhida vira camada por cima de tudo, cobrindo a prancheta, com o modo e a opacidade de costume', async ({ editor, criarPeca }) => {
+    const peca = await criarPeca();
+    await editor.abrir(peca);
+    const { page } = editor;
+    await page.getByRole('toolbar', { name: textosDoEditor.ferramentas.rotulo }).getByRole('button', { name: textosDeTexturas.abrir }).click();
+    const dialogo = page.getByRole('dialog', { name: textosDeTexturas.titulo });
+    const itens = dialogo.getByRole('list', { name: textosDeTexturas.lista }).getByRole('listitem');
+    await expect(itens.first()).toBeVisible();
+    expect(await itens.count()).toBeGreaterThan(1);
+    // a primeira da lista, seja qual for: o teste não depende do nome de uma textura
+    const nome = (await itens.first().locator('strong').textContent()) ?? '';
+    await dialogo.getByRole('button', { name: textosDeTexturas.usarEsta(nome), exact: true }).click();
+    await expect(dialogo).toHaveCount(0);
+
+    await expect(editor.linha(nome)).toHaveAttribute('aria-selected', 'true');
+    await expect.poll(async () => camadas((await editor.servidor()).arvore.pranchetas[0]?.filhos ?? []).some((n) => n.nome === nome)).toBe(true);
+    const feed = (await editor.servidor()).arvore.pranchetas[0];
+    const no = camada(await editor.servidor(), nome);
+    expect(no).toMatchObject({ tipo: 'imagem', x: 0, y: 0, largura: feed?.largura, altura: feed?.altura });
+    expect(no.modoDeMesclagem).not.toBe('normal');
+    expect(Number(no.opacidade)).toBeLessThan(1);
+    // por cima de tudo: é a última camada da prancheta
+    expect(feed?.filhos.at(-1)?.nome).toBe(nome);
   });
 });

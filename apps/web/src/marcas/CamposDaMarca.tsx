@@ -88,11 +88,20 @@ export function CamposDaMarca({ estado, aoMudar, arquivos, catalogo, fontes, des
     <div className={estilos.campos}>
       <label className={formulario.campo}>
         <span className={formulario.rotulo}>{t.nome}</span>
-        <input type="text" value={estado.nome} maxLength={120} placeholder={t.nomeExemplo} disabled={desativado} onChange={(e) => mudar({ nome: e.target.value })} />
+        <input type="text" aria-label={t.nome} value={estado.nome} maxLength={120} placeholder={t.nomeExemplo} disabled={desativado} onChange={(e) => mudar({ nome: e.target.value })} />
       </label>
       <label className={formulario.campo}>
         <span className={formulario.rotulo}>{t.site}</span>
-        <input type="text" value={estado.site} maxLength={300} placeholder={t.siteExemplo} disabled={desativado} aria-describedby={`${id}-site`} onChange={(e) => mudar({ site: e.target.value })} />
+        <input
+          type="text"
+          aria-label={t.site}
+          value={estado.site}
+          maxLength={300}
+          placeholder={t.siteExemplo}
+          disabled={desativado}
+          aria-describedby={`${id}-site`}
+          onChange={(e) => mudar({ site: e.target.value })}
+        />
         <span id={`${id}-site`} className={formulario.nota}>
           {t.siteNota}
         </span>
@@ -248,11 +257,11 @@ export function CamposDaMarca({ estado, aoMudar, arquivos, catalogo, fontes, des
 
       <label className={`${formulario.campo} ${estilos.inteiro}`}>
         <span className={formulario.rotulo}>{t.rodape}</span>
-        <input type="text" value={estado.rodape} maxLength={300} placeholder={t.rodapeExemplo} disabled={desativado} onChange={(e) => mudar({ rodape: e.target.value })} />
+        <input type="text" aria-label={t.rodape} value={estado.rodape} maxLength={300} placeholder={t.rodapeExemplo} disabled={desativado} onChange={(e) => mudar({ rodape: e.target.value })} />
       </label>
       <label className={`${formulario.campo} ${estilos.inteiro}`}>
         <span className={formulario.rotulo}>{t.restricoes}</span>
-        <textarea rows={3} value={estado.restricoes} placeholder={t.restricoesExemplo} disabled={desativado} onChange={(e) => mudar({ restricoes: e.target.value })} />
+        <textarea aria-label={t.restricoes} rows={3} value={estado.restricoes} placeholder={t.restricoesExemplo} disabled={desativado} onChange={(e) => mudar({ restricoes: e.target.value })} />
       </label>
     </div>
   );

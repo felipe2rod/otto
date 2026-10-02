@@ -49,6 +49,7 @@ export function ambienteDeTeste(
     ],
     trazerFonte: vi.fn(opcoes.trazerFonte ?? (async () => true)),
     inserirImagemTrazida: vi.fn(() => true),
+    inserirTextura: vi.fn(() => true),
   };
   const Moldura = ({ children }: { children: ReactNode }) => <ProvedorDoEditor ambiente={ambiente}>{children}</ProvedorDoEditor>;
   return { ambiente, iface, documento, lotes, Moldura };

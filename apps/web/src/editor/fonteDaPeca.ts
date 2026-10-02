@@ -3,7 +3,7 @@
 import { criarApiDeArquivos, type EnvioDeArquivos } from '../api/arquivos';
 import { criarCliente } from '../api/cliente';
 import { type ApiDeExportacoes, criarApiDeExportacoes } from '../api/exportacoes';
-import { type ApiDeImagens, criarApiDeFontes, criarApiDeImagens } from '../api/imagens';
+import { type ApiDeImagens, type ApiDeTexturas, criarApiDeFontes, criarApiDeImagens, criarApiDeTexturas } from '../api/imagens';
 import { type ApiDeLotes, criarApiDeLotes } from '../api/lotes';
 import { criarApiDePecas, type ResultadoDeAbrir } from '../api/pecas';
 import { type ApiDeTarefas, criarApiDeTarefas } from '../api/tarefas';
@@ -25,6 +25,8 @@ export interface FonteDaPeca {
   renomear?(id: string, nome: string): Promise<{ ok: true; nome: string } | { ok: false; codigo: string }>;
   /** Busca no banco de imagens e trazer para a conta. Ausente: o editor não oferece a busca. */
   imagens?: ApiDeImagens;
+  /** As texturas da biblioteca. Ausente: o editor não as oferece. */
+  texturas?: ApiDeTexturas;
   /** Bytes de imagem e de fonte para o motor. */
   recursos: RecursosDoRender;
   /** A biblioteca e, se houver, o catálogo (`naBiblioteca: false` é o que ainda não foi baixado). */
@@ -46,6 +48,7 @@ export function criarFonteDaApi(pecaId: string): FonteDaPeca {
     tarefas: criarApiDeTarefas(cliente, pecaId),
     lotes: criarApiDeLotes(cliente, pecaId),
     imagens: criarApiDeImagens(cliente),
+    texturas: criarApiDeTexturas(cliente),
     recursos: criarRecursosDoRender(),
     listarFontes() {
       // uma busca só por sessão; lista vazia é falha (a biblioteca nunca é vazia): a próxima chamada tenta de novo

@@ -21,6 +21,7 @@ export const briefing = {
     naoAbriu: 'Não consegui abrir esse briefing salvo.',
     daPeca: (nome: string): string => `Briefing da peça "${nome}".`,
     daPecaSemBriefing: 'Essa peça não nasceu de um briefing: comece em branco.',
+    naoLeuAPeca: 'Não consegui ler o briefing dessa peça agora. Recarregue a página para tentar de novo, ou comece em branco.',
     gerenciar: 'Briefings salvos',
     apagar: (nome: string): string => `Apagar o briefing ${nome}`,
     usar: (nome: string): string => `Usar o briefing ${nome}`,
@@ -30,6 +31,10 @@ export const briefing = {
   rascunho: {
     recuperado: 'Recuperei o que você tinha digitado da última vez.',
     limpar: 'Começar em branco',
+    /** Ao abrir o formulário de um briefing salvo ou de uma peça, havendo um rascunho de outra peça neste navegador. */
+    guardado: 'Há um rascunho de outra peça guardado neste navegador. Ele continua lá: o que você fizer aqui não fica guardado como rascunho enquanto você não decidir.',
+    voltar: 'Voltar ao rascunho',
+    descartar: 'Descartar o rascunho',
   },
 
   blocos: {
@@ -159,6 +164,7 @@ export const briefing = {
     } as Readonly<Record<string, string>>,
     criar: 'Criar a peça',
     criarNaFila: 'Criar a peça (entra na fila)',
+    atrasDe: (pecas: readonly string[]): string => `Entra na fila, atrás de ${new Intl.ListFormat('pt-BR', { style: 'long', type: 'conjunction' }).format(pecas)}.`,
     enviando: 'Enviando ao Otto…',
     cancelar: 'Cancelar',
     emBranco: 'Começar com a peça em branco',
@@ -279,4 +285,20 @@ export const imagens = {
     imagem_nao_buscada: 'Essa imagem saiu da busca. Busque de novo e escolha outra vez.',
     sem_conexao: 'Sem conexão. Tente de novo quando a conexão voltar.',
   } as Readonly<Record<string, string>>,
+} as const;
+
+export const texturas = {
+  titulo: 'Texturas',
+  abrir: 'Texturas',
+  lista: 'Texturas disponíveis',
+  carregando: 'Carregando as texturas…',
+  erro: 'Não consegui carregar as texturas. Feche e abra de novo.',
+  explica: 'A textura entra como camada, por cima de tudo, cobrindo a prancheta. Modo de mesclagem, opacidade e ordem você muda depois.',
+  /** "Multiplicação · 60%": o modo de mesclagem (com o nome do painel de Propriedades) e a opacidade com que ela entra. */
+  comoEntra: (modo: string, porcento: number): string => `${modo} · ${porcento}%`,
+  usar: 'Usar',
+  usarEsta: (nome: string): string => `Usar a textura ${nome}`,
+  trazendo: 'Pondo…',
+  naoVeio: (nome: string): string => `Não consegui pôr a textura ${nome}. Tente de novo.`,
+  fechar: 'Fechar',
 } as const;

@@ -2,11 +2,11 @@
 // /api/vetores) e a camada nasce por operação do catálogo: `criarNo`, ou `alterar` quando é troca
 // da imagem de uma camada de foto. Estados e recusas: docs/mvp/experiencia.md, seções 3.3 e 3.4.
 import type { Documento, No } from '@otto/documento';
-import { type ImagemTrazida, TIPOS_DE_IMAGEM } from '@otto/shared';
+import { type ImagemTrazida, type TexturaTrazida, TIPOS_DE_IMAGEM } from '@otto/shared';
 import type { EnvioDeArquivos } from '../api/arquivos';
 import { editor as textos } from '../textos/editor';
 import type { OndeSoltou } from './canvas/AreaDoCanvas';
-import { type LoteParaAplicar, loteDeInserirImagem, loteDeInserirVetor, loteDeTrocarImagem } from './nucleo/acoes';
+import { type LoteParaAplicar, loteDeInserirImagem, loteDeInserirTextura, loteDeInserirVetor, loteDeTrocarImagem } from './nucleo/acoes';
 import type { Armazem } from './nucleo/armazem';
 
 /** O limite da API é 25 MB por arquivo; conferir aqui poupa o envio de um arquivo que será recusado. */
@@ -117,6 +117,17 @@ export function criarEnvio(deps: DependenciasDoEnvio) {
       const doc = deps.documento();
       if (!doc) return false;
       const lote = loteDeInserirImagem(doc, deps.pranchetaPadrao(), { sha256: imagem.sha256, largura: imagem.largura, altura: imagem.altura, origem: imagem.no.origem }, nome);
+      if (!deps.aplicar(lote)) return false;
+      const criado = lote.operacoes.at(-1);
+      if (criado?.op === 'criarNo') deps.selecionarPorNome([(criado.no as { nome: string }).nome]);
+      return true;
+    },
+
+    /** A textura já é arquivo da conta: vira camada por cima de tudo, cobrindo a prancheta. */
+    inserirTextura(textura: TexturaTrazida, nome: string): boolean {
+      const doc = deps.documento();
+      if (!doc) return false;
+      const lote = loteDeInserirTextura(doc, deps.pranchetaPadrao(), textura, nome);
       if (!deps.aplicar(lote)) return false;
       const criado = lote.operacoes.at(-1);
       if (criado?.op === 'criarNo') deps.selecionarPorNome([(criado.no as { nome: string }).nome]);

@@ -6,7 +6,8 @@
 // uma peça vazia) define a direção, pede o "pode" e monta Feed e Story; o de AJUSTE altera o Título do
 // Feed. Aqui a tarefa de briefing começa pela API, com o MESMO corpo que o formulário manda (versão 1,
 // fechado), para estes testes cuidarem só do painel; o caminho inteiro pela tela (marca, formulário,
-// "pode", revisão) está em briefing.e2e.ts. O campo de pedir é conferido no ajuste rápido e nas recusas.
+// "pode", revisão) está em briefing.e2e.ts. O campo de pedir é conferido no ajuste rápido, no pedido maior
+// (que chega ao "pode"), no pedido livre em peça vazia e nas recusas.
 //
 // A conta roda UMA tarefa por vez: os testes daqui rodam em ordem, e a peça de cada teste é limpa no
 // fim (a tarefa viva é cancelada ou desfeita antes de arquivar).
@@ -14,7 +15,7 @@ import type { Locator, Page } from '@playwright/test';
 import { erros } from '../src/textos/erros';
 import { otto as textos } from '../src/textos/otto';
 import { pecas as textosDePecas } from '../src/textos/pecas';
-import { type Api, camada, type PecaDoServidor } from './apoio/api';
+import { type Api, camada, camadas, type PecaDoServidor } from './apoio/api';
 import { distancia, type Editor, expect, test } from './apoio/teste';
 
 /** O verde do bloco que o roteiro monta no topo do Feed (o token "primaria" do briefing gravado). */
@@ -25,8 +26,6 @@ const NO_BLOCO = { x: 30, y: 420 };
 const ATE_TERMINAR = { timeout: 150_000 };
 const ATE_O_PODE = { timeout: 90_000 };
 
-/** O botão que leva à camada de uma pendência: o rótulo começa igual e termina com a frase dela. */
-const VER_PENDENCIA = new RegExp(`^${textos.revisao.verPendencia('').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`);
 const codigo = () => `e2e-otto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 const painel = (page: Page): Locator => page.getByRole('region', { name: textos.titulo, exact: true });
 const estado = (page: Page, qual: string): Locator => painel(page).locator(`[data-estado-da-tarefa="${qual}"]`);
@@ -92,7 +91,8 @@ test.describe('Otto', () => {
     const etapas = painel(page).getByRole('list', { name: textos.espera.etapas });
     await expect(etapas.locator('[aria-current=step]')).toHaveCount(1, { timeout: 60_000 });
     await expect(page.getByRole('progressbar')).toHaveCount(0);
-    await expect(botao(page, textos.espera.interromper)).toBeVisible();
+    // (outro arquivo de teste pode estar com uma tarefa na frente: na fila, o botão é o de cancelar)
+    await expect(botao(page, textos.espera.interromper).or(botao(page, textos.espera.cancelar))).toBeVisible();
     await expect(trava(page)).toContainText(textos.trava.trabalhando);
     // o tempo aparece (segundos ou minutos), no painel e no título da aba
     await expect(painel(page).locator('[data-estado-da-tarefa]')).toContainText(/\d+ (s|min)/);
@@ -162,14 +162,15 @@ test.describe('Otto', () => {
     expect((await api.tarefas(peca.id)).itens.map((t) => t.estado)).toEqual(['desfeita']);
   });
 
-  test('ajuste rápido: sem "pode", direto para a revisão; a pendência leva à camada, e desfazer tudo volta a peça', async ({ editor, criarPeca, api }) => {
-    // O roteiro do ajuste pede a prancheta "Feed", a camada "Título" e a cor "destaque" na identidade da peça.
-    // A peça padrão tem DUAS pranchetas: o ciclo confere a que mudou (o defeito de conferir a última foi corrigido).
+  test('ajuste rápido: sem "pode", direto para a revisão; só a camada mexida fica marcada, e desfazer tudo volta a peça', async ({ editor, criarPeca, api }) => {
+    // O roteiro do ajuste põe em azul a primeira camada de texto da peça. A peça padrão tem DUAS
+    // pranchetas: o ciclo confere a que mudou (o defeito de conferir a última foi corrigido).
+    const AZUL = '#1f5fbf';
     const peca = await criarPeca({ nome: codigo() });
-    await api.lote(peca.id, [{ op: 'definirToken', nome: 'destaque', valor: '#f4c430' }]);
     await editor.abrir(peca);
     const { page } = editor;
-    const titulo = camada(await api.abrir(peca.id), 'Título');
+    const textosDaPeca = (p: PecaDoServidor) => camadas(p.arvore.pranchetas.flatMap((x) => x.filhos)).filter((n) => n.tipo === 'texto');
+    const antes = textosDaPeca(await api.abrir(peca.id)).map((n) => [n.nome, n.cor]);
     // antes de pedir: quantas tarefas a conta já pediu hoje, e o botão só pede com texto
     const limites = await api.limitesDeTarefa();
     await expect(painel(page)).toContainText(textos.pedir.tarefasHoje(limites.tarefasHoje, limites.tarefasPorDia));
@@ -180,18 +181,22 @@ test.describe('Otto', () => {
     page.on('request', (pedido) => {
       if (pedido.method() === 'POST' && /\/api\/tarefas\/[^/]+\/aprovar$/.test(new URL(pedido.url()).pathname)) aprovacoes.push(pedido.url());
     });
-    await pedir(page, 'título na cor de destaque e um pouco maior', 'ajuste');
+    await pedir(page, 'deixa o título em azul', 'ajuste');
     await expect(estado(page, 'em_revisao')).toBeVisible(ATE_TERMINAR);
+    await expect(estado(page, 'em_revisao')).not.toHaveAttribute('data-parou', 'sim');
     expect(aprovacoes).toEqual([]);
     const ajuste = await api.tarefaViva(peca.id);
-    expect((ajuste?.confirmacao as { motivos?: unknown[] } | undefined)?.motivos ?? []).toEqual([]);
-    expect(camada(await api.abrir(peca.id), 'Título').tamanho).not.toBe(titulo.tamanho);
-    // só a camada mexida fica marcada, e a pendência leva até ela
+    expect(ajuste?.fim).toBe('entregue');
+    // uma camada de texto ficou azul, e só ela está marcada como do Otto
+    const azuis = textosDaPeca(await api.abrir(peca.id)).filter((n) => String(n.cor).toLowerCase() === AZUL);
+    expect(azuis).toHaveLength(1);
+    const mexida = azuis[0]?.nome ?? '';
     await expect(editor.arvore.locator('[data-otto]')).toHaveCount(1);
+    await expect(editor.linha(mexida).locator('[data-otto], [role=img]').first()).toBeVisible();
+    // as pendências (se a verificação acusou contraste) vêm contadas antes dos botões; zero também é dito
     await expect(painel(page).getByRole('heading', { name: textos.revisao.pendencias(ajuste?.pendencias.length ?? 0) })).toBeVisible();
-    await painel(page).getByRole('button', { name: VER_PENDENCIA }).first().click();
-    expect(await editor.selecionadas()).toEqual(['Título']);
     // a edição continua travada até a revisão ser resolvida
+    await editor.linha(mexida).click();
     await editor.teclar('ArrowRight');
     await expect(editor.alerta).toContainText(textos.trava.emRevisao);
 
@@ -200,9 +205,86 @@ test.describe('Otto', () => {
     await expect(resultado(page, 'desfeita')).toBeVisible();
     await expect(trava(page)).toHaveCount(0);
     await expect(editor.arvore.locator('[data-otto]')).toHaveCount(0);
-    const depois = camada(await api.abrir(peca.id), 'Título');
-    expect([depois.tamanho, depois.altura, depois.cor, depois.x]).toEqual([titulo.tamanho, titulo.altura, titulo.cor, titulo.x]);
+    expect(textosDaPeca(await api.abrir(peca.id)).map((n) => [n.nome, n.cor])).toEqual(antes);
     expect((await api.tarefas(peca.id)).itens.map((t) => t.estado)).toEqual(['desfeita']);
+  });
+
+  test('pedido maior pelo campo: chega ao "pode", cria as pranchetas novas, e dá para descartar uma na revisão', async ({ editor, criarPeca, api }) => {
+    const peca = await criarPeca({ nome: codigo() });
+    await editor.abrir(peca);
+    const { page } = editor;
+    const antes = (await api.abrir(peca.id)).arvore.pranchetas.map((p) => p.nome);
+
+    await pedir(page, 'faz também um quadrado e um banner com o aviso do novo horário', 'pedido');
+    // o plano mexe em mais de uma prancheta: o Otto pede o "pode", e nada mudou na peça
+    await expect(estado(page, 'aguardando_confirmacao')).toBeVisible(ATE_O_PODE);
+    await expect(trava(page)).toContainText(textos.trava.aguardando);
+    expect((await api.abrir(peca.id)).arvore.pranchetas.map((p) => p.nome)).toEqual(antes);
+    expect((await api.tarefaViva(peca.id))?.confirmacao).toBeTruthy();
+    await botao(page, textos.pode.aprovar).click();
+
+    await expect(estado(page, 'em_revisao')).toBeVisible(ATE_TERMINAR);
+    const criadas = (await api.abrir(peca.id)).arvore.pranchetas.filter((p) => !antes.includes(p.nome));
+    expect(criadas).toHaveLength(2);
+    // o que já existia não foi tocado
+    expect(camada(await api.abrir(peca.id), 'Bloco')).toMatchObject(camada(peca, 'Bloco'));
+    const [fica, sai] = criadas as [(typeof criadas)[0], (typeof criadas)[0]];
+
+    // descartar uma prancheta: pede confirmação, e só ela sai; a outra continua em revisão
+    await botao(page, textos.revisao.descartarPrancheta(sai.nome)).click();
+    await expect(painel(page).getByText(textos.revisao.confirmarDescarte(sai.nome))).toBeVisible();
+    await painel(page).getByRole('button', { name: textos.revisao.descartar, exact: true }).click();
+    await expect.poll(async () => (await api.abrir(peca.id)).arvore.pranchetas.map((p) => p.nome)).toEqual([...antes, fica.nome]);
+    await expect(editor.linha(sai.nome)).toHaveCount(0);
+    await expect(estado(page, 'em_revisao')).toBeVisible();
+
+    await botao(page, textos.revisao.aceitar).click();
+    await expect(resultado(page, 'aceita')).toBeVisible();
+    await expect(trava(page)).toHaveCount(0);
+    expect((await api.abrir(peca.id)).arvore.pranchetas.map((p) => p.nome)).toEqual([...antes, fica.nome]);
+  });
+
+  test('pedido livre numa peça vazia, pelo campo: cria um formato só, sem "pode", e vai para a revisão', async ({ editor, criarPeca, api }) => {
+    const peca = await criarPeca({ nome: codigo(), operacoes: 'vazia' });
+    await editor.abrir(peca);
+    const { page } = editor;
+    // peça vazia não tem "ajuste rápido" nem "pedido maior": o pedido cria a peça
+    await expect(painel(page).getByRole('radio')).toHaveCount(0);
+    await pedir(page, 'aviso do novo horário, só com tipografia: abrimos às 7h');
+
+    await expect(estado(page, 'em_revisao')).toBeVisible(ATE_TERMINAR);
+    const criada = await api.abrir(peca.id);
+    expect(criada.arvore.pranchetas).toHaveLength(1);
+    expect(camadas(criada.arvore.pranchetas[0]?.filhos ?? []).length).toBeGreaterThan(3);
+    await expect(editor.arvore.locator('[data-otto]').first()).toBeVisible();
+    // o Otto declara o que escreveu por conta própria: a pendência aparece antes dos botões
+    const tarefa = await api.tarefaViva(peca.id);
+    expect(tarefa?.pendencias.length).toBeGreaterThan(0);
+    await expect(painel(page).getByRole('heading', { name: textos.revisao.pendencias(tarefa?.pendencias.length ?? 0) })).toBeVisible();
+
+    await botao(page, textos.revisao.desfazer).click();
+    await expect(resultado(page, 'desfeita')).toBeVisible();
+    expect((await api.abrir(peca.id)).arvore.pranchetas).toEqual([]);
+  });
+
+  test('ajuste que não começou (peça sem texto): o painel diz que nada mudou e devolve o campo de pedir', async ({ editor, criarPeca, api }) => {
+    // no modelo roteirizado, o ajuste precisa de uma camada de texto; sem ela a tarefa falha antes de alterar
+    const peca = await criarPeca({
+      nome: codigo(),
+      operacoes: [
+        { op: 'criarPrancheta', nome: 'Feed', largura: 1080, altura: 1350, fundo: '#f4efe3' },
+        { op: 'criarNo', prancheta: 'Feed', no: { tipo: 'forma', nome: 'Bloco', forma: 'retangulo', x: 100, y: 100, largura: 400, altura: 300, preenchimento: '#c0392b' } },
+      ],
+    });
+    await editor.abrir(peca);
+    const { page } = editor;
+    await pedir(page, 'deixa o título em azul', 'ajuste');
+    await expect(resultado(page, 'falhou')).toBeVisible(ATE_TERMINAR);
+    await expect(trava(page)).toHaveCount(0);
+    await expect(botao(page, textos.resultado.tentarDeNovo)).toBeVisible();
+    await expect(painel(page).getByRole('textbox', { name: textos.pedir.campo })).toBeVisible();
+    expect(camada(await api.abrir(peca.id), 'Bloco')).toMatchObject({ x: 100, y: 100 });
+    expect((await api.tarefas(peca.id)).viva).toBeUndefined();
   });
 
   test('interromper no meio: o que já foi feito fica para revisar, dito como não terminado, e sai inteiro ao desfazer', async ({ editor, criarPeca, api }) => {

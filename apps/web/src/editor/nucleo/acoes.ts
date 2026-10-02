@@ -287,6 +287,23 @@ export function loteDeInserirImagem(doc: Documento, pranchetaId: string | undefi
   return { descricao: textos.historico.inserir(nome), operacoes: [...d.antes, { op: 'criarNo', prancheta: d.alvo, no: no as never }] };
 }
 
+/**
+ * A textura entra por cima de tudo, cobrindo a prancheta inteira, com o modo de mesclagem e a opacidade
+ * com que costuma ser usada (vêm do servidor, junto do arquivo). É uma camada de imagem como outra
+ * qualquer: o designer muda modo, opacidade e ordem depois.
+ */
+export function loteDeInserirTextura(
+  doc: Documento,
+  pranchetaId: string | undefined,
+  textura: { no: { arquivo: string; larguraOriginal: number; alturaOriginal: number; modoDeMesclagem: string; opacidade: number } },
+  nomeDaTextura: string,
+): LoteParaAplicar {
+  const d = destino(doc, pranchetaId);
+  const nome = nomeLivre(d.ocupados, nomeDaTextura, (n) => `${nomeDaTextura} ${n}`);
+  const no = { ...textura.no, tipo: 'imagem', nome, ajuste: 'cobrir', x: 0, y: 0, largura: d.largura, altura: d.altura };
+  return { descricao: textos.historico.inserir(nome), operacoes: [...d.antes, { op: 'criarNo', prancheta: d.alvo, no: no as never }] };
+}
+
 /** O vetor que a API importou do SVG (`no` pronto para criarNo): faltam nome, posição e tamanho. */
 export function loteDeInserirVetor(
   doc: Documento,

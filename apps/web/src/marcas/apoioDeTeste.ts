@@ -38,7 +38,6 @@ export function servicosDeMentira(parcial: Parcial = {}, inicial: { marcas?: Mar
   let marcas = [...(inicial.marcas ?? [])];
   const tarefas = {
     limites: vi.fn(async () => LIMITES as LimitesDeTarefa | undefined),
-    pedir: vi.fn(async () => ({ ok: true as const, tarefa: { id: novoId() } as never })),
     daPeca: vi.fn(async () => ({ itens: [] }) as never),
     ...parcial.tarefas,
   };
@@ -88,7 +87,11 @@ export function servicosDeMentira(parcial: Parcial = {}, inicial: { marcas?: Mar
       trazer: vi.fn(async () => ({ ok: false as const, codigo: 'imagem_nao_buscada' })),
       ...parcial.imagens,
     },
-    pecas: { criar: vi.fn(async (nome?: string) => ({ ok: true as const, peca: { id: ID_DA_PECA, nome: nome ?? 'Sem título', formatos: 0, alteradoEm: QUANDO } })), ...parcial.pecas },
+    pecas: {
+      criar: vi.fn(async (nome?: string) => ({ ok: true as const, peca: { id: ID_DA_PECA, nome: nome ?? 'Sem título', formatos: 0, alteradoEm: QUANDO } })),
+      criarComTarefa: vi.fn(async () => ({ ok: true as const, pecaId: ID_DA_PECA })),
+      ...parcial.pecas,
+    },
     tarefas: vi.fn(() => tarefas),
   };
   return {

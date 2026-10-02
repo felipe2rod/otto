@@ -15,6 +15,12 @@ export const pecas = {
   novaPeca: 'Nova peça',
   criando: 'Criando…',
   pecaEmBranco: 'Peça em branco',
+  filtro: {
+    rotulo: 'Marca',
+    todas: 'Todas as marcas',
+    nenhuma: (marca: string): string => `Nenhuma peça da marca ${marca}.`,
+    novaPara: (marca: string): string => `Nova peça para ${marca}`,
+  },
   comEsteBriefing: 'Nova peça com este briefing',
   carregarMais: 'Carregar mais peças',
   acoes: (nome: string): string => `Ações de ${nome}`,

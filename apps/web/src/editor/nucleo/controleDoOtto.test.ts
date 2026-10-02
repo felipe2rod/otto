@@ -109,6 +109,14 @@ describe('pedir e acompanhar', () => {
     expect(otto.armazem.obter().ocupado).toBe(false);
   });
 
+  it('depois de pedir, relê os limites: é de lá que a tela sabe atrás de que peça a tarefa está na fila', async () => {
+    conexoes.push({ eventos: [], termina: 'caiu' });
+    const antes = vi.mocked(api.limites).mock.calls.length;
+    expect(await otto.pedir({ tipo: 'ajuste', pedido: 'x' })).toBe(true);
+    expect(vi.mocked(api.limites).mock.calls.length).toBe(antes + 1);
+    otto.parar();
+  });
+
   it('pedido recusado: guarda o código para a frase, e não há tarefa em tela', async () => {
     vi.mocked(api.pedir).mockResolvedValueOnce({ ok: false, codigo: 'limite_de_tarefas', detalhe: { motivo: 'fila_cheia' } });
     expect(await otto.pedir({ tipo: 'ajuste', pedido: 'x' })).toBe(false);

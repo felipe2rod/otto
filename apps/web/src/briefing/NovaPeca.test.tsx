@@ -33,8 +33,10 @@ const criar = () => screen.getByRole('button', { name: new RegExp(`^${textos.rod
 const formato = (nome: string) => screen.getByRole('button', { name: new RegExp(`^${nome} \\d`) }) as HTMLButtonElement;
 const fonteDasImagens = (qual: string) => screen.getByRole('radio', { name: textos.imagens.fontes[qual] as string }) as HTMLInputElement;
 const situacao = () => document.querySelector('[data-falta]');
-const pedidoFeito = (tarefas: Awaited<ReturnType<typeof montar>>['tarefas']) =>
-  (tarefas.pedir.mock.calls[0] as unknown[] | undefined)?.[0] as { briefing: Record<string, unknown>; cuidado: string; briefingId?: string };
+/** O que foi mandado em POST /api/documentos/com-tarefa: a peça e a tarefa numa chamada só. */
+const chamada = (pecas: Awaited<ReturnType<typeof montar>>['pecas']) =>
+  pecas.criarComTarefa.mock.calls[0]?.[0] as { nome?: string; tarefa: { briefing: Record<string, unknown>; cuidado: string; briefingId?: string } };
+const pedidoFeito = (pecas: Awaited<ReturnType<typeof montar>>['pecas']) => chamada(pecas).tarefa;
 
 /** O mínimo para o botão acender: título, um formato e "sem imagem". */
 function preencherOMinimo() {
@@ -54,15 +56,17 @@ describe('nova peça: o que falta e o envio', () => {
   });
 
   it('com título, formato e a imagem resolvida: cria a peça com o nome do título, pede a tarefa com o formulário e abre o editor', async () => {
-    const { pecas, tarefas, irPara, servicos, guarda } = await montar();
+    const { pecas, irPara, guarda } = await montar();
     preencherOMinimo();
     expect(situacao()).toBeNull();
     expect(criar().disabled).toBe(false);
     await act(async () => fireEvent.click(criar()));
 
-    expect(pecas.criar).toHaveBeenCalledWith('Abrimos às 7h');
-    expect(servicos.tarefas).toHaveBeenLastCalledWith(ID_DA_PECA);
-    const pedido = pedidoFeito(tarefas);
+    // uma chamada só cria a peça e a tarefa: se a tarefa não nascer, não fica peça vazia para trás
+    expect(pecas.criarComTarefa).toHaveBeenCalledTimes(1);
+    expect(pecas.criar).not.toHaveBeenCalled();
+    expect(chamada(pecas).nome).toBe('Abrimos às 7h');
+    const pedido = pedidoFeito(pecas);
     expect(pedido).toEqual({
       tipo: 'briefing',
       cuidado: 'cuidadoso',
@@ -85,24 +89,23 @@ describe('nova peça: o que falta e o envio', () => {
   });
 
   it('formato próprio entra com nome e medidas, e sai com um clique', async () => {
-    const { tarefas } = await montar();
+    const { pecas } = await montar();
     preencherOMinimo();
     fireEvent.change(campo(textos.formatos.nomeDoOutro), { target: { value: 'Faixa' } });
     fireEvent.change(screen.getByRole('spinbutton', { name: textos.formatos.largura, hidden: true }), { target: { value: '2000' } });
     fireEvent.change(screen.getByRole('spinbutton', { name: textos.formatos.altura, hidden: true }), { target: { value: '500' } });
     fireEvent.click(screen.getByRole('button', { name: textos.formatos.adicionar, hidden: true }));
     await act(async () => fireEvent.click(criar()));
-    expect(pedidoFeito(tarefas).briefing.formatos).toEqual([
+    expect(pedidoFeito(pecas).briefing.formatos).toEqual([
       { nome: 'Feed', largura: 1080, altura: 1350 },
       { nome: 'Faixa', largura: 2000, altura: 500 },
     ]);
   });
 
-  it('o briefing não chegou: a tela diz que nada se perdeu, e tentar de novo usa a MESMA peça', async () => {
+  it('o briefing não chegou: a tela diz que nada se perdeu, o rascunho fica, e tentar de novo manda outra vez (nenhuma peça ficou criada)', async () => {
     let vez = 0;
-    const { pecas, tarefas, irPara, guarda } = await montar({
-      servicos: [{ tarefas: { pedir: vi.fn(async () => (++vez === 1 ? { ok: false as const, codigo: 'erro_interno' } : { ok: true as const, tarefa: {} as never })) } }],
-    });
+    const criarComTarefa = vi.fn(async () => (++vez === 1 ? { ok: false as const, codigo: 'erro_interno' } : { ok: true as const, pecaId: ID_DA_PECA }));
+    const { pecas, irPara, guarda } = await montar({ servicos: [{ pecas: { criarComTarefa } }] });
     preencherOMinimo();
     await act(async () => fireEvent.click(criar()));
     expect(screen.getByRole('alert').textContent).toBe(textos.erros.padrao);
@@ -110,17 +113,17 @@ describe('nova peça: o que falta e o envio', () => {
     expect(lerRascunhoLocal(guarda)?.titulo).toBe('Abrimos às 7h');
 
     await act(async () => fireEvent.click(criar()));
-    expect(pecas.criar).toHaveBeenCalledTimes(1);
-    expect(tarefas.pedir).toHaveBeenCalledTimes(2);
+    expect(pecas.criarComTarefa).toHaveBeenCalledTimes(2);
+    expect(pecas.criar).not.toHaveBeenCalled();
     expect(irPara).toHaveBeenCalledWith(`/editor/p/${ID_DA_PECA}`);
   });
 
   it('recusa com código conhecido tem a frase dela (marca apagada, limite do dia); o código nunca aparece', async () => {
-    const { tarefas } = await montar({ servicos: [{ tarefas: { pedir: vi.fn(async () => ({ ok: false as const, codigo: 'marca_desconhecida' })) } }] });
+    const { pecas } = await montar({ servicos: [{ pecas: { criarComTarefa: vi.fn(async () => ({ ok: false as const, codigo: 'marca_desconhecida' })) } }] });
     preencherOMinimo();
     await act(async () => fireEvent.click(criar()));
     expect(screen.getByRole('alert').textContent).toBe(textos.erros.marca_desconhecida);
-    tarefas.pedir.mockResolvedValueOnce({ ok: false as const, codigo: 'limite_diario' });
+    pecas.criarComTarefa.mockResolvedValueOnce({ ok: false as const, codigo: 'limite_diario' });
     await act(async () => fireEvent.click(criar()));
     expect(screen.getByRole('alert').textContent).toBe(erros.doCodigo('limite_diario'));
   });
@@ -131,31 +134,45 @@ describe('nova peça: o que falta e o envio', () => {
     expect(criar().disabled).toBe(true);
     expect(situacao()?.textContent).toBe(textos.rodape.semLimite.limite_da_conta);
     cleanup();
-    await montar({ servicos: [{ tarefas: { limites: vi.fn(async () => ({ ...LIMITES, naFila: 1 })) } }] });
+    const naFrente = [{ tarefaId: ID_DO_BRIEFING, documentoId: ID_DA_PECA, nome: 'Cartaz do jazz', estado: 'rodando' as const }];
+    await montar({ servicos: [{ tarefas: { limites: vi.fn(async () => ({ ...LIMITES, naFila: 1, naFrente })) } }] });
     expect(screen.getByRole('button', { name: textos.rodape.criarNaFila })).toBeDefined();
+    // e diz qual peça está na frente
+    preencherOMinimo();
+    expect(screen.getByText(textos.rodape.atrasDe(['Cartaz do jazz']))).toBeDefined();
+  });
+
+  it('o nome acessível de cada campo é só o rótulo (o rótulo envolve o campo: sem nome próprio, levaria o valor junto)', async () => {
+    await montar({ servicos: [{}, { marcas: [CAFE] }] });
+    fireEvent.click(fonteDasImagens('banco'));
+    fireEvent.change(screen.getByRole('combobox', { name: textos.marca.rotulo }), { target: { value: 'nova' } });
+    const semNome = [...document.querySelectorAll('label input[type=text], label textarea, label select')].filter((c) => !c.getAttribute('aria-label'));
+    expect(semNome.map((c) => c.outerHTML.slice(0, 90))).toEqual([]);
+    expect(titulo().getAttribute('aria-label')).toBe(textos.campos.titulo);
+    expect(titulo().required).toBe(true);
   });
 
   it('a peça em branco continua existindo, em segundo plano: cria sem tarefa e abre o editor', async () => {
-    const { pecas, tarefas, irPara } = await montar();
+    const { pecas, irPara } = await montar();
     await act(async () => fireEvent.click(screen.getByRole('button', { name: textos.rodape.emBranco })));
     expect(pecas.criar).toHaveBeenCalledWith();
-    expect(tarefas.pedir).not.toHaveBeenCalled();
+    expect(pecas.criarComTarefa).not.toHaveBeenCalled();
     expect(irPara).toHaveBeenCalledWith(`/editor/p/${ID_DA_PECA}`);
   });
 });
 
 describe('nova peça: a marca', () => {
   it('sem marca, a tela diz que o Otto escolhe; nenhuma identidade vai no pedido', async () => {
-    const { tarefas } = await montar({ servicos: [{}, { marcas: [CAFE] }] });
+    const { pecas } = await montar({ servicos: [{}, { marcas: [CAFE] }] });
     expect(screen.getByText(textos.marca.semMarcaExplica)).toBeDefined();
     preencherOMinimo();
     await act(async () => fireEvent.click(criar()));
-    expect(pedidoFeito(tarefas).briefing).not.toHaveProperty('identidade');
-    expect(pedidoFeito(tarefas).briefing).not.toHaveProperty('marcaId');
+    expect(pedidoFeito(pecas).briefing).not.toHaveProperty('identidade');
+    expect(pedidoFeito(pecas).briefing).not.toHaveProperty('marcaId');
   });
 
   it('escolhida a marca: a identidade aparece numa linha, o rodapé e as restrições dela são mostrados, e o pedido leva só o id', async () => {
-    const { tarefas } = await montar({ servicos: [{}, { marcas: [CAFE] }] });
+    const { pecas } = await montar({ servicos: [{}, { marcas: [CAFE] }] });
     fireEvent.change(screen.getByRole('combobox', { name: textos.marca.rotulo }), { target: { value: ID_DA_MARCA } });
     const resumo = document.querySelector('[data-resumo-da-marca]') as HTMLElement;
     expect(resumo.querySelectorAll('[data-cor]')).toHaveLength(2);
@@ -165,7 +182,7 @@ describe('nova peça: a marca', () => {
 
     preencherOMinimo();
     await act(async () => fireEvent.click(criar()));
-    const { briefing } = pedidoFeito(tarefas);
+    const { briefing } = pedidoFeito(pecas);
     expect(briefing.marcaId).toBe(ID_DA_MARCA);
     // o servidor completa com o que a marca tem: o formulário não repete
     for (const chave of ['identidade', 'logo', 'icones', 'restricoes']) expect(briefing).not.toHaveProperty(chave);
@@ -181,7 +198,7 @@ describe('nova peça: a marca', () => {
   });
 
   it('a marca nasce dentro do primeiro briefing: "nova marca" abre os campos, e ela é salva junto ao criar a peça', async () => {
-    const { cadastros, tarefas } = await montar();
+    const { cadastros, pecas } = await montar();
     fireEvent.change(screen.getByRole('combobox', { name: textos.marca.rotulo }), { target: { value: 'nova' } });
     fireEvent.change(campo(textosDeMarcas.campos.nome), { target: { value: 'Padaria Sol' } });
     fireEvent.change(campo(textosDeMarcas.campos.rodape), { target: { value: '@padariasol' } });
@@ -189,7 +206,7 @@ describe('nova peça: a marca', () => {
     await act(async () => fireEvent.click(criar()));
     expect(cadastros.salvarMarca).toHaveBeenCalledWith({ nome: 'Padaria Sol', rodape: '@padariasol' });
     const salva = (await cadastros.salvarMarca.mock.results[0]?.value) as { marca: { id: string } };
-    expect(pedidoFeito(tarefas).briefing.marcaId).toBe(salva.marca.id);
+    expect(pedidoFeito(pecas).briefing.marcaId).toBe(salva.marca.id);
   });
 
   it('"editar a marca" abre os campos ali mesmo e salva a marca, sem sair do formulário', async () => {
@@ -210,7 +227,7 @@ describe('nova peça: imagens', () => {
   const fotos = () => within(screen.getByRole('list', { name: textos.imagens.lista })).getAllByRole('listitem');
 
   it('foto enviada mostra as medidas e vai no pedido pelo hash', async () => {
-    const { tarefas, arquivos } = await montar();
+    const { pecas, arquivos } = await montar();
     fireEvent.change(titulo(), { target: { value: 'Abrimos às 7h' } });
     fireEvent.click(formato('Banner'));
     expect(situacao()?.textContent).toBe(textos.rodape.faltas.imagem);
@@ -218,7 +235,7 @@ describe('nova peça: imagens', () => {
     expect(arquivos.enviarImagem).toHaveBeenCalledTimes(1);
     expect(fotos()[0]?.querySelector('[data-medidas]')?.textContent).toBe(textos.imagens.medidas(800, 600));
     await act(async () => fireEvent.click(criar()));
-    expect(pedidoFeito(tarefas).briefing.imagens).toEqual({ fonte: 'minhas', arquivos: [SHB] });
+    expect(pedidoFeito(pecas).briefing.imagens).toEqual({ fonte: 'minhas', arquivos: [SHB] });
   });
 
   it('foto pequena para o formato: diz quanto será ampliada em cada formato, com o mesmo número do servidor, e NÃO bloqueia', async () => {
@@ -300,7 +317,7 @@ describe('nova peça: imagens', () => {
       origem,
       no: { tipo: 'imagem' as const, arquivo: SHA, larguraOriginal: 853, alturaOriginal: 1280 },
     };
-    const { tarefas, pecas } = await montar({
+    const { pecas } = await montar({
       servicos: [{ imagens: { buscar: vi.fn(async () => ({ ok: true as const, resultado })), trazer: vi.fn(async () => ({ ok: true as const, imagem: trazida })) } }],
     });
     fireEvent.change(titulo(), { target: { value: 'Pão quente' } });
@@ -309,18 +326,18 @@ describe('nova peça: imagens', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: textosDeImagens.campo }), { target: { value: 'padaria' } });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: textosDeImagens.buscar })));
     // buscar não envia o formulário
-    expect(pecas.criar).not.toHaveBeenCalled();
+    expect(pecas.criarComTarefa).not.toHaveBeenCalled();
     await act(async () => fireEvent.click(screen.getByRole('button', { name: textosDeImagens.trazerEsta('Fulana') })));
 
     expect(fotos()[0]?.querySelector('[data-origem]')?.textContent).toBe(textos.imagens.origem('Banco de Teste', 'Fulana'));
     // a foto do banco chega pequena: o aviso de ampliação vale para ela também
     expect(fotos()[0]?.querySelector('[data-ampliacao]')?.textContent).toContain('150%');
     await act(async () => fireEvent.click(criar()));
-    expect(pedidoFeito(tarefas).briefing.imagens).toEqual({ fonte: 'minhas', arquivos: [SHA] });
+    expect(pedidoFeito(pecas).briefing.imagens).toEqual({ fonte: 'minhas', arquivos: [SHA] });
   });
 
   it('"o Otto busca": os termos vão como sugestão; com objetivo de vender, a tela avisa que banco raramente tem o produto', async () => {
-    const { tarefas } = await montar();
+    const { pecas } = await montar();
     preencherOMinimo();
     fireEvent.click(fonteDasImagens('banco'));
     expect(document.querySelector('[data-aviso-de-produto]')).toBeNull();
@@ -328,7 +345,7 @@ describe('nova peça: imagens', () => {
     expect(document.querySelector('[data-aviso-de-produto]')).not.toBeNull();
     fireEvent.change(campo(textos.imagens.termos), { target: { value: 'xícara' } });
     await act(async () => fireEvent.click(criar()));
-    expect(pedidoFeito(tarefas).briefing).toMatchObject({ objetivo: 'vender', imagens: { fonte: 'banco', termos: 'xícara' } });
+    expect(pedidoFeito(pecas).briefing).toMatchObject({ objetivo: 'vender', imagens: { fonte: 'banco', termos: 'xícara' } });
   });
 });
 
@@ -367,14 +384,47 @@ describe('nova peça: rascunho, briefing salvo e reuso', () => {
   const comSalvo = { cadastros: { briefings: vi.fn(async () => [{ id: ID_DO_BRIEFING, nome: 'Avisos do café', usos: 3, alteradoEm: QUANDO }]), briefing: vi.fn(async () => SALVO) } };
 
   it('?briefing= abre o formulário com o que o briefing salvo tem; só falta o título, e o pedido conta o uso', async () => {
-    const { tarefas } = await montar({ servicos: [comSalvo, { marcas: [CAFE] }], origem: { briefingId: ID_DO_BRIEFING }, rascunho: { ...ESTADO_VAZIO, titulo: 'rascunho antigo' } });
+    const { pecas } = await montar({ servicos: [comSalvo, { marcas: [CAFE] }], origem: { briefingId: ID_DO_BRIEFING }, rascunho: { ...ESTADO_VAZIO, titulo: 'rascunho antigo' } });
     expect(titulo().value).toBe('');
     expect(formato('Feed').getAttribute('aria-pressed')).toBe('true');
     expect((screen.getByRole('combobox', { name: textos.marca.rotulo }) as HTMLSelectElement).value).toBe(ID_DA_MARCA);
     expect(situacao()?.textContent).toBe(textos.rodape.faltas.titulo);
     fireEvent.change(titulo(), { target: { value: 'Fechado no feriado' } });
     await act(async () => fireEvent.click(criar()));
-    expect(pedidoFeito(tarefas)).toMatchObject({ briefingId: ID_DO_BRIEFING, cuidado: 'autoral', briefing: { marcaId: ID_DA_MARCA } });
+    expect(pedidoFeito(pecas)).toMatchObject({ briefingId: ID_DO_BRIEFING, cuidado: 'autoral', briefing: { marcaId: ID_DA_MARCA } });
+  });
+
+  it('abrir de um briefing salvo com rascunho guardado: avisa, e NÃO sobrescreve o rascunho enquanto o designer não decidir', async () => {
+    const antigo = { ...ESTADO_VAZIO, titulo: 'rascunho antigo' };
+    const { guarda, pecas } = await montar({ servicos: [comSalvo, { marcas: [CAFE] }], origem: { briefingId: ID_DO_BRIEFING }, rascunho: antigo });
+    expect(document.querySelector('[data-rascunho-guardado]')).not.toBeNull();
+    fireEvent.change(titulo(), { target: { value: 'Fechado no feriado' } });
+    expect(lerRascunhoLocal(guarda)?.titulo).toBe('rascunho antigo');
+    // enviar esta peça também não apaga o rascunho da outra
+    await act(async () => fireEvent.click(criar()));
+    expect(pecas.criarComTarefa).toHaveBeenCalledTimes(1);
+    expect(lerRascunhoLocal(guarda)?.titulo).toBe('rascunho antigo');
+  });
+
+  it('"voltar ao rascunho" troca o formulário pelo que estava guardado; "descartar o rascunho" libera o lugar para este', async () => {
+    const antigo = { ...ESTADO_VAZIO, titulo: 'rascunho antigo' };
+    await montar({ servicos: [comSalvo, { marcas: [CAFE] }], origem: { briefingId: ID_DO_BRIEFING }, rascunho: antigo });
+    fireEvent.click(screen.getByRole('button', { name: textos.rascunho.voltar }));
+    expect(titulo().value).toBe('rascunho antigo');
+    expect(document.querySelector('[data-rascunho-guardado]')).toBeNull();
+    cleanup();
+
+    const { guarda } = await montar({ servicos: [comSalvo, { marcas: [CAFE] }], origem: { briefingId: ID_DO_BRIEFING }, rascunho: antigo });
+    fireEvent.click(screen.getByRole('button', { name: textos.rascunho.descartar }));
+    expect(document.querySelector('[data-rascunho-guardado]')).toBeNull();
+    expect(lerRascunhoLocal(guarda)).toBeUndefined();
+    fireEvent.change(titulo(), { target: { value: 'Fechado no feriado' } });
+    expect(lerRascunhoLocal(guarda)?.titulo).toBe('Fechado no feriado');
+  });
+
+  it('sem rascunho guardado, abrir de um briefing salvo não mostra o aviso', async () => {
+    await montar({ servicos: [comSalvo, { marcas: [CAFE] }], origem: { briefingId: ID_DO_BRIEFING } });
+    expect(document.querySelector('[data-rascunho-guardado]')).toBeNull();
   });
 
   it('"começar de" lista os salvos e carrega o escolhido', async () => {
@@ -424,22 +474,28 @@ describe('nova peça: rascunho, briefing salvo e reuso', () => {
       restricoes: ['nunca foto de pessoa'],
     });
     const daPeca = vi.fn(async () => ({ itens: [{ entrada: { tipo: 'ajuste', pedido: 'x' } }, { entrada: { tipo: 'briefing', briefing: daTarefa, cuidado: 'direto' } }] }) as never);
-    const { tarefas, servicos } = await montar({ servicos: [{ tarefas: { daPeca } }, { marcas: [CAFE] }], origem: { pecaId: 'peca-antiga' } });
+    const { pecas, servicos } = await montar({ servicos: [{ tarefas: { daPeca } }, { marcas: [CAFE] }], origem: { pecaId: 'peca-antiga' } });
     expect(servicos.tarefas).toHaveBeenCalledWith('peca-antiga');
     expect(titulo().value).toBe('Abrimos às 7h');
     expect(campo(textos.campos.rodape).value).toBe('');
     await act(async () => fireEvent.click(criar()));
-    const pedido = pedidoFeito(tarefas);
+    const pedido = pedidoFeito(pecas);
     expect(pedido.cuidado).toBe('direto');
     expect(pedido.briefing).toEqual({ versao: 1, marcaId: ID_DA_MARCA, formatos: [{ nome: 'Feed', largura: 1080, altura: 1350 }], textos: { titulo: 'Abrimos às 7h' }, imagens: { fonte: 'nenhuma' } });
-    // é uma peça NOVA: a tarefa é pedida na peça criada agora, não na antiga
-    expect(servicos.tarefas).toHaveBeenLastCalledWith(ID_DA_PECA);
+    // é uma peça NOVA: da antiga só se leu o briefing
+    expect(pecas.criarComTarefa).toHaveBeenCalledTimes(1);
   });
 
   it('?peca= de uma peça que não nasceu de briefing: diz isso e abre em branco', async () => {
     await montar({ origem: { pecaId: 'peca-antiga' } });
     expect(screen.getByText(textos.comecarDe.daPecaSemBriefing)).toBeDefined();
     expect(titulo().value).toBe('');
+  });
+
+  it('?peca= e a leitura falhou: a tela diz que não conseguiu ler, e não que a peça "não nasceu de um briefing"', async () => {
+    await montar({ servicos: [{ tarefas: { daPeca: vi.fn(async () => undefined) } }], origem: { pecaId: 'peca-antiga' } });
+    expect(screen.getByText(textos.comecarDe.naoLeuAPeca)).toBeDefined();
+    expect(screen.queryByText(textos.comecarDe.daPecaSemBriefing)).toBeNull();
   });
 
   it('as marcas não carregaram: o formulário segue sem marca e diz, em vez de travar', async () => {

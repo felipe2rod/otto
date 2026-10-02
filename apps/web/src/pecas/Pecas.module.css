@@ -230,3 +230,44 @@
   color: #ffd9d3;
   font-weight: 600;
 }
+
+.miniatura[data-com-imagem="sim"] {
+  border-style: solid;
+  border-color: var(--linha);
+  overflow: hidden;
+}
+
+.miniatura img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* a prancheta inteira, sem cortar: o formato faz parte do que o cartão mostra */
+  object-fit: contain;
+}
+
+.filtro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* fica à direita, junto dos botões: a linha é a do título da página */
+  margin-right: 8px;
+  font: 600 11px var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+}
+
+.filtro select {
+  padding: 7px 10px;
+  background: var(--grafite-1);
+  border: 1px solid var(--grafite-4);
+  border-radius: 4px;
+  color: var(--papel);
+  font: 14px var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.vazio p {
+  margin: 0 0 18px;
+}

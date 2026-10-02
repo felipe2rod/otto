@@ -96,7 +96,7 @@ function DoNo({ no, doc, travado }: { no: No; doc: Documento; travado: boolean }
         {no.tipo !== 'ajuste' && (
           <label className={estilos.campo} data-largo="sim">
             <span>{p.mesclagem}</span>
-            <select value={no.modoDeMesclagem} disabled={desativado} onChange={(e) => alterar({ modoDeMesclagem: e.target.value }, p.mesclagem)}>
+            <select aria-label={p.mesclagem} value={no.modoDeMesclagem} disabled={desativado} onChange={(e) => alterar({ modoDeMesclagem: e.target.value }, p.mesclagem)}>
               {no.tipo === 'grupo' && <option value="atravessar">{textos.mesclagem.atravessar}</option>}
               {MODOS_DE_MESCLAGEM.map((modo) => (
                 <option key={modo} value={modo}>
@@ -167,7 +167,7 @@ function DoNo({ no, doc, travado }: { no: No; doc: Documento; travado: boolean }
           </div>
           <label className={estilos.campo}>
             <span>{p.ajuste}</span>
-            <select value={no.ajuste} disabled={desativado} onChange={(e) => alterar({ ajuste: e.target.value }, p.ajuste)}>
+            <select aria-label={p.ajuste} value={no.ajuste} disabled={desativado} onChange={(e) => alterar({ ajuste: e.target.value }, p.ajuste)}>
               <option value="cobrir">{p.ajustes.cobrir}</option>
               <option value="conter">{p.ajustes.conter}</option>
             </select>
@@ -253,7 +253,7 @@ function EscolhaDeFonte({
       </div>
       <label className={estilos.campo}>
         <span>{p.peso}</span>
-        <select value={peso} disabled={desativado} onChange={(e) => aoEscolherPeso(Number(e.target.value))}>
+        <select aria-label={p.peso} value={peso} disabled={desativado} onChange={(e) => aoEscolherPeso(Number(e.target.value))}>
           {pesos.map((n) => (
             <option key={n} value={n}>
               {p.pesos[n] ?? n}

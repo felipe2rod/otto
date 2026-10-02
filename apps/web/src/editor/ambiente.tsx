@@ -5,7 +5,7 @@
 // então pô-lo em contexto não faz ninguém renderizar de novo: quem renderiza é o seletor de cada
 // painel, quando o pedaço que ele lê muda.
 import type { Documento, No } from '@otto/documento';
-import type { ImagemTrazida } from '@otto/shared';
+import type { ImagemTrazida, TexturaTrazida } from '@otto/shared';
 import { createContext, type ReactNode, useContext } from 'react';
 import type { FaltasDoRender } from './casca/AvisosDoRender';
 import type { LoteParaAplicar } from './nucleo/acoes';
@@ -43,6 +43,8 @@ export interface AmbienteDoEditor {
   trazerFonte(familia: string, peso: number): Promise<boolean>;
   /** A imagem do banco, que já é arquivo da conta, vira camada (com a origem), por operação do catálogo. */
   inserirImagemTrazida(imagem: ImagemTrazida, nome: string): boolean;
+  /** A textura, que já é arquivo da conta, vira camada cobrindo a prancheta, por operação do catálogo. */
+  inserirTextura(textura: TexturaTrazida, nome: string): boolean;
 }
 
 const Contexto = createContext<AmbienteDoEditor | null>(null);

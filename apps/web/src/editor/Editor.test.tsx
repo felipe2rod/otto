@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { EventoDoFluxo } from '../api/fluxo';
 import type { ResultadoDeAbrir } from '../api/pecas';
-import { imagens as textosDeImagens } from '../textos/briefing';
+import { imagens as textosDeImagens, texturas as textosDeTexturas } from '../textos/briefing';
 import { editor as textos } from '../textos/editor';
 import { erros } from '../textos/erros';
 import { exportar as textosDeExportar } from '../textos/exportar';
@@ -51,6 +51,16 @@ function motorFalso(): MotorDeRender {
 
 type Lotes = NonNullable<FonteDaPeca['lotes']>;
 
+const TEXTURAS = [
+  { nome: 'papel', descricao: 'papel de algodão com fibras', modoDeMesclagem: 'multiplicacao', opacidade: 0.6, largura: 1600, altura: 1600 },
+  { nome: 'reticula', descricao: 'meio-tom de impressão', modoDeMesclagem: 'sobrepor', opacidade: 0.25, largura: 1600, altura: 1600 },
+];
+const TEXTURA_TRAZIDA = {
+  sha256: 'd'.repeat(64),
+  largura: 1600,
+  altura: 1600,
+  no: { tipo: 'imagem' as const, arquivo: 'd'.repeat(64), larguraOriginal: 1600, alturaOriginal: 1600, modoDeMesclagem: 'multiplicacao', opacidade: 0.6 },
+};
 const ORIGEM = { banco: 'Banco de Teste', autor: 'Fulana', licenca: 'Licença livre' };
 const BUSCA: ResultadoDaBuscaDeImagens = {
   banco: { id: 'banco-de-teste', nome: 'Banco de Teste', licenca: 'Licença livre', ladoMaximo: 1280 },
@@ -88,6 +98,7 @@ function montar(
     exportacoes?: Partial<NonNullable<FonteDaPeca['exportacoes']>>;
     tarefas?: Partial<NonNullable<FonteDaPeca['tarefas']>>;
     imagens?: Partial<NonNullable<FonteDaPeca['imagens']>>;
+    texturas?: Partial<NonNullable<FonteDaPeca['texturas']>>;
   } = {},
 ) {
   const motor = { ...motorFalso(), ...opcoes.motor };
@@ -115,6 +126,15 @@ function montar(
         }
       : {}),
     ...(opcoes.renomear ? { renomear: opcoes.renomear } : {}),
+    ...(opcoes.texturas
+      ? {
+          texturas: {
+            listar: vi.fn(async () => TEXTURAS),
+            trazer: vi.fn(async () => ({ ok: true as const, textura: TEXTURA_TRAZIDA })),
+            ...opcoes.texturas,
+          },
+        }
+      : {}),
     ...(opcoes.imagens
       ? {
           imagens: {
@@ -764,6 +784,60 @@ describe('casca do editor: banco de imagens', () => {
     const semBanco = montar({ abrir: aberta, lotes: {}, arquivos: {} });
     await waitFor(() => expect(semBanco.motor.definirDocumento).toHaveBeenCalled());
     expect(within(screen.getByRole('toolbar', { name: textos.ferramentas.rotulo })).queryByRole('button', { name: textosDeImagens.abrir })).toBeNull();
+  });
+});
+
+describe('casca do editor: texturas', () => {
+  const abrir = async (opcoes: Parameters<typeof montar>[0] = {}) => {
+    const m = montar({ abrir: aberta, lotes: {}, arquivos: {}, texturas: {}, ...opcoes });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    return m;
+  };
+  const enviados = (lotes: Lotes | undefined) => vi.mocked(lotes?.enviar as Lotes['enviar']).mock.calls.map((c) => c[0]);
+  const botao = () => within(screen.getByRole('toolbar', { name: textos.ferramentas.rotulo })).getByRole('button', { name: textosDeTexturas.abrir }) as HTMLButtonElement;
+
+  it('"texturas" lista as texturas com o modo e a opacidade de costume; usar uma cria a camada por `criarNo`, cobrindo a prancheta', async () => {
+    const { lotes, fonte } = await abrir();
+    fireEvent.click(botao());
+    const dialogo = screen.getByRole('dialog', { name: textosDeTexturas.titulo });
+    const itens = await within(dialogo).findAllByRole('listitem');
+    expect(itens).toHaveLength(2);
+    expect(itens[0]?.textContent).toContain('papel de algodão com fibras');
+    expect(itens[0]?.textContent).toContain(textosDeTexturas.comoEntra(textos.mesclagem.multiplicacao, 60));
+
+    await act(async () => fireEvent.click(within(dialogo).getByRole('button', { name: textosDeTexturas.usarEsta('papel') })));
+    expect(fonte.texturas?.trazer).toHaveBeenCalledWith('papel');
+    await waitFor(() => expect(enviados(lotes)).toHaveLength(1));
+    const prancheta = EXEMPLO.pranchetas[0];
+    expect(enviados(lotes)[0]?.operacoes[0]).toMatchObject({
+      op: 'criarNo',
+      no: { tipo: 'imagem', nome: 'papel', arquivo: 'd'.repeat(64), x: 0, y: 0, largura: prancheta?.largura, altura: prancheta?.altura, modoDeMesclagem: 'multiplicacao', opacidade: 0.6 },
+    });
+    expect(screen.getByRole('treeitem', { name: /^papel/ }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('as texturas não carregaram: o diálogo diz o erro (não "nenhuma textura"); a que não veio diz que não veio', async () => {
+    await abrir({ texturas: { listar: vi.fn(async () => undefined) } });
+    fireEvent.click(botao());
+    expect(await within(screen.getByRole('dialog', { name: textosDeTexturas.titulo })).findByRole('alert')).toBeDefined();
+    cleanup();
+    const { lotes } = await abrir({ texturas: { trazer: vi.fn(async () => ({ ok: false as const, codigo: 'nao_encontrado' })) } });
+    fireEvent.click(botao());
+    const dialogo = screen.getByRole('dialog', { name: textosDeTexturas.titulo });
+    const usar = await within(dialogo).findByRole('button', { name: textosDeTexturas.usarEsta('papel') });
+    await act(async () => fireEvent.click(usar));
+    expect(within(dialogo).getByRole('alert').textContent).toBe(textosDeTexturas.naoVeio('papel'));
+    expect(enviados(lotes)).toHaveLength(0);
+  });
+
+  it('peça só para leitura não põe textura; sem a biblioteca de texturas (a bancada), o botão não existe', async () => {
+    const m = montar({ abrir: aberta, arquivos: {}, texturas: {} });
+    await waitFor(() => expect(m.motor.definirDocumento).toHaveBeenCalled());
+    expect(botao().disabled).toBe(true);
+    cleanup();
+    const sem = montar({ abrir: aberta, lotes: {}, arquivos: {} });
+    await waitFor(() => expect(sem.motor.definirDocumento).toHaveBeenCalled());
+    expect(within(screen.getByRole('toolbar', { name: textos.ferramentas.rotulo })).queryByRole('button', { name: textosDeTexturas.abrir })).toBeNull();
   });
 });
 

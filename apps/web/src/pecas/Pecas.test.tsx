@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApiDePecas, PecaDaLista, ResultadoDaLista } from '../api/pecas';
 import { erros } from '../textos/erros';
@@ -10,7 +10,13 @@ afterEach(cleanup);
 const AGORA = '2026-10-01T12:00:00.000Z';
 const peca = (id: string, nome: string, extra: Partial<PecaDaLista> = {}): PecaDaLista => ({ id, nome, formatos: 2, alteradoEm: '2026-09-29T12:00:00.000Z', ...extra });
 
-function montar(inicial: ResultadoDaLista, api: Partial<ApiDePecas> = {}) {
+const ID_DA_MARCA = '0199a000-0000-7000-8000-00000000000a';
+const MARCAS = [
+  { id: ID_DA_MARCA, nome: 'Café Aurora', criadaEm: AGORA, alteradaEm: AGORA },
+  { id: '0199a000-0000-7000-8000-00000000000b', nome: 'Padaria Sol', criadaEm: AGORA, alteradaEm: AGORA },
+];
+
+function montar(inicial: ResultadoDaLista, api: Partial<ApiDePecas> = {}, opcoes: { marcaId?: string; marcas?: typeof MARCAS | undefined } = {}) {
   const irPara = vi.fn();
   const completa: ApiDePecas = {
     listar: vi.fn(async () => ({ estado: 'ok', pecas: [], proximoCursor: null }) as ResultadoDaLista),
@@ -18,10 +24,12 @@ function montar(inicial: ResultadoDaLista, api: Partial<ApiDePecas> = {}) {
     renomear: vi.fn(async (_id: string, nome: string) => ({ ok: true as const, nome })),
     duplicar: vi.fn(async (id: string) => ({ ok: true as const, peca: peca(`${id}-copia`, 'Crové (cópia)') })),
     arquivar: vi.fn(async () => ({ ok: true as const })),
+    criarComTarefa: vi.fn(),
     abrir: vi.fn(),
     ...api,
   };
-  render(<Pecas inicial={inicial} agora={AGORA} api={completa} irPara={irPara} />);
+  const marcas = vi.fn(async () => ('marcas' in opcoes ? opcoes.marcas : []));
+  render(<Pecas inicial={inicial} agora={AGORA} api={completa} irPara={irPara} cadastros={{ marcas }} {...(opcoes.marcaId ? { marcaId: opcoes.marcaId } : {})} />);
   const cartao = (nome: string) => screen.getByRole('link', { name: new RegExp(nome) }).closest('li') as HTMLElement;
   const acao = async (nome: string, qual: string) => {
     fireEvent.click(screen.getByText(textos.acoes(nome)));
@@ -32,6 +40,63 @@ function montar(inicial: ResultadoDaLista, api: Partial<ApiDePecas> = {}) {
 /** O botão que confirma a exclusão, na faixa que pergunta (o menu tem outro "Excluir", que só abre a pergunta). */
 const confirmar = (nome: string) => within(screen.getByText(textos.confirmarExclusao(nome)).parentElement as HTMLElement).getByRole('button', { name: textos.excluir });
 const comDuas: ResultadoDaLista = { estado: 'ok', pecas: [peca('a1', 'Crové'), peca('b2', 'Jazz na Praça', { tarefa: 'em_revisao' })], proximoCursor: null };
+
+describe('peças: miniatura e filtro por marca', () => {
+  it('peça com miniatura mostra a imagem; sem miniatura (ou se ela não carregar), o contorno do formato, e o cartão continua clicável', () => {
+    const endereco = '/api/documentos/a1/miniatura?v=3';
+    const { cartao } = montar({ estado: 'ok', pecas: [peca('a1', 'Crové', { miniatura: endereco }), peca('b2', 'Jazz na Praça')], proximoCursor: null });
+    const imagem = cartao('Crové').querySelector('img') as HTMLImageElement;
+    expect(imagem.getAttribute('src')).toBe(endereco);
+    // decorativa: o nome da peça está logo abaixo
+    expect(imagem.getAttribute('alt')).toBe('');
+    expect(cartao('Jazz').querySelector('img')).toBeNull();
+    expect(cartao('Jazz').querySelector('[data-sem-miniatura]')).not.toBeNull();
+
+    fireEvent.error(imagem);
+    expect(cartao('Crové').querySelector('img')).toBeNull();
+    expect(cartao('Crové').querySelector('[data-sem-miniatura]')).not.toBeNull();
+    expect(screen.getByRole('link', { name: /Crové/ }).getAttribute('href')).toBe('/editor/p/a1');
+  });
+
+  it('o filtro lista as marcas da conta; escolher uma abre a lista só das peças dela, e "todas" volta', async () => {
+    const { irPara } = montar(comDuas, {}, { marcas: MARCAS });
+    const filtro = (await screen.findByRole('combobox', { name: textos.filtro.rotulo })) as HTMLSelectElement;
+    expect([...filtro.options].map((o) => o.textContent)).toEqual([textos.filtro.todas, 'Café Aurora', 'Padaria Sol']);
+    fireEvent.change(filtro, { target: { value: ID_DA_MARCA } });
+    expect(irPara).toHaveBeenCalledWith(`/editor?marca=${ID_DA_MARCA}`);
+    cleanup();
+
+    const filtrada = montar(comDuas, {}, { marcas: MARCAS, marcaId: ID_DA_MARCA });
+    const escolhido = (await screen.findByRole('combobox', { name: textos.filtro.rotulo })) as HTMLSelectElement;
+    await waitFor(() => expect(escolhido.value).toBe(ID_DA_MARCA));
+    fireEvent.change(escolhido, { target: { value: '' } });
+    expect(filtrada.irPara).toHaveBeenCalledWith('/editor');
+  });
+
+  it('marca sem peça: diz o nome dela e oferece a peça nova da marca, em vez da frase de conta vazia', async () => {
+    montar({ estado: 'ok', pecas: [], proximoCursor: null }, {}, { marcas: MARCAS, marcaId: ID_DA_MARCA });
+    expect(await screen.findByText(textos.filtro.nenhuma('Café Aurora'))).toBeDefined();
+    expect(screen.queryByText(textos.vazio)).toBeNull();
+    expect(screen.getByRole('link', { name: textos.filtro.novaPara('Café Aurora') }).getAttribute('href')).toBe(`/editor/novo?marca=${ID_DA_MARCA}`);
+  });
+
+  it('com o filtro, "carregar mais" pede a página seguinte da mesma marca', async () => {
+    const { api } = montar({ estado: 'ok', pecas: [peca('a1', 'Crové')], proximoCursor: 'abc' }, {}, { marcas: MARCAS, marcaId: ID_DA_MARCA });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: textos.carregarMais })));
+    expect(api.listar).toHaveBeenCalledWith('abc', ID_DA_MARCA);
+  });
+
+  it('conta sem marca, ou marcas que não carregaram: a lista aparece sem o filtro', async () => {
+    montar(comDuas, {}, { marcas: [] });
+    await act(async () => undefined);
+    expect(screen.queryByRole('combobox', { name: textos.filtro.rotulo })).toBeNull();
+    cleanup();
+    montar(comDuas, {}, { marcas: undefined });
+    await act(async () => undefined);
+    expect(screen.queryByRole('combobox', { name: textos.filtro.rotulo })).toBeNull();
+    expect(screen.getByRole('link', { name: /Crové/ })).toBeDefined();
+  });
+});
 
 describe('peças: estados da lista', () => {
   it('sem peça nenhuma, diz isso, não mostra lista e oferece criar a primeira', () => {
@@ -74,7 +139,7 @@ describe('peças: estados da lista', () => {
     montar({ ...comDuas, proximoCursor: 'cursor-2' } as ResultadoDaLista, { listar });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: textos.carregarMais })));
 
-    expect(listar).toHaveBeenCalledWith('cursor-2');
+    expect(listar).toHaveBeenCalledWith('cursor-2', undefined);
     expect(screen.getByRole('link', { name: /Terceira/ })).toBeDefined();
     expect(screen.queryByRole('button', { name: textos.carregarMais })).toBeNull();
   });

@@ -46,8 +46,10 @@ export function Campo({
   return (
     <label className={estilos.campo} data-largo={largo ? 'sim' : undefined}>
       <span>{rotulo}</span>
+      {/* aria-label: o rótulo envolve o campo, e sem isto o nome acessível levaria junto o valor digitado */}
       <input
         type="text"
+        aria-label={rotulo}
         inputMode={numerico ? 'decimal' : 'text'}
         value={rascunho}
         disabled={desativado}
@@ -70,6 +72,7 @@ export function TextoLongo({ rotulo, valor, aoConfirmar, desativado }: { rotulo:
       <span>{rotulo}</span>
       <textarea
         rows={3}
+        aria-label={rotulo}
         value={rascunho}
         disabled={desativado}
         onChange={(e) => setRascunho(e.target.value)}

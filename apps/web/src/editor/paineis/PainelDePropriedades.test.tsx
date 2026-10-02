@@ -121,6 +121,21 @@ describe('painel de propriedades: o que mostra', () => {
     expect(document.querySelector('[data-origem-da-imagem]')?.textContent).toBe(p.origemDaImagem('Banco de Teste', 'Fulana', 'Licença livre'));
   });
 
+  it('o nome acessível de cada campo é só o rótulo: não leva o texto digitado nem a opção escolhida', () => {
+    montar('Título');
+    // o leitor de tela anuncia o nome e depois o valor; com o valor dentro do nome, anunciaria duas vezes
+    expect(screen.getByRole('textbox', { name: p.conteudo })).toBeDefined();
+    expect(screen.getByRole('textbox', { name: p.tamanho })).toBeDefined();
+    expect(screen.getByRole('textbox', { name: p.x })).toBeDefined();
+    expect(screen.getByRole('combobox', { name: p.peso })).toBeDefined();
+    expect(screen.getByRole('combobox', { name: p.mesclagem })).toBeDefined();
+    for (const campo of [...document.querySelectorAll('label input[type=text], label textarea, label select')]) expect(campo.getAttribute('aria-label'), campo.outerHTML.slice(0, 80)).toBeTruthy();
+    cleanup();
+    montar('Foto');
+    expect(screen.getByRole('combobox', { name: p.ajuste })).toBeDefined();
+    for (const campo of [...document.querySelectorAll('label input[type=text], label textarea, label select')]) expect(campo.getAttribute('aria-label'), campo.outerHTML.slice(0, 80)).toBeTruthy();
+  });
+
   it('com a prancheta, mostra nome e fundo', () => {
     const { campo } = montar('prancheta');
     expect(campo(p.nome).value).toBe('Feed');

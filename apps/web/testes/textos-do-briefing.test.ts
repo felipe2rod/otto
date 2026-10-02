@@ -3,7 +3,7 @@
 // a tela mostra é o que o servidor devolve; ADR 020). Percorre TODO texto de textos/briefing.ts,
 // chamando as funções com valores de exemplo.
 import { describe, expect, it } from 'vitest';
-import { briefing, fontes, imagens, marcas } from '../src/textos/briefing';
+import { briefing, fontes, imagens, marcas, texturas } from '../src/textos/briefing';
 import { frases } from './frasesDosTextos';
 
 const PROIBIDO = [
@@ -21,7 +21,7 @@ const PROIBIDO = [
 const proibidas = (todas: [string, string][]) => todas.filter(([, frase]) => PROIBIDO.some((p) => p.test(frase)));
 
 describe('textos do briefing, das marcas, do banco de imagens e das fontes', () => {
-  const todas = [...frases(briefing, 'briefing'), ...frases(marcas, 'marcas'), ...frases(imagens, 'imagens'), ...frases(fontes, 'fontes')];
+  const todas = [...frases(briefing, 'briefing'), ...frases(marcas, 'marcas'), ...frases(imagens, 'imagens'), ...frases(fontes, 'fontes'), ...frases(texturas, 'texturas')];
 
   it('o percurso acha os textos (o teste não passa por não ter lido nada)', () => {
     expect(todas.length).toBeGreaterThan(200);

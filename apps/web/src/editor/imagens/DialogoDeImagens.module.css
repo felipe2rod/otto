@@ -44,3 +44,48 @@
 .corpo {
   padding: 16px 18px 18px;
 }
+
+.corpo {
+  display: grid;
+  gap: 12px;
+}
+
+.texturas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.textura {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  background: var(--grafite-2);
+  border: 1px solid var(--linha);
+  border-radius: 5px;
+}
+
+.textura div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.textura strong {
+  font: 600 14px var(--sans);
+  color: var(--papel);
+}
+
+.textura span {
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.textura small {
+  font: 11px var(--mono);
+  color: var(--texto-3);
+}

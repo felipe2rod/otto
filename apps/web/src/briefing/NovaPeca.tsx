@@ -90,6 +90,8 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
   const [limites, setLimites] = useState<LimitesDeTarefa | undefined>(undefined);
   const [nota, setNota] = useState<string | null>(null);
   const [recuperado, setRecuperado] = useState(false);
+  /** O rascunho de OUTRA peça que estava guardado quando o formulário abriu de um briefing salvo ou de uma peça. */
+  const [rascunhoGuardado, setRascunhoGuardado] = useState<EstadoDoBriefing | null>(null);
   /** A marca aberta para edição dentro do formulário: o id dela, ou "nova". */
   const [editandoMarca, setEditandoMarca] = useState<string | null>(null);
   const [fotosIndo, setFotosIndo] = useState(0);
@@ -100,7 +102,6 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
 
   const guarda = useRef<Guarda | undefined>(guardaDeFora);
   const mexeu = useRef(false);
-  const pecaCriada = useRef<string | null>(null);
   const marcaDigitada = useRef<EstadoDaMarca | null>(null);
   const id = useId();
   const { briefingId, pecaId, marcaId } = origem;
@@ -121,15 +122,16 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
         const dela = await servicos.tarefas(pecaId).daPeca();
         const comBriefing = dela?.itens.map((t) => briefingDaTarefa(t)).find((b) => b !== undefined);
         if (comBriefing) inicial = daTarefa(comBriefing, lidas ?? []);
-        else aviso = textos.comecarDe.daPecaSemBriefing;
+        // leitura que falhou não é "peça sem briefing": são coisas diferentes, e a tela diz qual foi
+        else aviso = dela ? textos.comecarDe.daPecaSemBriefing : textos.comecarDe.naoLeuAPeca;
       }
       let veioDoRascunho = false;
-      if (!inicial && !briefingId && !pecaId && !marcaId) {
-        const local = guarda.current ? lerRascunhoLocal(guarda.current) : undefined;
-        if (local) {
-          inicial = local;
-          veioDoRascunho = true;
-        }
+      const local = guarda.current ? lerRascunhoLocal(guarda.current) : undefined;
+      // o rascunho vale quando o formulário abre sem origem; com origem, ele fica guardado e a tela avisa
+      const deOutraPeca = inicial && local ? local : null;
+      if (!inicial && !marcaId && local) {
+        inicial = local;
+        veioDoRascunho = true;
       }
       inicial ??= { ...ESTADO_VAZIO, marcaId: marcaId ?? null };
       // marca que não existe mais (apagada depois do rascunho) sai, em vez de dar erro ao enviar
@@ -140,6 +142,7 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
       setSalvos(itens ?? []);
       setNota(aviso);
       setRecuperado(veioDoRascunho);
+      setRascunhoGuardado(deOutraPeca);
       setEstado(inicial);
     })();
     void servicos.fontes.catalogo().then((itens) => !desmontado && setCatalogo(itens));
@@ -153,9 +156,10 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
   }, [servicos, briefingId, pecaId, marcaId]);
 
   // rascunho automático: fechar a aba sem enviar não perde o que foi digitado
+  // (com o rascunho de outra peça ainda guardado, nada é gravado por cima dele sem o designer decidir)
   useEffect(() => {
-    if (estado && mexeu.current && guarda.current) guardarRascunhoLocal(guarda.current, estado);
-  }, [estado]);
+    if (estado && mexeu.current && guarda.current && !rascunhoGuardado) guardarRascunhoLocal(guarda.current, estado);
+  }, [estado, rascunhoGuardado]);
 
   const mudar = useCallback((parte: Partial<EstadoDoBriefing> | ((antes: EstadoDoBriefing) => EstadoDoBriefing)) => {
     mexeu.current = true;
@@ -175,6 +179,7 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
   const semLimite = limites && !limites.podeEnviar ? (limites.motivo ?? 'limite_diario') : undefined;
   const bloqueado = oQueFalta.length > 0 || fotosIndo > 0 || enviando || semLimite !== undefined;
   const proprios = estado.formatos.filter((f) => !ehSugerido(f));
+  const naFrente = limites?.naFrente ?? [];
 
   // ---------- ações ----------
   const abrirSalvo = async (idDoSalvo: string) => {
@@ -254,22 +259,17 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
       guardarMarca(r.marca);
       atual = { ...atual, marcaId: r.marca.id, avulsa: null };
     }
-    // a peça é criada uma vez só: se o briefing não chegar, tentar de novo usa a mesma
-    if (!pecaCriada.current) {
-      const r = await servicos.pecas.criar((atual.nome.trim() || atual.titulo.trim()).slice(0, 120));
-      if (!r.ok) {
-        setEnviando(false);
-        return setErro(fraseDaRecusa(r.codigo));
-      }
-      pecaCriada.current = r.peca.id;
-    }
-    const r = await servicos.tarefas(pecaCriada.current).pedir(paraOPedido(atual));
+    // peça e tarefa numa chamada só: o servidor confere o formulário e os limites antes de a peça nascer,
+    // então um envio recusado não deixa peça vazia para trás
+    const nome = (atual.nome.trim() || atual.titulo.trim()).slice(0, 120);
+    const r = await servicos.pecas.criarComTarefa({ ...(nome ? { nome } : {}), tarefa: paraOPedido(atual) });
     if (!r.ok) {
       setEnviando(false);
       return setErro(fraseDaRecusa(r.codigo));
     }
-    if (guarda.current) apagarRascunhoLocal(guarda.current);
-    irPara(`/editor/p/${encodeURIComponent(pecaCriada.current)}`);
+    // o rascunho de outra peça, que o designer ainda não decidiu descartar, fica
+    if (guarda.current && !rascunhoGuardado) apagarRascunhoLocal(guarda.current);
+    irPara(`/editor/p/${encodeURIComponent(r.pecaId)}`);
   };
 
   const emBranco = async () => {
@@ -297,7 +297,16 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
         {opcoes.rotulo}
         {opcoes.obrigatorio && <em>{textos.campos.obrigatorio}</em>}
       </span>
-      <input type="text" value={estado[campo]} maxLength={maximo} placeholder={opcoes.exemplo} required={opcoes.obrigatorio} disabled={enviando} onChange={(e) => mudar({ [campo]: e.target.value })} />
+      <input
+        type="text"
+        aria-label={opcoes.rotulo}
+        value={estado[campo]}
+        maxLength={maximo}
+        placeholder={opcoes.exemplo}
+        required={opcoes.obrigatorio}
+        disabled={enviando}
+        onChange={(e) => mudar({ [campo]: e.target.value })}
+      />
     </label>
   );
 
@@ -314,7 +323,7 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
       <div className={estilos.partida}>
         <label className={`${formulario.campo} ${estilos.campo}`}>
           <span className={formulario.rotulo}>{textos.comecarDe.rotulo}</span>
-          <select value={estado.briefingId ?? ''} disabled={enviando} onChange={(e) => void abrirSalvo(e.target.value)}>
+          <select aria-label={textos.comecarDe.rotulo} value={estado.briefingId ?? ''} disabled={enviando} onChange={(e) => void abrirSalvo(e.target.value)}>
             <option value="">{textos.comecarDe.nenhum}</option>
             {salvos.map((s) => (
               <option key={s.id} value={s.id}>
@@ -340,13 +349,41 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
         )}
       </div>
 
-      {(nota || recuperado || marcasFalharam) && (
+      {(nota || recuperado || marcasFalharam || rascunhoGuardado) && (
         <div className={estilos.notas}>
           {recuperado && (
             <p className={`${formulario.aviso} ${estilos.notaComAcao}`} role="status" data-rascunho-recuperado>
               {textos.rascunho.recuperado}
               <button type="button" className={formulario.discreto} onClick={limpar}>
                 {textos.rascunho.limpar}
+              </button>
+            </p>
+          )}
+          {rascunhoGuardado && (
+            <p className={`${formulario.aviso} ${estilos.notaComAcao}`} role="status" data-rascunho-guardado>
+              {textos.rascunho.guardado}
+              <button
+                type="button"
+                className={formulario.discreto}
+                onClick={() => {
+                  // o formulário passa a ser o rascunho, como se tivesse aberto sem origem
+                  mexeu.current = false;
+                  setEstado(rascunhoGuardado.marcaId && !marcas.some((m) => m.id === rascunhoGuardado.marcaId) ? { ...rascunhoGuardado, marcaId: null } : rascunhoGuardado);
+                  setRascunhoGuardado(null);
+                  setNota(null);
+                }}
+              >
+                {textos.rascunho.voltar}
+              </button>
+              <button
+                type="button"
+                className={formulario.discreto}
+                onClick={() => {
+                  if (guarda.current) apagarRascunhoLocal(guarda.current);
+                  setRascunhoGuardado(null);
+                }}
+              >
+                {textos.rascunho.descartar}
               </button>
             </p>
           )}
@@ -375,7 +412,7 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
           <div className={estilos.marcaEscolhida}>
             <label className={formulario.campo}>
               <span className={formulario.rotulo}>{textos.marca.rotulo}</span>
-              <select value={editandoMarca === NOVA ? NOVA : (estado.marcaId ?? '')} disabled={enviando} onChange={(e) => escolherMarca(e.target.value)}>
+              <select aria-label={textos.marca.rotulo} value={editandoMarca === NOVA ? NOVA : (estado.marcaId ?? '')} disabled={enviando} onChange={(e) => escolherMarca(e.target.value)}>
                 <option value="">{textos.marca.semMarca}</option>
                 {marcas.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -548,7 +585,15 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
               <>
                 <label className={formulario.campo}>
                   <span className={formulario.rotulo}>{textos.imagens.termos}</span>
-                  <input type="text" value={estado.termos} maxLength={100} placeholder={textos.imagens.termosExemplo} disabled={enviando} onChange={(e) => mudar({ termos: e.target.value })} />
+                  <input
+                    type="text"
+                    aria-label={textos.imagens.termos}
+                    value={estado.termos}
+                    maxLength={100}
+                    placeholder={textos.imagens.termosExemplo}
+                    disabled={enviando}
+                    onChange={(e) => mudar({ termos: e.target.value })}
+                  />
                 </label>
                 {OBJETIVOS_DE_PRODUTO.includes(estado.objetivo) && (
                   <p className={formulario.aviso} role="status" data-aviso-de-produto>
@@ -562,7 +607,7 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
           <div className={estilos.duas}>
             <label className={formulario.campo}>
               <span className={formulario.rotulo}>{textos.campos.objetivo}</span>
-              <select value={estado.objetivo} disabled={enviando} onChange={(e) => mudar({ objetivo: e.target.value })}>
+              <select aria-label={textos.campos.objetivo} value={estado.objetivo} disabled={enviando} onChange={(e) => mudar({ objetivo: e.target.value })}>
                 <option value="">{textos.campos.semObjetivo}</option>
                 {Object.entries(textos.campos.objetivos).map(([valor, nome]) => (
                   <option key={valor} value={valor}>
@@ -637,11 +682,26 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
                 ))}
               </ul>
             )}
-            <textarea rows={3} value={estado.restricoes} placeholder={textos.restricoes.exemplo} disabled={enviando} onChange={(e) => mudar({ restricoes: e.target.value })} />
+            <textarea
+              aria-label={textos.restricoes.rotulo}
+              rows={3}
+              value={estado.restricoes}
+              placeholder={textos.restricoes.exemplo}
+              disabled={enviando}
+              onChange={(e) => mudar({ restricoes: e.target.value })}
+            />
           </label>
           <label className={formulario.campo}>
             <span className={formulario.rotulo}>{textos.observacoes.rotulo}</span>
-            <textarea rows={3} maxLength={2000} value={estado.observacoes} placeholder={textos.observacoes.exemplo} disabled={enviando} onChange={(e) => mudar({ observacoes: e.target.value })} />
+            <textarea
+              aria-label={textos.observacoes.rotulo}
+              rows={3}
+              maxLength={2000}
+              value={estado.observacoes}
+              placeholder={textos.observacoes.exemplo}
+              disabled={enviando}
+              onChange={(e) => mudar({ observacoes: e.target.value })}
+            />
           </label>
         </div>
       </details>
@@ -662,6 +722,9 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
             <span data-falta={oQueFalta.join(' ')}>{oQueFalta.map((f) => textos.rodape.faltas[f]).join(' ')}</span>
           ) : fotosIndo > 0 ? (
             <span data-falta="enviando">{textos.rodape.faltas.enviando}</span>
+          ) : naFrente.length > 0 ? (
+            // o Otto está ocupado em outra peça: diz qual, antes do clique
+            <span>{textos.rodape.atrasDe(naFrente.map((t) => t.nome))}</span>
           ) : (
             <span>{textos.rodape.espera}</span>
           )}
@@ -709,7 +772,7 @@ export function NovaPeca({ origem = {}, servicos: deFora, irPara = (endereco) =>
           {textos.rodape.cancelar}
         </a>
         <button type="submit" className={formulario.principal} disabled={bloqueado}>
-          {enviando ? textos.rodape.enviando : limites && limites.naFila > 0 ? textos.rodape.criarNaFila : textos.rodape.criar}
+          {enviando ? textos.rodape.enviando : limites && (limites.naFila > 0 || naFrente.length > 0) ? textos.rodape.criarNaFila : textos.rodape.criar}
         </button>
       </div>
     </form>

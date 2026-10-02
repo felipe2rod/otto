@@ -14,6 +14,7 @@ import {
   loteDeDuplicar,
   loteDeEditarTexto,
   loteDeInserirImagem,
+  loteDeInserirTextura,
   loteDeInserirVetor,
   loteDeMoverPorSeta,
   loteDeRemover,
@@ -377,6 +378,32 @@ describe('inserir imagem e vetor', () => {
     expect(aplica(lote)).toBe(true);
     // foto do designer não ganha origem
     expect((loteDeInserirImagem(doc, feed.id, arquivo, 'foto.jpg').operacoes[0] as { no: Record<string, unknown> }).no).not.toHaveProperty('origem');
+  });
+
+  it('a textura cobre a prancheta inteira, por cima de tudo, com o modo de mesclagem e a opacidade de costume', () => {
+    const textura = {
+      sha256: 'd'.repeat(64),
+      largura: 1600,
+      altura: 1600,
+      no: { tipo: 'imagem' as const, arquivo: 'd'.repeat(64), larguraOriginal: 1600, alturaOriginal: 1600, modoDeMesclagem: 'multiplicacao', opacidade: 0.6 },
+    };
+    const lote = loteDeInserirTextura(doc, feed.id, textura, 'papel');
+    expect(lote.operacoes).toHaveLength(1);
+    const no = (lote.operacoes[0] as { no: Record<string, unknown> }).no;
+    expect(lote.operacoes[0]).toMatchObject({ op: 'criarNo', prancheta: feed.id });
+    expect(no).toMatchObject({
+      tipo: 'imagem',
+      nome: 'papel',
+      arquivo: 'd'.repeat(64),
+      x: 0,
+      y: 0,
+      largura: feed.largura,
+      altura: feed.altura,
+      ajuste: 'cobrir',
+      modoDeMesclagem: 'multiplicacao',
+      opacidade: 0.6,
+    });
+    expect(aplica(lote)).toBe(true);
   });
 
   it('imagem pequena entra no tamanho dela, sem ampliar; sem ponto, vai para o centro da prancheta', () => {

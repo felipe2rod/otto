@@ -210,6 +210,8 @@ export function criarControleDoOtto(deps: DependenciasDoOtto): ControleDoOtto {
       }
       definirAtual(novaTarefaNaTela(r.tarefa));
       seguirCom(r.tarefa);
+      // a fila da conta mudou: é dos limites que a tela sabe atrás de que peça esta tarefa está
+      void atualizarEntorno();
       return true;
     },
     async aprovar() {

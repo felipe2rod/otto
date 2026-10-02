@@ -29,6 +29,7 @@ import { DialogoDeExportar } from './exportar/DialogoDeExportar';
 import { criarExportador } from './exportar/exportador';
 import { criarFonteDaApi, type FonteDaPeca } from './fonteDaPeca';
 import { DialogoDeImagens } from './imagens/DialogoDeImagens';
+import { DialogoDeTexturas } from './imagens/DialogoDeTexturas';
 import { loteDeMoverPorSeta, loteDeRemover, loteDeReordenar } from './nucleo/acoes';
 import { criarArmazem, useArmazem } from './nucleo/armazem';
 import { resolverAtalho } from './nucleo/atalhos';
@@ -117,6 +118,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
   const [exportador] = useState(() => (fonte.exportacoes ? criarExportador({ api: fonte.exportacoes }) : undefined));
   const [exportando, setExportando] = useState(false);
   const [buscandoImagem, setBuscandoImagem] = useState(false);
+  const [vendoTexturas, setVendoTexturas] = useState(false);
 
   const [comWebGL] = useState(temWebGL);
   const [situacao, setSituacao] = useState<SituacaoDaPeca>({ estado: 'abrindo' });
@@ -241,6 +243,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
       listarFontes: () => fonte.listarFontes(),
       trazerFonte: async (familia: string, peso: number) => (await fonte.trazerFonte?.(familia, peso)) ?? false,
       inserirImagemTrazida: envio.inserirDoBanco,
+      inserirTextura: envio.inserirTextura,
       aplicar,
       avisar,
       inserirArquivos: envio.inserir,
@@ -620,6 +623,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
               podeInserir={podeEditar && fonte.arquivos !== undefined}
               aoInserir={(arquivos) => void ambiente.inserirArquivos(arquivos)}
               aoBuscarImagem={fonte.imagens ? () => setBuscandoImagem(true) : undefined}
+              aoAbrirTexturas={fonte.texturas ? () => setVendoTexturas(true) : undefined}
             />
             <div className={estilos.esquerda}>
               {otto ? (
@@ -719,6 +723,7 @@ export function Editor({ pecaId, fonte: fonteDeFora, criarMotor, temWebGL = dete
         )}
 
         {buscandoImagem && fonte.imagens && <DialogoDeImagens api={fonte.imagens} aoFechar={() => setBuscandoImagem(false)} />}
+        {vendoTexturas && fonte.texturas && <DialogoDeTexturas api={fonte.texturas} aoFechar={() => setVendoTexturas(false)} />}
 
         {exportando && nome !== undefined && fonte.exportacoes && exportador && (
           <DialogoDeExportar nomeDaPeca={nome} api={fonte.exportacoes} exportador={exportador} estado={estado} aoFechar={() => setExportando(false)} />

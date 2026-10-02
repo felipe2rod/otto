@@ -1,7 +1,7 @@
 // Banco de imagens e catálogo de fontes (packages/shared/src/briefing.ts e contrato.ts).
 import { describe, expect, it, vi } from 'vitest';
 import { criarCliente } from './cliente';
-import { criarApiDeFontes, criarApiDeImagens } from './imagens';
+import { criarApiDeFontes, criarApiDeImagens, criarApiDeTexturas } from './imagens';
 
 const json = (status: number, corpo?: unknown) => new Response(corpo === undefined ? null : JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } });
 const SHA = 'a'.repeat(64);
@@ -69,5 +69,25 @@ describe('catálogo de fontes', () => {
     expect(await fontes.trazer('Bitter', 700)).toBe(true);
     expect(fetch.mock.calls[0]?.[0]).toBe('/api/fontes/Bitter/700');
     expect(await montar(() => json(404, { codigo: 'nao_encontrado' })).fontes.trazer('Nenhuma', 400)).toBe(false);
+  });
+});
+
+describe('texturas', () => {
+  const papel = { nome: 'papel', descricao: 'papel de algodão', modoDeMesclagem: 'multiplicacao', opacidade: 0.6, largura: 1600, altura: 1600 };
+
+  it('lista as texturas; se a leitura falhar, indefinido (a tela diz o erro, não "nenhuma textura")', async () => {
+    const fetch = vi.fn(async (_u: string, _i?: RequestInit) => json(200, { itens: [papel] }));
+    expect(await criarApiDeTexturas(criarCliente({ fetch })).listar()).toEqual([papel]);
+    expect(fetch.mock.calls[0]?.[0]).toBe('/api/texturas');
+    expect(await criarApiDeTexturas(criarCliente({ fetch: async () => json(500, { codigo: 'erro_interno' }) })).listar()).toBeUndefined();
+  });
+
+  it('trazer faz da textura um arquivo da conta e devolve o nó pronto, com o modo de mesclagem e a opacidade de costume', async () => {
+    const trazida = { sha256: SHA, largura: 1600, altura: 1600, no: { tipo: 'imagem', arquivo: SHA, larguraOriginal: 1600, alturaOriginal: 1600, modoDeMesclagem: 'multiplicacao', opacidade: 0.6 } };
+    const fetch = vi.fn(async (_u: string, _i?: RequestInit) => json(201, trazida));
+    expect(await criarApiDeTexturas(criarCliente({ fetch })).trazer('papel-amassado')).toEqual({ ok: true, textura: trazida });
+    expect(fetch.mock.calls[0]?.[0]).toBe('/api/texturas/papel-amassado/trazer');
+    expect(fetch.mock.calls[0]?.[1]?.method).toBe('POST');
+    expect(await criarApiDeTexturas(criarCliente({ fetch: async () => json(404, { codigo: 'nao_encontrado' }) })).trazer('nada')).toEqual({ ok: false, codigo: 'nao_encontrado' });
   });
 });
