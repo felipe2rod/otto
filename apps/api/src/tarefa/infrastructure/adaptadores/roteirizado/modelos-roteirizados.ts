@@ -1,13 +1,18 @@
 // Adaptador de ModelosDoOtto que não fala com modelo nenhum: reproduz uma tarefa gravada pelo treinador
 // (@otto/agente/roteiros). É como o worker e o editor rodam a tarefa de ponta a ponta sem gastar token
 // (docs/mvp/backend.md, 8.5). O roteiro é escolhido pelo TIPO da entrada, e não pelo conteúdo dela:
-//   ajuste                    → ajuste-titulo (pede uma peça com a prancheta "Feed", a camada "Título" e o token "destaque")
-//   briefing, criar e pedido  → briefing-dois-formatos (parte de uma peça vazia; pede o "pode")
-// Se a peça não é a que o roteiro espera, os lotes são recusados e a tarefa termina sem alterar nada: o
-// roteiro é para desenvolver, não para acertar o pedido.
+//   briefing → briefing-dois-formatos   (Feed e Story; pede o "pode")
+//   criar    → criar-uma-peca           (uma prancheta; não pede o "pode")
+//   pedido   → pedido-dois-formatos     (um quadrado e um banner a mais na peça aberta; pede o "pode")
+//   ajuste   → ajuste-em-qualquer-peca  (põe em azul a primeira camada de texto da peça)
+// Os roteiros se adaptam à peça (leem dela o nome da prancheta e da camada) e não tocam no que já existia.
+// O de briefing cria sempre Feed e Story: se o formulário pedir outros formatos, os lotes são recusados pela
+// guarda do plano e a tarefa termina sem alterar nada. O roteiro é para desenvolver, não para acertar o pedido.
 import { criarModeloRoteirizado, type EntradaDaTarefa, idsDoRoteiro, type PrecoDoModelo, type Roteiro } from '@otto/agente';
-import roteiroDoAjuste from '@otto/agente/roteiros/ajuste-titulo.json' with { type: 'json' };
+import roteiroDoAjuste from '@otto/agente/roteiros/ajuste-em-qualquer-peca.json' with { type: 'json' };
 import roteiroDoBriefing from '@otto/agente/roteiros/briefing-dois-formatos.json' with { type: 'json' };
+import roteiroDeCriar from '@otto/agente/roteiros/criar-uma-peca.json' with { type: 'json' };
+import roteiroDoPedido from '@otto/agente/roteiros/pedido-dois-formatos.json' with { type: 'json' };
 import { type ModeloAberto, ModelosDoOtto, type PedidoDeModelo } from '../../../application/modelos-do-otto';
 
 /** O preço do Sonnet 5 (docs/tecnico/custos.md): o custo registrado no desenvolvimento tem a ordem de grandeza do de verdade. */
@@ -15,8 +20,15 @@ const PRECO_DE_REFERENCIA: PrecoDoModelo = { entrada: 2, saida: 10, cacheLido: 0
 /** Os papéis da segunda parte da tarefa. A primeira (direção e plano) é tudo que vem antes. */
 const PAPEIS_DA_EXECUCAO: readonly (string | undefined)[] = ['agente', 'ajuste'];
 
+const ROTEIROS: Record<EntradaDaTarefa['tipo'], Roteiro> = {
+  briefing: roteiroDoBriefing as Roteiro,
+  criar: roteiroDeCriar as Roteiro,
+  pedido: roteiroDoPedido as Roteiro,
+  ajuste: roteiroDoAjuste as Roteiro,
+};
+
 export function roteiroPara(entrada: EntradaDaTarefa): Roteiro {
-  return (entrada.tipo === 'ajuste' ? roteiroDoAjuste : roteiroDoBriefing) as Roteiro;
+  return ROTEIROS[entrada.tipo];
 }
 
 export class ModelosRoteirizados extends ModelosDoOtto {

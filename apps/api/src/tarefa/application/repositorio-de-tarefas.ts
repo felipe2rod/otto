@@ -39,8 +39,9 @@ export interface TarefaGuardada {
   cancelamentoPedidoEm?: Date;
   /** Sequência do último evento gravado; -1 se nenhum. */
   ultimoEvento: number;
-  /** Chamadas ao modelo já registradas. */
+  /** Chamadas ao modelo já registradas, e o que elas somam. É o custo que existe mesmo se o worker cair. */
   chamadas: number;
+  consumo: { tokensDeEntrada: number; tokensDeCacheLidos: number; tokensDeCacheCriados: number; tokensDeSaida: number; imagens: number };
   duracaoMs: number;
   criadaEm: Date;
   iniciadaEm?: Date;
@@ -123,6 +124,8 @@ export abstract class RepositorioDeTarefas {
   abstract contarCriadasDesde(escopo: EscopoDaConta, desde: Date): Promise<number>;
   /** Quantas a conta tem esperando ou trabalhando (na_fila, preparando, rodando). */
   abstract contarNaFila(escopo: EscopoDaConta): Promise<number>;
+  /** As tarefas da conta que estão trabalhando ou na fila, na ordem em que vão ser atendidas. É o que está "na frente" de um pedido novo. */
+  abstract emAndamentoDaConta(escopo: EscopoDaConta): Promise<TarefaGuardada[]>;
   /**
    * na_fila → preparando (fase de preparo) ou rodando (fase de execução), só se nenhuma outra tarefa da
    * conta está trabalhando. É o que torna o consumidor idempotente e garante uma por vez por conta.

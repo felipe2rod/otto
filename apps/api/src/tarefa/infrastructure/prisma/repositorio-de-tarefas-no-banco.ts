@@ -55,6 +55,13 @@ function paraGuardada(l: Linha): TarefaGuardada {
     ...(l.cancelamentoPedidoEm ? { cancelamentoPedidoEm: l.cancelamentoPedidoEm } : {}),
     ultimoEvento: l.ultimoEvento,
     chamadas: l.chamadas,
+    consumo: {
+      tokensDeEntrada: Number(l.tokensDeEntrada),
+      tokensDeCacheLidos: Number(l.tokensDeCacheLidos),
+      tokensDeCacheCriados: Number(l.tokensDeCacheCriados),
+      tokensDeSaida: Number(l.tokensDeSaida),
+      imagens: l.imagensEnviadas,
+    },
     duracaoMs: l.duracaoMs,
     criadaEm: l.criadaEm,
     ...(l.iniciadaEm ? { iniciadaEm: l.iniciadaEm } : {}),
@@ -165,6 +172,14 @@ export class RepositorioDeTarefasNoBanco extends RepositorioDeTarefas {
 
   async contarCriadasDesde(escopo: EscopoDaConta, desde: Date): Promise<number> {
     return this.prisma.executar(escopo, (tx) => tx.tarefaDoAgente.count({ where: { contaId: escopo.contaId, criadaEm: { gte: desde } } }));
+  }
+
+  async emAndamentoDaConta(escopo: EscopoDaConta): Promise<TarefaGuardada[]> {
+    const linhas = await this.prisma.executar(escopo, (tx) =>
+      tx.tarefaDoAgente.findMany({ where: { contaId: escopo.contaId, estado: { in: NA_FILA } }, orderBy: [{ enfileiradaEm: 'asc' }, { id: 'asc' }] }),
+    );
+    // quem já está trabalhando vem primeiro; a fila, por ordem de chegada
+    return linhas.map(paraGuardada).sort((a, b) => Number(a.estado === 'na_fila') - Number(b.estado === 'na_fila'));
   }
 
   async contarNaFila(escopo: EscopoDaConta): Promise<number> {

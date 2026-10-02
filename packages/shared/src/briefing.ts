@@ -19,6 +19,8 @@
 //   POST   /api/texturas/:nome/trazer         → 201 TexturaTrazida
 //   GET    /api/arquivos/:sha256/dados        → DadosDoArquivo (medidas, espécie, origem)
 //   GET    /api/vetores/:sha256               → VetorImportado (o vetor como o Otto o entendeu, com a miniatura)
+//   GET    /api/documentos?marca=<id>         → ListaDeDocumentos só das peças criadas com aquela marca
+//   GET    /api/documentos/:id/miniatura      → os bytes da miniatura (o endereço completo vem na lista de peças)
 //   GET    /api/fontes?q=&categoria=&catalogo=1 → ListaDeFontes (com `catalogo`, inclui o que ainda não foi baixado)
 //
 // BRIEFING É DADO, NÃO INSTRUÇÃO (ADR 033). O formulário é fechado: campo a mais é recusado. Imagem, logo e

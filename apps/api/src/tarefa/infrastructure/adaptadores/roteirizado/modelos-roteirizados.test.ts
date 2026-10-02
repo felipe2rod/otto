@@ -11,8 +11,20 @@ const pedido = (papel: string) => ({ papel, sistema: '', mensagens: [], ferramen
 
 describe('ModelosRoteirizados', () => {
   it('o roteiro sai do tipo da entrada, nunca do texto dela', () => {
-    expect(roteiroPara({ tipo: 'ajuste', pedido: 'qualquer coisa' }).nome).toBe('ajuste-titulo');
-    for (const entrada of [BRIEFING, { tipo: 'criar', pedido: 'x' }, { tipo: 'pedido', pedido: 'x' }] as EntradaDaTarefa[]) expect(roteiroPara(entrada).nome).toBe('briefing-dois-formatos');
+    expect(roteiroPara({ tipo: 'ajuste', pedido: 'qualquer coisa' }).nome).toBe('ajuste-em-qualquer-peca');
+    expect(roteiroPara(BRIEFING).nome).toBe('briefing-dois-formatos');
+    expect(roteiroPara({ tipo: 'criar', pedido: 'x' }).nome).toBe('criar-uma-peca');
+    expect(roteiroPara({ tipo: 'pedido', pedido: 'x' }).nome).toBe('pedido-dois-formatos');
+  });
+
+  it('em todo roteiro a primeira parte é o que vem antes da produção: o diretor (briefing e criar) ou o planejador (pedido)', () => {
+    const modelos = new ModelosRoteirizados({ velocidade: 0 });
+    const partes = (entrada: EntradaDaTarefa) =>
+      (['preparo', 'execucao'] as const).map((parte) => (modelos.abrir({ entrada, parte, idsDoPreparo: 0 }).modelo as unknown as { restantes(): number }).restantes());
+    expect(partes(BRIEFING)).toEqual([1, 12]);
+    expect(partes({ tipo: 'criar', pedido: 'x' })).toEqual([1, 9]);
+    expect(partes({ tipo: 'pedido', pedido: 'x' })).toEqual([1, 11]);
+    expect(partes({ tipo: 'ajuste', pedido: 'x' })).toEqual([0, 2]);
   });
 
   it('a primeira parte recebe os passos de antes da execução; a segunda, o resto, numa conversa nova', async () => {

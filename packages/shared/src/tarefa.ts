@@ -1,6 +1,7 @@
 // O contrato HTTP da tarefa do Otto (docs/mvp/backend.md, 7.5 e 17.11).
 //
 //   POST /api/documentos/:id/tarefas          PedidoDeTarefa → 202 Tarefa (pelo formulário: PedidoDeTarefaPorBriefing, em briefing.ts)
+//   POST /api/documentos/com-tarefa           PedidoDePecaComTarefa → 202 PecaComTarefa (cria a peça e a tarefa numa chamada só)
 //   GET  /api/documentos/:id/tarefas          → ListaDeTarefas (as recentes da peça e qual está viva)
 //   GET  /api/tarefas/limites                 → LimitesDeTarefa (antes de enviar)
 //   GET  /api/tarefas/:id                     → Tarefa (a fotografia do estado atual)
@@ -38,7 +39,7 @@ import type {
   MotivoDoPode as MotivoDoAgente,
   Pendencia as PendenciaDoAgente,
   Plano as PlanoDoAgente,
-} from '@otto/agente';
+} from '@otto/agente/contrato';
 import type { Documento as ArvoreDoDocumento } from '@otto/documento';
 import { z } from 'zod';
 import type { PedidoDeTarefaPorBriefing } from './briefing';
@@ -190,11 +191,21 @@ export type AntesDaTarefa = z.infer<typeof AntesDaTarefa>;
  */
 export const LimitesDeTarefa = z.object({
   podeEnviar: z.boolean(),
+  /**
+   * Um ajuste pontual cabe agora? Pode ser verdadeiro com `podeEnviar` falso por `limite_diario`: o ajuste gasta
+   * cem vezes menos que uma tarefa que cria peça.
+   */
+  podeAjustar: z.boolean().optional(),
   motivo: z.enum(['limite_da_conta', 'fila_cheia', 'limite_diario']).optional(),
   tarefasHoje: z.int().min(0),
   tarefasPorDia: z.int().min(0),
   naFila: z.int().min(0),
   naFilaNoMaximo: z.int().min(0),
+  /**
+   * As peças da conta em que o Otto está trabalhando ou vai trabalhar antes de um pedido novo, na ordem.
+   * É para o formulário dizer "entra na fila, atrás de <peça>".
+   */
+  naFrente: z.array(z.object({ tarefaId: Id, documentoId: Id, nome: z.string(), estado: EstadoDaTarefa })).optional(),
 });
 export type LimitesDeTarefa = z.infer<typeof LimitesDeTarefa>;
 
@@ -223,3 +234,17 @@ export type PendenciaDaPeca = z.infer<typeof PendenciaDaPeca>;
 /** Resposta de GET /api/documentos/:id/pendencias (?estado=aberta|resolvida|dispensada; sem o parâmetro, as abertas). */
 export const ListaDePendencias = z.object({ itens: z.array(PendenciaDaPeca) });
 export type ListaDePendencias = z.infer<typeof ListaDePendencias>;
+
+/**
+ * Corpo de POST /api/documentos/com-tarefa: cria a peça E a tarefa numa chamada. Se a tarefa não puder ser
+ * criada (formulário inválido, limite, fila fora), nenhuma peça fica para trás. Só para o que parte de peça
+ * nova: formulário de briefing ou pedido livre de criar.
+ */
+export interface PedidoDePecaComTarefa {
+  /** Nome da peça. Ausente: o nome do briefing, ou o nome padrão. */
+  nome?: string;
+  tarefa: Extract<PedidoDeTarefa, { tipo: 'briefing' | 'criar' }>;
+}
+
+export const PecaComTarefa = z.object({ documento: z.object({ id: Id, nome: z.string() }), tarefa: Tarefa });
+export type PecaComTarefa = z.infer<typeof PecaComTarefa>;

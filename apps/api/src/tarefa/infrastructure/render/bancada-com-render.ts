@@ -1,19 +1,16 @@
 // Adaptador de BancadaDoOtto: o motor de render único (@otto/render, CanvasKit em CPU), o resumo e a
 // verificação de @otto/documento. É o que o Otto "enxerga" enquanto trabalha (ADR 027, item 9).
 //
-// Só o worker chama isto. O WebAssembly é carregado uma vez por processo (a variante completa, que codifica
-// JPEG; os pixels são os mesmos da padrão); cada tarefa abre e destrói a própria sessão.
-// O render de conferência roda no laço principal do worker: são décimos de segundo por prancheta, em que o
-// processo não atende outra coisa. Se pesar, o lugar dele é uma thread, como a exportação.
+// Só o worker chama isto. O RENDER, A VERIFICAÇÃO E A REDUÇÃO DE FOTO RODAM NUMA THREAD (oficina-de-render.ts):
+// são síncronos lá dentro e, no laço principal, seguravam o sinal de vida e as outras tarefas. No laço
+// principal fica só o resumo (a porta do ciclo o quer síncrono), que mede texto e não desenha.
 //
 // Fonte: todas as da biblioteca do Otto (o agente pode escolher qualquer uma). Imagem: só a que a CONTA tem;
 // a linha do arquivo, lida sob o escopo, é a autorização. Hash citado que não é da conta não é lido.
-//
-// PARA O ESPECIALISTA-GRAFICO: codificarJpeg e reduzirFoto vieram de avaliacao/src/ambiente.ts porque
-// @otto/render não exporta nenhum dos dois. Deveriam morar lá, ao lado de codificarPng.
+// A bancada guarda o que entregou à thread: se a thread cair, outra sobe e a sessão é remontada.
 import type { FamiliaDeFonte, ImagemParaOModelo } from '@otto/agente';
-import { type Documento, resumirDocumento, verificarDocumento } from '@otto/documento';
-import { criarMedidor, criarMeiosDeVerificacao, criarSessao, type FonteDeArquivo, type RenderEmPixels, renderizarPrancheta, type Sessao } from '@otto/render';
+import { type Documento, resumirDocumento } from '@otto/documento';
+import { criarMedidor, criarSessao, type FonteDeArquivo, type ImagemDeArquivo } from '@otto/render';
 import { carregarCanvasKit } from '@otto/render/node';
 import type { ArmazenamentoDeArquivo } from '../../../arquivo/application/armazenamento-de-arquivo';
 import type { RepositorioDeArquivos } from '../../../arquivo/application/repositorio-de-arquivos';
@@ -22,77 +19,43 @@ import { arquivosDaArvore } from '../../../documento/domain/arquivos-da-arvore';
 import { familiasCitadas } from '../../../documento/domain/familias-citadas';
 import type { EscopoDaConta } from '../../../plataforma/escopo/escopo-da-conta';
 import { type BancadaAberta, BancadaDoOtto } from '../../application/bancada-do-otto';
+import { OficinaDeRender, OficinaInterrompida, type PedidoAOficina, type ResultadoDaOficina } from './oficina-de-render';
 
 type Motor = Awaited<ReturnType<typeof carregarCanvasKit>>;
 
 const TIPOS_QUE_O_MOTOR_ABRE: readonly string[] = ['image/png', 'image/jpeg', 'image/webp'];
-const QUALIDADE_DO_RENDER = 85;
-const QUALIDADE_DA_PREVIA = 82;
-
 const emBase64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64');
 
-function codificarJpeg(sessao: Sessao, render: RenderEmPixels): Uint8Array {
-  const { ck } = sessao;
-  const img = ck.MakeImage(
-    { width: render.largura, height: render.altura, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: ck.ColorSpace.SRGB },
-    render.rgba,
-    render.largura * 4,
-  );
-  if (!img) throw new Error('não foi possível montar a imagem do render');
-  const bytes = img.encodeToBytes(ck.ImageFormat.JPEG, QUALIDADE_DO_RENDER);
-  img.delete();
-  if (!bytes) throw new Error('este motor não codifica JPEG: carregue a variante completa');
-  return bytes;
-}
-
-/** Reduz uma foto para o modelo ver: lado maior de `ladoMaximo`, em JPEG. */
-function reduzirFoto(sessao: Sessao, bytes: Uint8Array, ladoMaximo: number): ImagemParaOModelo | undefined {
-  const { ck } = sessao;
-  const img = ck.MakeImageFromEncoded(bytes);
-  if (!img) return undefined;
-  const escala = Math.min(1, ladoMaximo / Math.max(img.width(), img.height()));
-  const largura = Math.max(1, Math.round(img.width() * escala));
-  const altura = Math.max(1, Math.round(img.height() * escala));
-  const superficie = ck.MakeSurface(largura, altura);
-  if (!superficie) {
-    img.delete();
-    return undefined;
-  }
-  const tinta = new ck.Paint();
-  superficie.getCanvas().drawImageRectOptions(img, ck.XYWHRect(0, 0, img.width(), img.height()), ck.XYWHRect(0, 0, largura, altura), ck.FilterMode.Linear, ck.MipmapMode.Linear, tinta);
-  const reduzida = superficie.makeImageSnapshot();
-  const jpeg = reduzida.encodeToBytes(ck.ImageFormat.JPEG, QUALIDADE_DA_PREVIA);
-  tinta.delete();
-  reduzida.delete();
-  superficie.delete();
-  img.delete();
-  return jpeg ? { mime: 'image/jpeg', base64: emBase64(jpeg), largura, altura } : undefined;
+function comoImagem(r: ResultadoDaOficina): ImagemParaOModelo | undefined {
+  return r.tipo === 'imagem' ? { mime: 'image/jpeg', base64: emBase64(r.jpeg), largura: r.largura, altura: r.altura } : undefined;
 }
 
 export class BancadaComRender extends BancadaDoOtto {
+  /** O motor do laço principal: só mede texto, para o resumo. A variante padrão basta (não codifica nada). */
   private motor: Promise<Motor> | undefined;
   /** As fontes da biblioteca são iguais para todas as contas: lidas uma vez por processo. */
   private biblioteca: Promise<{ arquivos: FonteDeArquivo[]; familias: FamiliaDeFonte[] }> | undefined;
-  /** Quantas vezes o WebAssembly foi carregado neste processo. Deve ficar em 1. */
-  cargasDoMotor = 0;
+  private readonly oficina: OficinaDeRender;
+  private abertas = 0;
+
+  /** Quantas threads de render este processo já criou. */
+  get threadsCriadas(): number {
+    return this.oficina.threadsCriadas;
+  }
 
   constructor(
     private readonly fontes: BibliotecaDeFontes,
     private readonly arquivos: RepositorioDeArquivos,
     private readonly armazenamento: ArmazenamentoDeArquivo,
+    opcoes: { ociosaPorMs?: number } = {},
   ) {
     super();
-  }
-
-  /** O motor deste processo, para quem mais precisa dele no worker (as texturas): o WebAssembly é carregado uma vez só. */
-  motorDoProcesso(): Promise<Motor> {
-    return this.carregar();
+    this.oficina = new OficinaDeRender(opcoes);
   }
 
   private carregar(): Promise<Motor> {
     if (!this.motor) {
-      this.cargasDoMotor++;
-      this.motor = carregarCanvasKit('completa');
+      this.motor = carregarCanvasKit();
       // se a carga falhar, a próxima chamada tenta de novo em vez de guardar a falha
       this.motor.catch(() => {
         this.motor = undefined;
@@ -120,12 +83,50 @@ export class BancadaComRender extends BancadaDoOtto {
     return this.biblioteca;
   }
 
+  /** Encerra a thread de render como se tivesse caído. A bancada continua aceitando trabalho. */
+  derrubarThread(): Promise<void> {
+    return this.oficina.derrubar();
+  }
+
+  /** Desligamento do processo: encerra a thread de render. */
+  override fechar(): Promise<void> {
+    return this.oficina.fechar();
+  }
+
   async abrir(escopo: EscopoDaConta, peca: { nome: string; arvore: Documento }): Promise<BancadaAberta> {
     const [ck, biblioteca] = await Promise.all([this.carregar(), this.lerBiblioteca()]);
-    const sessao = criarSessao(ck, { fontes: biblioteca.arquivos, imagens: [] });
+    const oficina = this.oficina;
+    // no laço principal, só o texto: é o que o resumo mede
+    const medida = criarSessao(ck, { fontes: biblioteca.arquivos, imagens: [] });
+    // o que já foi entregue à thread: é com isto que a sessão é remontada se a thread cair
+    const fontesEntregues: FonteDeArquivo[] = [...biblioteca.arquivos];
+    const imagensEntregues: ImagemDeArquivo[] = [];
+    const sessao = oficina.novaSessao();
+    let montadaNa: number | undefined;
+    let fechada = false;
+    this.abertas++;
+
+    const montar = async (): Promise<void> => {
+      if (montadaNa !== undefined && montadaNa === oficina.geracao && oficina.viva) return;
+      await oficina.pedir({ tipo: 'abrir', sessao, fontes: fontesEntregues, imagens: imagensEntregues });
+      montadaNa = oficina.geracao;
+    };
+    /** Uma chamada à thread, com a sessão garantida. Se a thread cair no meio, remonta e tenta uma vez mais. */
+    const chamar = async (pedido: PedidoAOficina): Promise<ResultadoDaOficina> => {
+      if (fechada) throw new Error('a bancada desta tarefa já foi fechada');
+      try {
+        await montar();
+        return await oficina.pedir(pedido);
+      } catch (erro) {
+        if (!(erro instanceof OficinaInterrompida)) throw erro;
+        montadaNa = undefined;
+        await montar();
+        return oficina.pedir(pedido);
+      }
+    };
+
     /** Hashes já procurados nesta conta (achados ou não): cada um é lido uma vez por tarefa. */
     const procurados = new Set<string>();
-
     const bytesDaConta = async (sha256: string): Promise<Uint8Array | undefined> => {
       const registro = await this.arquivos.buscar(escopo, sha256);
       if (!registro || !TIPOS_QUE_O_MOTOR_ABRE.includes(registro.tipoMime)) return undefined;
@@ -137,10 +138,12 @@ export class BancadaComRender extends BancadaDoOtto {
         if (procurados.has(sha256)) continue;
         procurados.add(sha256);
         const bytes = await bytesDaConta(sha256);
-        if (bytes) sessao.adicionarImagem({ arquivo: sha256, bytes });
+        if (!bytes) continue;
+        const imagem = { arquivo: sha256, bytes };
+        imagensEntregues.push(imagem);
+        if (montadaNa !== undefined) await chamar({ tipo: 'imagem', sessao, imagem });
       }
     };
-    await garantirImagens(peca.arvore);
     // A biblioteca cresce durante a tarefa (fonte trazida do catálogo sob demanda): a família que o documento
     // cita e a sessão ainda não tem é lida da biblioteca na hora.
     const familiasNaSessao = new Set(biblioteca.arquivos.map((f) => f.familia));
@@ -150,36 +153,45 @@ export class BancadaComRender extends BancadaDoOtto {
         familiasNaSessao.add(familia);
         for (const registro of await this.fontes.pesosDa(familia)) {
           const bytes = await this.fontes.bytes(registro);
-          if (bytes) sessao.adicionarFonte({ familia: registro.familia, peso: registro.peso, bytes });
+          if (!bytes) continue;
+          const fonte = { familia: registro.familia, peso: registro.peso, bytes };
+          fontesEntregues.push(fonte);
+          medida.adicionarFonte(fonte);
+          if (montadaNa !== undefined) await chamar({ tipo: 'fonte', sessao, fonte });
         }
       }
     };
+    await garantirImagens(peca.arvore);
     await garantirFontes(peca.arvore);
 
     return {
       fontes: biblioteca.familias,
-      resumir: (doc, prancheta) => resumirDocumento(doc, { medidor: criarMedidor(sessao), nome: peca.nome, ...(prancheta ? { prancheta } : {}) }),
+      resumir: (doc, prancheta) => resumirDocumento(doc, { medidor: criarMedidor(medida), nome: peca.nome, ...(prancheta ? { prancheta } : {}) }),
       async renderizar(doc, pedido) {
-        const p = doc.pranchetas.find((x) => x.id === pedido.prancheta);
-        if (!p) throw new Error('prancheta desconhecida');
+        if (!doc.pranchetas.some((x) => x.id === pedido.prancheta)) throw new Error('prancheta desconhecida');
         await garantirImagens(doc);
         await garantirFontes(doc);
-        const [x, y, w, h] = pedido.regiao ?? [0, 0, p.largura, p.altura];
-        const regiao = { x: Math.max(0, x), y: Math.max(0, y), w: Math.max(1, Math.min(w, p.largura - Math.max(0, x))), h: Math.max(1, Math.min(h, p.altura - Math.max(0, y))) };
-        const escala = Math.min(1, pedido.ladoMaximo / Math.max(regiao.w, regiao.h));
-        const render = renderizarPrancheta(sessao, doc, p, { escala, ...(pedido.regiao ? { regiao } : {}) });
-        return { mime: 'image/jpeg', base64: emBase64(codificarJpeg(sessao, render)), largura: render.largura, altura: render.altura };
+        const imagem = comoImagem(await chamar({ tipo: 'renderizar', sessao, doc, pedido }));
+        if (!imagem) throw new Error('o motor não devolveu o render');
+        return imagem;
       },
       async verificar(doc, prancheta) {
         await garantirImagens(doc);
         await garantirFontes(doc);
-        return verificarDocumento(doc, criarMeiosDeVerificacao(sessao), prancheta);
+        const r = await chamar({ tipo: 'verificar', sessao, doc, ...(prancheta ? { prancheta } : {}) });
+        return r.tipo === 'avisos' ? r.avisos : [];
       },
       async previaDeArquivo(arquivo, ladoMaximo) {
         const bytes = await bytesDaConta(arquivo);
-        return bytes ? reduzirFoto(sessao, bytes, ladoMaximo) : undefined;
+        return bytes ? comoImagem(await chamar({ tipo: 'reduzir', sessao, bytes, ladoMaximo })) : undefined;
       },
-      fechar: () => sessao.destruir(),
+      fechar: () => {
+        if (fechada) return;
+        fechada = true;
+        medida.destruir();
+        if (montadaNa !== undefined && montadaNa === oficina.geracao && oficina.viva) void oficina.pedir({ tipo: 'fechar', sessao }).catch(() => undefined);
+        if (--this.abertas === 0) oficina.semSessoes();
+      },
     };
   }
 }

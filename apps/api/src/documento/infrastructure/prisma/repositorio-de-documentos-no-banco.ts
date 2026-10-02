@@ -40,9 +40,19 @@ interface LinhaDeDocumento {
   versaoAtual: number;
   pranchetas: number;
   alteradoEm: Date;
+  marcaId: string | null;
+  miniaturaVersao: number | null;
 }
 
-const registro = (l: LinhaDeDocumento): RegistroDeDocumento => ({ id: l.id, nome: l.nome, versao: l.versaoAtual, pranchetas: l.pranchetas, alteradoEm: l.alteradoEm });
+const registro = (l: LinhaDeDocumento): RegistroDeDocumento => ({
+  id: l.id,
+  nome: l.nome,
+  versao: l.versaoAtual,
+  pranchetas: l.pranchetas,
+  alteradoEm: l.alteradoEm,
+  ...(l.marcaId ? { marcaId: l.marcaId } : {}),
+  ...(l.miniaturaVersao !== null ? { miniaturaVersao: l.miniaturaVersao } : {}),
+});
 
 const loteGravado = (l: { tocados: unknown } & Omit<LoteGravado, 'tocados'>): LoteGravado => ({ ...l, tocados: Array.isArray(l.tocados) ? l.tocados.map(String) : [] });
 
@@ -78,13 +88,43 @@ export class RepositorioDeDocumentosNoBanco extends RepositorioDeDocumentos {
     });
   }
 
-  async listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number }): Promise<Pagina<RegistroDeDocumento>> {
+  async definirMarca(escopo: EscopoDaConta, id: string, marcaId: string): Promise<boolean> {
+    if (!UUID.test(id) || !UUID.test(marcaId)) return false;
+    return (await this.prisma.executar(escopo, (tx) => tx.documento.updateMany({ where: { id, contaId: escopo.contaId }, data: { marcaId } }))).count > 0;
+  }
+
+  async pedirMiniatura(escopo: EscopoDaConta, id: string, agora: Date, seAnteriorA: Date): Promise<boolean> {
+    if (!UUID.test(id)) return false;
+    // a condição vai no UPDATE: dois lotes ao mesmo tempo publicam um trabalho só
+    const mudou = await this.prisma.executar(
+      escopo,
+      (tx) => tx.$executeRaw`
+        UPDATE documentos SET miniatura_pedida_em = ${agora}
+        WHERE id = ${id}::uuid AND conta_id = ${escopo.contaId}::uuid AND (miniatura_pedida_em IS NULL OR miniatura_pedida_em < ${seAnteriorA})`,
+    );
+    return mudou > 0;
+  }
+
+  async gravarMiniatura(escopo: EscopoDaConta, id: string, versao: number): Promise<{ anterior?: number } | undefined> {
+    if (!UUID.test(id)) return undefined;
+    return this.prisma.executar(escopo, async (tx) => {
+      const antes = await tx.documento.findFirst({ where: { id, contaId: escopo.contaId }, select: { miniaturaVersao: true } });
+      if (!antes) return undefined;
+      // sem tocar em alterado_em: a peça não sobe na lista por causa da miniatura
+      await tx.documento.updateMany({ where: { id, contaId: escopo.contaId }, data: { miniaturaVersao: versao } });
+      return antes.miniaturaVersao !== null ? { anterior: antes.miniaturaVersao } : {};
+    });
+  }
+
+  async listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number; marcaId?: string }): Promise<Pagina<RegistroDeDocumento>> {
+    if (pagina.marcaId !== undefined && !UUID.test(pagina.marcaId)) return { itens: [], proximoCursor: null };
     const depoisDe = pagina.cursor ? lerPosicaoDaLista(pagina.cursor) : undefined;
     return this.prisma.executar(escopo, async (tx) => {
       const linhas = await tx.documento.findMany({
         where: {
           contaId: escopo.contaId,
           arquivadoEm: null,
+          ...(pagina.marcaId ? { marcaId: pagina.marcaId } : {}),
           ...(depoisDe ? { OR: [{ alteradoEm: { lt: depoisDe.alteradoEm } }, { alteradoEm: depoisDe.alteradoEm, id: { lt: depoisDe.id } }] } : {}),
         },
         orderBy: [{ alteradoEm: 'desc' }, { id: 'desc' }],

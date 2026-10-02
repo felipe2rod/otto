@@ -27,10 +27,12 @@ import { RepositorioDeCadastrosNoBanco } from './briefing/infrastructure/prisma/
 import { ControladorDeBriefings, ControladorDeMarcas } from './briefing/presentation/controlador-de-cadastros';
 import { CicloDeVida } from './ciclo-de-vida';
 import { CasosDeUsoDeDocumento } from './documento/application/casos-de-uso-de-documento';
+import { CasosDeUsoDeMiniatura, RenderDeMiniatura } from './documento/application/casos-de-uso-de-miniatura';
 import { MedidorDeTexto } from './documento/application/medidor-de-texto';
 import { RepositorioDeDocumentos } from './documento/application/repositorio-de-documentos';
 import { RepositorioDeDocumentosNoBanco } from './documento/infrastructure/prisma/repositorio-de-documentos-no-banco';
 import { MedidorComCanvasKit } from './documento/infrastructure/render/medidor-com-canvaskit';
+import { MiniaturaPelaBancada } from './documento/infrastructure/render/miniatura-pela-bancada';
 import { ControladorDeDocumentos } from './documento/presentation/controlador-de-documentos';
 import { CasosDeUsoDeExportacao, type FalhaObservada } from './exportacao/application/casos-de-uso-de-exportacao';
 import { MotorDeExportacao } from './exportacao/application/motor-de-exportacao';
@@ -143,8 +145,7 @@ export class ModuloRaiz {
         // Quem desenha textura é o worker (é render); a API só entrega a que já está guardada.
         {
           provide: GeradorDeTexturas,
-          useFactory: (bancada: BancadaDoOtto) => (servico === 'worker' ? new GeradorComCanvasKit(bancada instanceof BancadaComRender ? () => bancada.motorDoProcesso() : undefined) : null),
-          inject: [BancadaDoOtto],
+          useFactory: () => (servico === 'worker' ? new GeradorComCanvasKit() : null),
         },
         { provide: RepositorioDeTarefas, useFactory: (prisma: PrismaComEscopo) => new RepositorioDeTarefasNoBanco(prisma), inject: [PrismaComEscopo] },
         { provide: ConsumoDoModelo, useFactory: (prisma: PrismaComEscopo) => new ConsumoDoModeloNoBanco(prisma), inject: [PrismaComEscopo] },
@@ -177,6 +178,14 @@ export class ModuloRaiz {
         // ao mesmo tempo.
         { provide: MotorDeExportacao, useFactory: () => new MotorDeExportacaoEmThread({ threads: config.worker.exportacoesAoMesmoTempo }) },
         { provide: MedidorDeTexto, useFactory: (fontes: BibliotecaDeFontes) => new MedidorComCanvasKit(fontes), inject: [BibliotecaDeFontes] },
+        // A miniatura da peça é desenhada pela bancada de render do worker (na thread de render).
+        { provide: RenderDeMiniatura, useFactory: (bancada: BancadaDoOtto) => new MiniaturaPelaBancada(bancada), inject: [BancadaDoOtto] },
+        {
+          provide: CasosDeUsoDeMiniatura,
+          useFactory: (documentos: RepositorioDeDocumentos, armazenamento: ArmazenamentoDeArquivo, fila: BarramentoDeEventos, render: RenderDeMiniatura, uso: RegistroDeUso) =>
+            new CasosDeUsoDeMiniatura({ documentos, armazenamento, fila, render, uso }),
+          inject: [RepositorioDeDocumentos, ArmazenamentoDeArquivo, BarramentoDeEventos, RenderDeMiniatura, RegistroDeUso],
+        },
         // casos de uso: classes puras, montadas aqui
         {
           provide: CasosDeUsoDeDocumento,
@@ -188,8 +197,9 @@ export class ModuloRaiz {
             fontes: BibliotecaDeFontes,
             tarefas: RepositorioDeTarefas,
             sobDemanda: CasosDeUsoDeFontes,
-          ) => new CasosDeUsoDeDocumento(documentos, arquivos, medidor, uuidV7, uso, fontes, tarefasDaPeca(tarefas), sobDemanda),
-          inject: [RepositorioDeDocumentos, RepositorioDeArquivos, MedidorDeTexto, RegistroDeUso, BibliotecaDeFontes, RepositorioDeTarefas, CasosDeUsoDeFontes],
+            miniaturas: CasosDeUsoDeMiniatura,
+          ) => new CasosDeUsoDeDocumento(documentos, arquivos, medidor, uuidV7, uso, fontes, tarefasDaPeca(tarefas, uso), sobDemanda, miniaturas),
+          inject: [RepositorioDeDocumentos, RepositorioDeArquivos, MedidorDeTexto, RegistroDeUso, BibliotecaDeFontes, RepositorioDeTarefas, CasosDeUsoDeFontes, CasosDeUsoDeMiniatura],
         },
         {
           provide: CasosDeUsoDeArquivo,
@@ -251,6 +261,7 @@ export class ModuloRaiz {
             texturas: CasosDeUsoDeTexturas,
             fontes: CasosDeUsoDeFontes,
             catalogo: CatalogoDeFontes | null,
+            miniaturas: CasosDeUsoDeMiniatura,
           ) =>
             new CasosDeUsoDeTarefa({
               tarefas,
@@ -264,6 +275,8 @@ export class ModuloRaiz {
               limites: { ...config.agente, contarConsumo: config.agente.modeloDeVerdade },
               gerarId: uuidV7,
               uso,
+              alavancas: config.agente.alavancas,
+              aoParar: (escopo, documentoId) => miniaturas.pedirAgora(escopo, documentoId),
               briefing,
               // as ferramentas que o Otto recebe dependem do que este servidor tem configurado
               ...(banco ? { imagens: imagensDoOtto(imagens) } : {}),
@@ -288,6 +301,7 @@ export class ModuloRaiz {
             CasosDeUsoDeTexturas,
             CasosDeUsoDeFontes,
             CatalogoDeFontes,
+            CasosDeUsoDeMiniatura,
           ],
         },
         {
@@ -332,17 +346,32 @@ export class ModuloRaiz {
         },
         {
           provide: CicloDeVida,
-          useFactory: (prisma: PrismaComEscopo, fila: BarramentoDeEventos, exportacoes: CasosDeUsoDeExportacao, registro: Registro, motor: MotorDeExportacao, tarefas: CasosDeUsoDeTarefa) =>
+          useFactory: (
+            prisma: PrismaComEscopo,
+            fila: BarramentoDeEventos,
+            exportacoes: CasosDeUsoDeExportacao,
+            registro: Registro,
+            motorDeExportacao: MotorDeExportacao,
+            tarefas: CasosDeUsoDeTarefa,
+            bancada: BancadaDoOtto,
+            miniaturas: CasosDeUsoDeMiniatura,
+          ) =>
             new CicloDeVida(
               servico,
               prisma,
               fila,
               exportacoes,
               registro,
-              { exportacoesAoMesmoTempo: config.worker.exportacoesAoMesmoTempo, tarefasAoMesmoTempo: config.worker.tarefasAoMesmoTempo, motor },
+              {
+                exportacoesAoMesmoTempo: config.worker.exportacoesAoMesmoTempo,
+                tarefasAoMesmoTempo: config.worker.tarefasAoMesmoTempo,
+                // as threads de render: as da exportação e a da tarefa do Otto
+                motor: { fechar: async () => void (await Promise.all([motorDeExportacao.fechar(), bancada.fechar()])) },
+              },
               tarefas,
+              miniaturas,
             ),
-          inject: [PrismaComEscopo, BarramentoDeEventos, CasosDeUsoDeExportacao, Registro, MotorDeExportacao, CasosDeUsoDeTarefa],
+          inject: [PrismaComEscopo, BarramentoDeEventos, CasosDeUsoDeExportacao, Registro, MotorDeExportacao, CasosDeUsoDeTarefa, BancadaDoOtto, CasosDeUsoDeMiniatura],
         },
       ],
     };

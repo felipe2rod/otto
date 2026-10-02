@@ -21,4 +21,6 @@ export interface BancadaAberta {
 
 export abstract class BancadaDoOtto {
   abstract abrir(escopo: EscopoDaConta, peca: { nome: string; arvore: Documento }): Promise<BancadaAberta>;
+  /** Desligamento do processo: libera o que a bancada mantém entre tarefas (a thread de render). */
+  async fechar(): Promise<void> {}
 }

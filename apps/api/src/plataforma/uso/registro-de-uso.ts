@@ -8,6 +8,7 @@ type FormatoExportado = 'psd' | 'png' | 'svg' | 'pdf';
 
 export type EventoDeUso =
   | { evento: 'peca_de_exemplo_semeada'; documentoId: string }
+  | { evento: 'miniatura_gerada'; documentoId: string; versao: number; bytes: number; duracaoMs: number }
   | { evento: 'lote_aplicado'; documentoId: string; autoria: 'designer' | 'agente'; operacoesPorTipo: Record<string, number>; nosTocados: number; mediuTexto: boolean; versao: number }
   | { evento: 'arquivo_enviado'; tipo: string; bytes: number; largura: number; altura: number }
   | { evento: 'exportacao_pedida'; exportacaoId: string; documentoId: string; formato: FormatoExportado; pacote: boolean; pranchetas: number; juntas: boolean }

@@ -87,6 +87,11 @@ export interface TarefasDaPeca {
   vivas(escopo: EscopoDaConta): Promise<Map<string, { id: string; estado: EstadoDaTarefa; fim?: FimDaTarefa }>>;
 }
 
+/** Pede a miniatura da peça depois de uma edição (com atraso e freio: quem responde é o caso de uso de miniatura). Nunca lança. */
+export interface MiniaturasDaPeca {
+  pedirDepoisDeEdicao(escopo: EscopoDaConta, documentoId: string): Promise<void>;
+}
+
 /**
  * Traz para a biblioteca as famílias de fonte que ainda não estão nela (quem responde é a biblioteca de
  * fontes). É rede: é chamado ANTES de travar a peça, nunca dentro da transação do lote.
@@ -117,6 +122,7 @@ export class CasosDeUsoDeDocumento {
     private readonly fontes?: BibliotecaDeFontes,
     private readonly tarefas?: TarefasDaPeca,
     private readonly fontesSobDemanda?: FontesSobDemanda,
+    private readonly miniaturas?: MiniaturasDaPeca,
   ) {}
 
   /** O documento como a rota o devolve: com as possibilidades do histórico e os pesos de fonte que existem. */
@@ -166,7 +172,7 @@ export class CasosDeUsoDeDocumento {
     return criado.id;
   }
 
-  async listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number }): Promise<ListaDeDocumentos> {
+  async listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number; marcaId?: string }): Promise<ListaDeDocumentos> {
     const lista = await this.paginar(() => this.documentos.listar(escopo, pagina));
     const vivas = (await this.tarefas?.vivas(escopo)) ?? new Map<string, { id: string; estado: EstadoDaTarefa; fim?: FimDaTarefa }>();
     const item = (r: RegistroDeDocumento) => ({
@@ -176,7 +182,9 @@ export class CasosDeUsoDeDocumento {
       versao: r.versao,
       alteradoEm: r.alteradoEm.toISOString(),
       ...(vivas.has(r.id) ? { tarefa: vivas.get(r.id) } : {}),
-      miniatura: null,
+      ...(r.marcaId ? { marcaId: r.marcaId } : {}),
+      // o endereço leva a versão: muda quando a miniatura muda. Peça sem prancheta não tem miniatura.
+      miniatura: r.miniaturaVersao !== undefined && r.pranchetas > 0 ? `/api/documentos/${r.id}/miniatura?v=${r.miniaturaVersao}` : null,
     });
     return { itens: lista.itens.map(item), proximoCursor: lista.proximoCursor };
   }
@@ -215,7 +223,7 @@ export class CasosDeUsoDeDocumento {
   async aplicarLote(escopo: EscopoDaConta, id: string, pedido: PedidoDeLote): Promise<RespostaDeLote> {
     // fonte que o lote cita e ainda não está na biblioteca: trazida antes, fora da transação (é rede)
     await this.garantirFontes(pedido.operacoes);
-    return this.comTrava(escopo, id, async (doc) => {
+    return this.editando(escopo, id, async (doc) => {
       await this.exigirPecaLivre(escopo, id);
       // reenvio do mesmo lote: devolve o que já foi gravado, sem olhar a versão base
       const repetido = await doc.lotePorChaveDoCliente(pedido.id);
@@ -262,7 +270,7 @@ export class CasosDeUsoDeDocumento {
   }
 
   async desfazer(escopo: EscopoDaConta, id: string, pedido: PedidoDeDesfazer): Promise<RespostaDeDesfazer> {
-    return this.comTrava(escopo, id, async (doc) => {
+    return this.editando(escopo, id, async (doc) => {
       await this.exigirPecaLivre(escopo, id);
       this.conferirVersao(doc, pedido.versaoBase);
       const atual = await doc.lote(doc.registro.versao);
@@ -281,7 +289,7 @@ export class CasosDeUsoDeDocumento {
   }
 
   async refazer(escopo: EscopoDaConta, id: string, pedido: PedidoDeDesfazer): Promise<RespostaDeDesfazer> {
-    return this.comTrava(escopo, id, async (doc) => {
+    return this.editando(escopo, id, async (doc) => {
       await this.exigirPecaLivre(escopo, id);
       this.conferirVersao(doc, pedido.versaoBase);
       const cauda = await doc.caudaDeReversoes();
@@ -354,7 +362,7 @@ export class CasosDeUsoDeDocumento {
    * peça ao conteúdo da versão em que a tarefa começou. Quem decide se pode é o caso de uso da tarefa.
    */
   async voltarParaAntesDaTarefa(escopo: EscopoDaConta, id: string, tarefa: { id: string; versaoInicial: number }): Promise<{ versao: number; arvore: Documento }> {
-    return this.comTrava(escopo, id, async (doc) => {
+    return this.editando(escopo, id, async (doc) => {
       const ateVersao = conteudoDe(tarefa.versaoInicial > 0 ? await doc.lote(tarefa.versaoInicial) : undefined);
       const ultimoDaTarefa = conteudoDe(await doc.lote(doc.registro.versao));
       const r = await this.reverter(doc, ateVersao, tarefa.id);
@@ -366,7 +374,7 @@ export class CasosDeUsoDeDocumento {
 
   /** Descartar uma prancheta que a tarefa criou: uma operação comum do catálogo, num lote ligado à tarefa. */
   async removerPranchetaDaTarefa(escopo: EscopoDaConta, id: string, tarefaId: string, pranchetaId: string): Promise<{ versao: number; arvore: Documento }> {
-    return this.comTrava(escopo, id, async (doc) => {
+    return this.editando(escopo, id, async (doc) => {
       const operacoes = [{ op: 'removerPrancheta', prancheta: pranchetaId }];
       const loteId = this.gerarId();
       const aplicado = aplicarLote(await doc.arvore(), operacoes, { autoria: { tipo: 'designer' }, idDoLote: loteId });
@@ -428,6 +436,13 @@ export class CasosDeUsoDeDocumento {
     });
     if (!achou) throw new NaoEncontrado();
     return resultado as T;
+  }
+
+  /** Uma edição do designer: grava com a peça travada e, gravada, pede a miniatura (com atraso; nunca derruba a edição). */
+  private async editando<T>(escopo: EscopoDaConta, id: string, fn: (doc: DocumentoTravado) => Promise<T>): Promise<T> {
+    const resultado = await this.comTrava(escopo, id, fn);
+    await this.miniaturas?.pedirDepoisDeEdicao(escopo, id);
+    return resultado;
   }
 
   private async paginar<T>(fn: () => Promise<T>): Promise<T> {

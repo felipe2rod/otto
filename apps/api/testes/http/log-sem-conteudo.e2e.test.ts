@@ -125,8 +125,18 @@ beforeAll(async () => {
   await A.get(`/api/documentos/${peca.id}/pendencias`);
   await A.post(`/api/tarefas/${tarefa.id}/aceitar`).send({});
   await A.post(`/api/tarefas/${tarefa.id}/desfazer`).send({});
-  // e a que dá errado: pedido livre numa peça em que o roteiro não se aplica (o lote é recusado, e a recusa cita a camada)
-  const recusada = (await A.post(`/api/documentos/${documentoId}/tarefas`).send({ tipo: 'ajuste', pedido: S.pedidoAoOtto })).body as { id: string };
+  // e a que dá errado: ajuste numa peça sem camada de texto (o roteiro de ajuste precisa de uma). A falha cita a peça por dentro.
+  const semTexto = (await A.post('/api/documentos').send({ nome: S.nomeDoDocumento })).body as { id: string };
+  await A.post(`/api/documentos/${semTexto.id}/lotes`).send({
+    id: randomUUID(),
+    versaoBase: 0,
+    descricao: S.descricaoDoLote,
+    operacoes: [
+      { op: 'criarPrancheta', nome: S.nomeDaPrancheta, largura: 1080, altura: 1350, fundo: S.corDaMarca },
+      { op: 'criarNo', prancheta: S.nomeDaPrancheta, no: { tipo: 'forma', forma: 'retangulo', nome: S.nomeDaCamada, x: 0, y: 0, largura: 100, altura: 100, preenchimento: S.corDaMarca } },
+    ],
+  });
+  const recusada = (await A.post(`/api/documentos/${semTexto.id}/tarefas`).send({ tipo: 'ajuste', pedido: S.pedidoAoOtto })).body as { id: string };
   tarefaRecusadaId = recusada.id;
   await api.fila.ociosa();
   await A.post(`/api/documentos/${documentoId}/tarefas`).send({ tipo: 'tipo-que-nao-existe', pedido: S.pedidoAoOtto });
@@ -312,11 +322,10 @@ describe('a tarefa do Otto no log: uso sim, conteúdo não (ADR 031)', () => {
     ).toEqual(['aceita', 'desfeita']);
   });
 
-  it('a tarefa que deu errado registra o código do fim, e não a mensagem da recusa (que cita a camada)', () => {
+  it('a tarefa que deu errado registra o estado e o código do erro, e não a mensagem dele', () => {
     const terminada = api.log.find((l) => l.evento === 'tarefa_terminada' && l.tarefaId === tarefaRecusadaId);
-    expect(terminada).toMatchObject({ lotes: 0 });
-    expect(terminada?.lotesRecusados).toBeGreaterThan(0);
-    expect(JSON.stringify(linhasDaTarefa(tarefaRecusadaId))).not.toMatch(/Título|Feed|destaque/);
+    expect(terminada).toMatchObject({ estado: 'falhou', fim: 'erro', erro: 'resposta_invalida', lotes: 0 });
+    expect(JSON.stringify(linhasDaTarefa(tarefaRecusadaId))).not.toMatch(/roteiro|camada de texto|mensagem/);
   });
 
   it('o fluxo de eventos aparece no log como rota modelo, sem o corpo que ele transmitiu', () => {

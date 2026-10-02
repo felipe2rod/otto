@@ -4,8 +4,9 @@
 export interface ConsumoDeHoje {
   tokens: number;
   chamadas: number;
-  /** O que o fornecedor disse que resta no dia, na última resposta que trouxe o número. */
+  /** O que o fornecedor disse que resta, na última resposta que trouxe o número, e quando foi. */
   restanteNoFornecedor?: number;
+  vistoEm?: Date;
 }
 
 export abstract class ConsumoDoModelo {
@@ -38,6 +39,8 @@ export class ConsumoDoModeloEmMemoria extends ConsumoDoModelo {
     dia.chamadas += 1;
   }
   async anotarRestante(agora: Date, restante: number): Promise<void> {
-    this.do(agora).restanteNoFornecedor = restante;
+    const dia = this.do(agora);
+    dia.restanteNoFornecedor = restante;
+    dia.vistoEm = agora;
   }
 }

@@ -159,8 +159,17 @@ export const DocumentoDaLista = z.object({
   alteradoEm: Quando,
   /** Presente quando há tarefa na fila, rodando ou aguardando revisão. */
   tarefa: TarefaResumida.optional(),
-  /** Sempre nulo no MVP até a fatia de exportação. */
-  miniatura: z.null(),
+  /** A marca com que a peça foi criada pelo formulário de briefing. GET /api/documentos?marca=<id> filtra por ela. */
+  marcaId: Id.optional(),
+  /**
+   * Endereço da miniatura (JPEG da primeira prancheta, até 480 px), ou nulo enquanto não há. O endereço muda
+   * quando a miniatura muda (leva a versão): pode ser guardado em cache para sempre. É feita pelo worker ao
+   * fim de cada tarefa do Otto e alguns segundos depois de uma edição: logo depois de editar, ainda é a anterior.
+   */
+  miniatura: z
+    .string()
+    .regex(/^\/api\/documentos\/[0-9a-f-]+\/miniatura\?v=\d+$/)
+    .nullable(),
 });
 export type DocumentoDaLista = z.infer<typeof DocumentoDaLista>;
 

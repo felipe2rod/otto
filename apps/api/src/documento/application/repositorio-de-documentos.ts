@@ -10,6 +10,10 @@ export interface RegistroDeDocumento {
   versao: number;
   pranchetas: number;
   alteradoEm: Date;
+  /** A marca com que a peça foi criada pelo formulário de briefing. */
+  marcaId?: string;
+  /** A versão que a miniatura guardada mostra. Ausente: ainda não há miniatura. */
+  miniaturaVersao?: number;
 }
 
 export interface DocumentoGuardado extends RegistroDeDocumento {
@@ -88,7 +92,17 @@ export abstract class RepositorioDeDocumentos {
   /** A conta já teve a peça de exemplo? Conta também a arquivada: o exemplo não volta sozinho. */
   abstract temExemplo(escopo: EscopoDaConta): Promise<boolean>;
   /** Não arquivados, do alterado mais recentemente para o mais antigo. */
-  abstract listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number }): Promise<Pagina<RegistroDeDocumento>>;
+  /** `marcaId` filtra pelas peças de uma marca. */
+  abstract listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number; marcaId?: string }): Promise<Pagina<RegistroDeDocumento>>;
+  /** Liga a peça a uma marca DA CONTA (quem chama já conferiu a marca). false se a peça não existe nesta conta. */
+  abstract definirMarca(escopo: EscopoDaConta, id: string, marcaId: string): Promise<boolean>;
+  /**
+   * Marca que uma miniatura foi pedida agora, se a última foi pedida antes de `seAnteriorA` (ou nunca). É o freio:
+   * true quer dizer "publique o trabalho"; false, que já há um pedido recente (ou que a peça não existe nesta conta).
+   */
+  abstract pedirMiniatura(escopo: EscopoDaConta, id: string, agora: Date, seAnteriorA: Date): Promise<boolean>;
+  /** Registra a versão que a miniatura guardada mostra. Devolve a versão que havia antes, para apagar o arquivo antigo. undefined se a peça não existe nesta conta. */
+  abstract gravarMiniatura(escopo: EscopoDaConta, id: string, versao: number): Promise<{ anterior?: number } | undefined>;
   /** undefined se não existe, se foi arquivado ou se é de outra conta. */
   abstract abrir(escopo: EscopoDaConta, id: string): Promise<DocumentoGuardado | undefined>;
   abstract renomear(escopo: EscopoDaConta, id: string, nome: string): Promise<RegistroDeDocumento | undefined>;

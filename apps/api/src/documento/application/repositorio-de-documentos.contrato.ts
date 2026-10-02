@@ -10,6 +10,8 @@ export interface RepositorioSobTeste {
   repositorio: RepositorioDeDocumentos;
   contaA: EscopoDaConta;
   contaB: EscopoDaConta;
+  /** Cria uma marca na conta e devolve o id. Só o adaptador do banco precisa (a chave estrangeira confere). */
+  criarMarca?(escopo: EscopoDaConta): Promise<string>;
 }
 
 const arvoreCom = (nome: string): Documento => ({ ...documentoVazio(), pranchetas: [{ id: randomUUID(), nome, tipo: 'prancheta', largura: 100, altura: 100, fundo: '#ffffff', filhos: [] }] });
@@ -33,8 +35,12 @@ export function contratoDoRepositorioDeDocumentos(nome: string, criar: () => Pro
     let A: EscopoDaConta;
     let B: EscopoDaConta;
 
+    let criarMarca: (escopo: EscopoDaConta) => Promise<string>;
+
     beforeAll(async () => {
-      ({ repositorio: r, contaA: A, contaB: B } = await criar());
+      const sob = await criar();
+      ({ repositorio: r, contaA: A, contaB: B } = sob);
+      criarMarca = sob.criarMarca ?? (async () => randomUUID());
     });
 
     const novo = (escopo: EscopoDaConta, nomeDoDoc = 'doc', arvore = documentoVazio()) => r.criar(escopo, { id: randomUUID(), nome: nomeDoDoc, arvore });
@@ -98,6 +104,48 @@ export function contratoDoRepositorioDeDocumentos(nome: string, criar: () => Pro
       expect(await r.temExemplo(outra)).toBe(false);
       await r.arquivar(nova, exemplo.id);
       expect(await r.temExemplo(nova)).toBe(true);
+    });
+
+    it('a marca da peça: é definida, vem na lista e filtra a lista; a peça de outra conta não é marcada', async () => {
+      const { contaA: conta, contaB: outra } = await criar();
+      const [marca, outraMarca] = [await criarMarca(conta), await criarMarca(conta)];
+      const [comMarca, comOutra, semMarca] = [
+        await r.criar(conta, { id: randomUUID(), nome: 'a', arvore: documentoVazio() }),
+        await r.criar(conta, { id: randomUUID(), nome: 'b', arvore: documentoVazio() }),
+        await r.criar(conta, { id: randomUUID(), nome: 'c', arvore: documentoVazio() }),
+      ];
+      expect(await r.definirMarca(conta, comMarca.id, marca)).toBe(true);
+      expect(await r.definirMarca(conta, comOutra.id, outraMarca)).toBe(true);
+      expect(await r.definirMarca(outra, comMarca.id, marca)).toBe(false);
+      expect(await r.definirMarca(conta, randomUUID(), marca)).toBe(false);
+      const todos = (await r.listar(conta, { limite: 10 })).itens;
+      expect(todos.find((d) => d.id === comMarca.id)?.marcaId).toBe(marca);
+      expect(todos.find((d) => d.id === semMarca.id)).not.toHaveProperty('marcaId');
+      expect((await r.listar(conta, { limite: 10, marcaId: marca })).itens.map((d) => d.id)).toEqual([comMarca.id]);
+      expect((await r.listar(conta, { limite: 10, marcaId: randomUUID() })).itens).toEqual([]);
+      expect((await r.abrir(conta, comMarca.id))?.marcaId).toBe(marca);
+    });
+
+    it('miniatura: o pedido tem freio (uma vez por intervalo), e a gravação diz qual versão havia antes', async () => {
+      const { contaA: conta, contaB: outra } = await criar();
+      const doc = await r.criar(conta, { id: randomUUID(), nome: 'a', arvore: documentoVazio() });
+      const t0 = new Date('2026-10-05T12:00:00.000Z');
+      const mais = (segundos: number) => new Date(t0.getTime() + segundos * 1000);
+      // o primeiro pedido passa; o segundo, dentro do intervalo, não
+      expect(await r.pedirMiniatura(conta, doc.id, t0, mais(-20))).toBe(true);
+      expect(await r.pedirMiniatura(conta, doc.id, mais(5), mais(-15))).toBe(false);
+      expect(await r.pedirMiniatura(conta, doc.id, mais(25), mais(5))).toBe(true);
+      expect(await r.pedirMiniatura(outra, doc.id, mais(100), mais(80))).toBe(false);
+      expect(await r.pedirMiniatura(conta, randomUUID(), mais(100), mais(80))).toBe(false);
+
+      expect((await r.abrir(conta, doc.id))?.miniaturaVersao).toBeUndefined();
+      expect(await r.gravarMiniatura(conta, doc.id, 0)).toEqual({});
+      expect(await r.gravarMiniatura(conta, doc.id, 3)).toEqual({ anterior: 0 });
+      expect((await r.abrir(conta, doc.id))?.miniaturaVersao).toBe(3);
+      expect((await r.listar(conta, { limite: 10 })).itens[0]?.miniaturaVersao).toBe(3);
+      expect(await r.gravarMiniatura(outra, doc.id, 9)).toBeUndefined();
+      // gravar a miniatura não mexe na data de alteração: a peça não sobe na lista por causa dela
+      expect((await r.abrir(conta, doc.id))?.alteradoEm).toEqual(doc.alteradoEm);
     });
 
     it('arquivar: some de abrir e da lista; arquivar de novo devolve false', async () => {

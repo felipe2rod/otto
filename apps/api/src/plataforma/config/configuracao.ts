@@ -1,6 +1,7 @@
 // Configuração do processo, validada na subida. Faltou ou veio malformada: o processo não inicia.
 // É o ÚNICO lugar (com main.ts e worker.ts, que só repassam) onde variável de ambiente é lida.
 // Nome de fornecedor pode aparecer aqui, no valor que escolhe o adaptador (ADR 020, item 1).
+import { type Alavancas, lerAlavancas } from '@otto/agente';
 import { ContaId } from '@otto/shared';
 import { z } from 'zod';
 
@@ -70,6 +71,14 @@ const Esquema = z
     // Uma tarefa de briefing de dois formatos consome 2,2 a 2,6 milhões: com menos que isto sobrando no
     // fornecedor, não começa nem continua.
     RESTO_MINIMO_NO_FORNECEDOR: z.coerce.number().int().min(0).default(3_000_000),
+    // O limite do fornecedor se comporta como um balde que se repõe (medido em 2026-10-02; docs/tecnico/custos.md,
+    // seção 10; a confirmar): o tamanho do balde e quanto volta por hora. A reposição é o mínimo compatível com
+    // as leituras; serve para a última leitura não trancar as tarefas quando ninguém está chamando o modelo.
+    CAPACIDADE_DO_FORNECEDOR: z.coerce.number().int().min(0).default(4_500_000),
+    REPOSICAO_POR_HORA_NO_FORNECEDOR: z.coerce.number().int().min(0).default(900_000),
+    // Alavancas de custo do ciclo (@otto/agente, alavancas.ts): "nenhuma", "todas", ou números de 1 a 4 separados
+    // por vírgula. Desligadas por padrão: ligar é decisão do Felipe, com o conjunto de avaliação rodado.
+    ALAVANCAS_DE_CUSTO: z.string().max(120).default('nenhuma'),
     // ---- banco de imagens e catálogo de fontes (fatia 4) ----
     // A chave do banco de imagens de fábrica (ADR 032). É segredo. Ausente: a busca responde "indisponível" e
     // o Otto não recebe as ferramentas de imagem.
@@ -134,6 +143,9 @@ export interface ConfiguracaoDoAgente {
   readonly naFilaPorConta: number;
   readonly tetoDiarioDeTokens: number;
   readonly restoMinimoNoFornecedor: number;
+  readonly capacidadeDoFornecedor: number;
+  readonly reposicaoPorHoraNoFornecedor: number;
+  readonly alavancas: Alavancas;
 }
 
 /** A mensagem cita o NOME das variáveis com problema e nunca o valor: o valor pode ser segredo. */
@@ -157,6 +169,12 @@ export function lerConfiguracao(env: Record<string, string | undefined>, servico
     throw new ConfiguracaoInvalida(variaveis);
   }
   const e = lido.data;
+  let alavancas: Alavancas;
+  try {
+    alavancas = lerAlavancas(e.ALAVANCAS_DE_CUSTO);
+  } catch {
+    throw new ConfiguracaoInvalida(['ALAVANCAS_DE_CUSTO']);
+  }
   if (servico === 'worker') {
     const comProblema: string[] = [];
     if (e.MODELO_DO_AGENTE === 'claude' && !e.MODELO_CHAVE) comProblema.push('MODELO_CHAVE');
@@ -184,6 +202,9 @@ export function lerConfiguracao(env: Record<string, string | undefined>, servico
       naFilaPorConta: e.TAREFAS_NA_FILA_POR_CONTA,
       tetoDiarioDeTokens: e.TETO_DIARIO_DE_TOKENS,
       restoMinimoNoFornecedor: e.RESTO_MINIMO_NO_FORNECEDOR,
+      capacidadeDoFornecedor: e.CAPACIDADE_DO_FORNECEDOR,
+      reposicaoPorHoraNoFornecedor: e.REPOSICAO_POR_HORA_NO_FORNECEDOR,
+      alavancas: Object.freeze(alavancas),
     }),
     bancoDeImagens: Object.freeze(e.PIXABAY_API_KEY ? { adaptador: 'pixabay' as const, chave: e.PIXABAY_API_KEY } : { adaptador: 'nenhum' as const }),
     imagens: Object.freeze({ trazidasPorDia: e.IMAGENS_TRAZIDAS_POR_DIA_POR_CONTA, buscasNovasPorMinuto: e.BUSCAS_DE_IMAGEM_POR_MINUTO_POR_CONTA }),

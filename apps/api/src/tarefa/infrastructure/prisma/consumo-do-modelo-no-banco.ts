@@ -9,12 +9,17 @@ export class ConsumoDoModeloNoBanco extends ConsumoDoModelo {
 
   async hoje(agora: Date): Promise<ConsumoDeHoje> {
     const linhas = await this.prisma.noCatalogoGlobal(
-      (tx) => tx.$queryRaw<{ tokens: bigint; chamadas: number; restante_no_fornecedor: bigint | null }[]>`
-        SELECT tokens, chamadas, restante_no_fornecedor FROM consumo_diario_do_modelo WHERE dia = ${diaDe(agora)}::date`,
+      (tx) => tx.$queryRaw<{ tokens: bigint; chamadas: number; restante_no_fornecedor: bigint | null; visto_em: Date | null }[]>`
+        SELECT tokens, chamadas, restante_no_fornecedor, visto_em FROM consumo_diario_do_modelo WHERE dia = ${diaDe(agora)}::date`,
     );
     const l = linhas[0];
     if (!l) return { tokens: 0, chamadas: 0 };
-    return { tokens: Number(l.tokens), chamadas: l.chamadas, ...(l.restante_no_fornecedor !== null ? { restanteNoFornecedor: Number(l.restante_no_fornecedor) } : {}) };
+    return {
+      tokens: Number(l.tokens),
+      chamadas: l.chamadas,
+      ...(l.restante_no_fornecedor !== null ? { restanteNoFornecedor: Number(l.restante_no_fornecedor) } : {}),
+      ...(l.visto_em ? { vistoEm: l.visto_em } : {}),
+    };
   }
 
   async somar(agora: Date, tokens: number): Promise<void> {

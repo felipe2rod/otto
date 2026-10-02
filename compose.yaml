@@ -106,6 +106,8 @@ services:
       # gravada, sem custo. Para o modelo de verdade: MODELO_DO_AGENTE=claude docker compose up -d api worker
       # (a chave vem de LLM_API_KEY_DO, no .env da raiz, que não entra no repositório).
       MODELO_CHAVE: ${LLM_API_KEY_DO:-}
+      # Alavancas de custo do ciclo: "nenhuma" (padrão), "todas" ou números de 1 a 4. Ligar é decisão do Felipe.
+      ALAVANCAS_DE_CUSTO: ${ALAVANCAS_DE_CUSTO:-nenhuma}
       MODELO_NOME: ${MODELO_NOME:-}
       # 1: o roteiro demora o que demorou na gravação (7 minutos no de briefing). 0.05: vinte vezes mais rápido.
       VELOCIDADE_DO_ROTEIRO: ${VELOCIDADE_DO_ROTEIRO:-0.05}

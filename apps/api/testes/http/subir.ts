@@ -20,6 +20,7 @@ import { BibliotecaDeFontes } from '../../src/biblioteca/application/biblioteca-
 import { CatalogoDeFontes } from '../../src/biblioteca/application/catalogo-de-fontes';
 import { CatalogoDeMentira } from '../../src/biblioteca/infrastructure/adaptadores/memoria/catalogo-de-mentira';
 import { BibliotecaDeFontesEmMemoria } from '../../src/biblioteca/infrastructure/memoria/biblioteca-de-fontes-em-memoria';
+import { CasosDeUsoDeMiniatura } from '../../src/documento/application/casos-de-uso-de-miniatura';
 import { CasosDeUsoDeExportacao } from '../../src/exportacao/application/casos-de-uso-de-exportacao';
 import { MotorDeExportacao } from '../../src/exportacao/application/motor-de-exportacao';
 import { consumirExportacoes } from '../../src/exportacao/infrastructure/consumidor-de-exportacoes';
@@ -28,9 +29,10 @@ import { BancoDeImagens } from '../../src/imagem/application/banco-de-imagens';
 import { BancoDeMentira } from '../../src/imagem/infrastructure/adaptadores/memoria/banco-de-mentira';
 import { lerConfiguracao } from '../../src/plataforma/config/configuracao';
 import type { EscopoDaConta } from '../../src/plataforma/escopo/escopo-da-conta';
+import { escopoDoTrabalho } from '../../src/plataforma/escopo/escopo-do-trabalho';
 import { ResolvedorDeEscopo } from '../../src/plataforma/escopo/resolvedor-de-escopo';
 import { BarramentoEmMemoria } from '../../src/plataforma/fila/adaptadores/memoria/barramento-em-memoria';
-import { BarramentoDeEventos } from '../../src/plataforma/fila/barramento-de-eventos';
+import { BarramentoDeEventos, FILAS } from '../../src/plataforma/fila/barramento-de-eventos';
 import { Registro } from '../../src/plataforma/log/registro';
 import { CasosDeUsoDeTarefa } from '../../src/tarefa/application/casos-de-uso-de-tarefa';
 import { consumirTarefas } from '../../src/tarefa/infrastructure/consumidor-de-tarefas';
@@ -160,6 +162,8 @@ export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { 
   const app = configurarAplicacao(modulo.createNestApplication({ bodyParser: false }));
   await app.init();
   if (opcoes.consumirFila !== false) await consumirExportacoes(fila, app.get(CasosDeUsoDeExportacao));
+  // a miniatura da peça, com o consumidor do worker e a thread de render de verdade
+  await fila.consumir(FILAS.miniaturaDaPeca, { concorrencia: 1 }, async (trabalho) => void (await app.get(CasosDeUsoDeMiniatura).gerar(escopoDoTrabalho(trabalho), trabalho.id)));
   const ligarTarefas = () => consumirTarefas(fila, app.get(CasosDeUsoDeTarefa), 2);
   if (opcoes.consumirTarefas !== false) await ligarTarefas();
 
@@ -181,9 +185,13 @@ export const criarForma = (nome: string, extra: object = {}) => ({
 /** A entrada que o roteiro de briefing responde (parte de uma peça vazia e pede o "pode"). */
 export const ENTRADA_DE_BRIEFING = roteiroDoBriefing.entrada;
 
-/** Uma peça em que o roteiro de ajuste funciona: prancheta "Feed", camada de texto "Título" e o token "destaque". */
+/**
+ * Uma peça para o roteiro de ajuste, que põe em azul a primeira camada de texto. O fundo é azul de propósito:
+ * o texto fica sem contraste, a verificação acusa e a entrega sai com uma pendência (é o que os testes de
+ * pendência precisam).
+ */
 export const PECA_PARA_O_AJUSTE = [
   { op: 'definirToken', nome: 'destaque', valor: '#f4c430' },
-  { op: 'criarPrancheta', nome: 'Feed', largura: 1080, altura: 1350, fundo: '#f4efe3' },
+  { op: 'criarPrancheta', nome: 'Feed', largura: 1080, altura: 1350, fundo: '#2a66c4' },
   { op: 'criarNo', prancheta: 'Feed', no: { tipo: 'texto', nome: 'Título', x: 80, y: 120, largura: 900, altura: 300, conteudo: 'Promoção da semana', fonte: 'Anton', tamanho: 120, cor: '#17171c' } },
 ];

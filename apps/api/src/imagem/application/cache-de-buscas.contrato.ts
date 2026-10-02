@@ -58,6 +58,17 @@ export function contratoDoCacheDeBuscas(nome: string, criar: () => Promise<Cache
       expect(await cache.vista('outro-banco', '32', antes(24))).toBeUndefined();
     });
 
+    it('guardar uma busca apaga as que venceram há mais tempo que o prazo dado, e só elas', async () => {
+      const [velha, recente, nova] = [chave(), chave(), chave()];
+      await cache.guardar(banco, velha, [imagem('41')], antes(72));
+      await cache.guardar(banco, recente, [imagem('42')], antes(10));
+      await cache.guardar(banco, nova, [imagem('43')], T0, antes(48));
+      expect(await cache.recente(banco, velha, antes(1000))).toBeUndefined();
+      expect(await cache.vista(banco, '41', antes(1000))).toBeUndefined();
+      expect(await cache.recente(banco, recente, antes(24))).toEqual([imagem('42')]);
+      expect(await cache.recente(banco, nova, antes(24))).toEqual([imagem('43')]);
+    });
+
     it('id malicioso não acha nada e não quebra a consulta', async () => {
       for (const id of ['"}]', "'; DROP TABLE buscas_de_imagens; --", '%', '', '3']) expect(await cache.vista(banco, id, antes(1000))).toBeUndefined();
     });

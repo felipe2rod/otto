@@ -100,7 +100,7 @@ Tetos de uma exportação: 36 megapixels por prancheta na escala de saída (`422
 
 ### Tarefa do Otto
 
-O worker roda a tarefa do Otto. O padrão do desenvolvimento é o **modelo roteirizado**: reproduz uma tarefa gravada, sem falar com modelo nenhum e sem custo. O roteiro sai do tipo da entrada: `ajuste` usa `ajuste-titulo` (pede uma peça com a prancheta "Feed", a camada "Título" e o token "destaque"); os outros tipos usam `briefing-dois-formatos` (parte de uma peça vazia e pede o "pode").
+O worker roda a tarefa do Otto. O padrão do desenvolvimento é o **modelo roteirizado**: reproduz uma tarefa gravada, sem falar com modelo nenhum e sem custo. O roteiro sai do tipo da entrada: `briefing` → Feed e Story, com o "pode"; `criar` → uma prancheta, sem o "pode"; `pedido` → um quadrado e um banner a mais na peça aberta, com o "pode"; `ajuste` → põe em azul a primeira camada de texto da peça.
 
 ```bash
 H='-H X-Otto-Cliente:editor -H Content-Type:application/json'
@@ -129,7 +129,9 @@ docker compose logs worker | grep tarefa_terminada      # estado, lotes, chamada
 | `VELOCIDADE_DO_ROTEIRO` | `0.05` | 1 demora o que demorou na gravação (7 minutos no briefing); 0 responde na hora |
 | `TAREFAS_POR_WORKER` | 2 | Tarefas ao mesmo tempo em cada worker, de contas diferentes |
 | `TAREFAS_POR_DIA_POR_CONTA`, `TAREFAS_NA_FILA_POR_CONTA` | 30 e 3 | Limites operacionais da conta |
-| `TETO_DIARIO_DE_TOKENS`, `RESTO_MINIMO_NO_FORNECEDOR` | 40 milhões e 3 milhões | Teto nosso da plataforma por dia (UTC). Passou: tarefa nova responde 429 e a que roda fecha com o que já fez |
+| `TETO_DIARIO_DE_TOKENS` | 40 milhões | Teto nosso de gasto por dia (UTC). Passou: tarefa nova responde 429 e a que roda fecha com o que já fez |
+| `RESTO_MINIMO_NO_FORNECEDOR`, `CAPACIDADE_DO_FORNECEDOR`, `REPOSICAO_POR_HORA_NO_FORNECEDOR` | 3 milhões, 4,5 milhões e 900 mil | O limite do fornecedor é um balde que se repõe: quanto precisa restar para começar uma tarefa grande, o tamanho do balde e quanto volta por hora (`docs/mvp/backend.md`, 17.13) |
+| `ALAVANCAS_DE_CUSTO` | `nenhuma` | Alavancas de custo do ciclo: `todas` ou números de 1 a 4 (`docs/tecnico/custos.md`, seção 10). Ligar é decisão do Felipe |
 
 Pelo formulário de briefing (o caminho padrão), o corpo é `{"tipo":"briefing","briefing":{"versao":1,...},"cuidado":"cuidadoso"}`. O contrato está em `packages/shared/src/briefing.ts`. Para o roteiro gravado funcionar, os formatos são Feed 1080×1350 e Story 1080×1920:
 
@@ -143,6 +145,15 @@ curl -s $H -X POST localhost:8080/api/documentos/$DOC/tarefas -d @/tmp/formulari
 ```
 
 Uma tarefa por vez por peça e por conta. Enquanto ela vive, a peça é somente leitura (`409 documento_em_tarefa`; em revisão, `409 revisao_pendente`). Parar o worker fecha a tarefa em curso como interrompida, com o que já foi feito em revisão. Em desenvolvimento, salvar um arquivo reinicia o worker e a tarefa em curso é fechada por falta de sinal de vida, 60 s depois. O contrato está em `packages/shared/src/tarefa.ts` e o desenho em `docs/mvp/backend.md`, seção 17.11.
+
+Para criar a peça e a tarefa numa chamada só (se a tarefa não puder ser criada, nenhuma peça fica para trás):
+
+```bash
+curl -s $H -X POST localhost:8080/api/documentos/com-tarefa \
+  -d '{"nome":"Aviso do café","tarefa":{"tipo":"criar","pedido":"Aviso para o Café Aurora: \"Abrimos às 7h\"."}}' | jq '{documento, estado: .tarefa.estado}'
+curl -s $H localhost:8080/api/tarefas/limites | jq '{podeEnviar, podeAjustar, naFrente}'      # o que está na frente
+curl -s $H 'localhost:8080/api/documentos?limite=5' | jq '.itens[] | {nome, marcaId, miniatura}'   # a miniatura sai segundos depois
+```
 
 ### Marcas, banco de imagens, fontes e texturas
 
@@ -165,6 +176,28 @@ curl -s $H -X POST localhost:8080/api/texturas/papel/trazer -d '{}' | jq .      
 `docker compose run --rm semear` (roda a cada `up`) semeia as fontes, gera as texturas e cria a peça de exemplo da conta, uma vez. O desenho está em `docs/mvp/backend.md`, seção 17.12.
 
 Para derrubar: `docker compose down`. Para apagar também os dados e as dependências instaladas: `docker compose down -v`.
+
+## Imagens de produção
+
+`compose.producao.yaml` sobe as imagens de produção juntas numa máquina só, para provar que constroem e sobem. Não é a hospedagem (decisão do Felipe) e o Otto ainda não tem login: **não exponha à internet**. Nenhuma senha tem valor padrão; as variáveis vão num arquivo à parte.
+
+```bash
+cat > /tmp/producao.env <<'ENV'
+BANCO_SENHA_SUPERUSUARIO=...
+BANCO_SENHA_MIGRADOR=...
+BANCO_SENHA_APP=...
+BANCO_SENHA_OPERACAO=...
+ARMAZENAMENTO_CHAVE_DE_ACESSO=...
+ARMAZENAMENTO_CHAVE_SECRETA=...
+LLM_API_KEY_DO=...          # o worker de produção só sobe com o modelo de verdade
+ENV
+docker compose -f compose.producao.yaml --env-file /tmp/producao.env build
+docker compose -f compose.producao.yaml --env-file /tmp/producao.env up -d
+curl localhost:8180/api/saude/pronto                                  # a borda de produção fica na 8180
+docker compose -f compose.producao.yaml --env-file /tmp/producao.env down -v
+```
+
+A etapa de build roda o teste de fronteira e o de tipos: com trabalho em andamento na árvore que não passa neles, a imagem não sai.
 
 ## Testes, tipos e Biome
 

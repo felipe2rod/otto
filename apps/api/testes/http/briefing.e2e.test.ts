@@ -12,17 +12,21 @@ import {
   ErroDaApi,
   type FormularioDeBriefing,
   ImagemTrazida,
+  LimitesDeTarefa,
   ListaDeBriefings,
+  ListaDeDocumentos,
   ListaDeFontes,
   ListaDeMarcas,
   ListaDeTexturas,
   Marca,
+  PecaComTarefa,
   ResultadoDaBuscaDeImagens,
   Tarefa,
   TexturaTrazida,
   VetorImportado,
 } from '@otto/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { inspecionarImagem } from '../../src/arquivo/domain/inspecionar-imagem';
 import { semearFontes } from '../../src/biblioteca/application/semear-fontes';
 import { type ApiDeTeste, type ClienteDeTeste, ENTRADA_DE_BRIEFING, PNG, subirApi } from './subir';
 
@@ -361,5 +365,98 @@ describe('em produção só entra briefing pelo formulário', () => {
     } finally {
       await producao.fechar();
     }
+  }, 60_000);
+});
+
+describe('rodada de adoção: marca na lista, o que está na frente, peça e tarefa numa chamada, miniatura', () => {
+  const FORMULARIO = { versao: 1, nome: 'Aviso de inverno', formatos: FORMATOS, textos: { titulo: 'Abrimos às 7h' }, imagens: { fonte: 'nenhuma' } };
+
+  it('POST /api/documentos/com-tarefa cria a peça e a tarefa; a peça vem com a marca e a lista filtra por ela', async () => {
+    const marca = Marca.parse((await A.post('/api/marcas').send({ nome: 'Padaria Fermento' })).body);
+    const r = await A.post('/api/documentos/com-tarefa').send({ tarefa: { tipo: 'briefing', briefing: { ...FORMULARIO, marcaId: marca.id } } });
+    expect(r.status).toBe(202);
+    const criada = PecaComTarefa.parse(r.body);
+    expect(criada.documento.nome).toBe('Aviso de inverno');
+    expect(criada.tarefa).toMatchObject({ documentoId: criada.documento.id, tipo: 'briefing' });
+
+    // enquanto a tarefa está viva, a consulta de limites diz que esta peça está na frente
+    const limites = LimitesDeTarefa.parse((await A.get('/api/tarefas/limites')).body);
+    expect(limites.naFrente?.map((n) => n.documentoId)).toContain(criada.documento.id);
+    expect(limites.naFrente?.find((n) => n.documentoId === criada.documento.id)?.nome).toBe('Aviso de inverno');
+
+    const daMarca = ListaDeDocumentos.parse((await A.get(`/api/documentos?marca=${marca.id}`)).body);
+    expect(daMarca.itens.map((d) => [d.id, d.marcaId])).toEqual([[criada.documento.id, marca.id]]);
+    expect(ListaDeDocumentos.parse((await A.get(`/api/documentos?marca=${randomUUID()}`)).body).itens).toEqual([]);
+    expect(ListaDeDocumentos.parse((await A.get('/api/documentos?marca=nao-e-id')).body).itens).toEqual([]);
+    await api.fila.ociosa();
+    await A.post(`/api/tarefas/${criada.tarefa.id}/cancelar`).send({});
+  });
+
+  it('se o formulário é recusado, ou o corpo não é de peça nova, nenhuma peça é criada', async () => {
+    const antes = ListaDeDocumentos.parse((await A.get('/api/documentos?limite=100')).body).itens.length;
+    for (const [corpo, status] of [
+      [{ tarefa: { tipo: 'briefing', briefing: { ...FORMULARIO, marcaId: randomUUID() } } }, 422],
+      [{ tarefa: { tipo: 'briefing', briefing: { ...FORMULARIO, logo: { arquivo: 'f'.repeat(64) } } } }, 422],
+      [{ tarefa: { tipo: 'briefing', briefing: { ...FORMULARIO, textos: {} } } }, 400],
+      [{ tarefa: { tipo: 'ajuste', pedido: 'aumenta o título' } }, 400],
+      [{ tarefa: { tipo: 'pedido', pedido: 'faz um banner' } }, 400],
+      [{ nome: '', tarefa: { tipo: 'criar', pedido: 'x' } }, 400],
+      [{ tarefa: { tipo: 'criar', pedido: 'x' }, documentoId: randomUUID() }, 400],
+      [{}, 400],
+    ] as const) {
+      expect((await A.post('/api/documentos/com-tarefa').send(corpo)).status).toBe(status);
+    }
+    expect(ListaDeDocumentos.parse((await A.get('/api/documentos?limite=100')).body).itens).toHaveLength(antes);
+  });
+
+  it('o pedido livre de criar também nasce com a peça, e ao fim da tarefa a peça ganha miniatura', async () => {
+    const r = await A.post('/api/documentos/com-tarefa').send({ nome: 'Aviso do café', tarefa: { tipo: 'criar', pedido: 'Aviso para o Café Aurora, só com tipografia: "Abrimos às 7h".' } });
+    expect(r.status).toBe(202);
+    const criada = PecaComTarefa.parse(r.body);
+    // o roteiro de criar não pede o "pode": vai direto para a revisão
+    await api.fila.ociosa();
+    expect(Tarefa.parse((await A.get(`/api/tarefas/${criada.tarefa.id}`)).body)).toMatchObject({ estado: 'em_revisao', fim: 'entregue' });
+    await api.fila.ociosa();
+    const item = ListaDeDocumentos.parse((await A.get('/api/documentos?limite=100')).body).itens.find((d) => d.id === criada.documento.id);
+    expect(item?.pranchetas).toBe(1);
+    expect(item?.miniatura).toBe(`/api/documentos/${criada.documento.id}/miniatura?v=${item?.versao}`);
+    const imagem = await A.get(item?.miniatura as string);
+    expect(imagem.status).toBe(200);
+    expect(imagem.headers['content-type']).toBe('image/jpeg');
+    expect(imagem.headers['cache-control']).toBe('private, max-age=31536000, immutable');
+    expect([...(imagem.body as Buffer).subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
+    // o lado maior tem 480 px
+    expect(inspecionarImagem(imagem.body as Buffer)).toMatchObject({ ok: true, tipo: 'image/jpeg' });
+    const medidas = inspecionarImagem(imagem.body as Buffer) as { largura: number; altura: number };
+    expect(Math.max(medidas.largura, medidas.altura)).toBe(480);
+    // sem a versão (ou com versão velha) serve a atual, sem cache
+    expect((await A.get(`/api/documentos/${criada.documento.id}/miniatura`)).headers['cache-control']).toBe('private, no-cache');
+    await A.post(`/api/tarefas/${criada.tarefa.id}/aceitar`).send({});
+  }, 120_000);
+
+  it('peça sem miniatura responde 404, e a de outra conta não existe', async () => {
+    const vazia = await novaPeca('Sem miniatura');
+    expect((await A.get(`/api/documentos/${vazia.id}/miniatura`)).status).toBe(404);
+    const comMiniatura = ListaDeDocumentos.parse((await A.get('/api/documentos?limite=100')).body).itens.find((d) => d.miniatura);
+    expect((await api.como('B').get(comMiniatura?.miniatura as string)).status).toBe(404);
+  });
+
+  it('depois de uma edição do designer a miniatura é pedida com atraso, uma vez só para várias edições', async () => {
+    const peca = await novaPeca('Editada à mão');
+    const agendadosAntes = api.fila.agendados.length;
+    for (let versaoBase = 0; versaoBase < 3; versaoBase++) {
+      const operacoes =
+        versaoBase === 0
+          ? [{ op: 'criarPrancheta', nome: 'Feed', largura: 400, altura: 500, fundo: '#fff7e6' }]
+          : [{ op: 'alterarPrancheta', prancheta: 'Feed', props: { fundo: versaoBase === 1 ? '#000000' : '#ff0000' } }];
+      expect((await A.post(`/api/documentos/${peca.id}/lotes`).send({ id: randomUUID(), versaoBase, descricao: 'x', operacoes })).status).toBe(200);
+    }
+    const dela = api.fila.agendados.slice(agendadosAntes).filter((a) => a.fila === 'miniatura-da-peca' && a.trabalho.id === peca.id);
+    expect(dela).toHaveLength(1);
+    // chegada a hora, o worker renderiza a versão que estiver valendo
+    api.fila.adiantar();
+    await api.fila.ociosa();
+    const item = ListaDeDocumentos.parse((await A.get('/api/documentos?limite=100')).body).itens.find((d) => d.id === peca.id);
+    expect(item?.miniatura).toBe(`/api/documentos/${peca.id}/miniatura?v=3`);
   }, 60_000);
 });

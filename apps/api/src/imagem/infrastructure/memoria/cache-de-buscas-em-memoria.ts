@@ -3,7 +3,7 @@ import type { ImagemNoBanco } from '../../application/banco-de-imagens';
 import { CacheDeBuscas } from '../../application/cache-de-buscas';
 
 export class CacheDeBuscasEmMemoria extends CacheDeBuscas {
-  private readonly linhas: { banco: string; chave: string; quando: Date; resultados: ImagemNoBanco[] }[] = [];
+  private linhas: { banco: string; chave: string; quando: Date; resultados: ImagemNoBanco[] }[] = [];
 
   private recentes(banco: string, desde: Date) {
     return this.linhas.filter((l) => l.banco === banco && l.quando >= desde).sort((a, b) => b.quando.getTime() - a.quando.getTime());
@@ -14,7 +14,8 @@ export class CacheDeBuscasEmMemoria extends CacheDeBuscas {
     return linha ? structuredClone(linha.resultados) : undefined;
   }
 
-  async guardar(banco: string, chave: string, resultados: readonly ImagemNoBanco[], agora: Date): Promise<void> {
+  async guardar(banco: string, chave: string, resultados: readonly ImagemNoBanco[], agora: Date, apagarAnterioresA?: Date): Promise<void> {
+    if (apagarAnterioresA) this.linhas = this.linhas.filter((l) => l.quando >= apagarAnterioresA);
     this.linhas.push({ banco, chave, quando: agora, resultados: structuredClone([...resultados]) });
   }
 

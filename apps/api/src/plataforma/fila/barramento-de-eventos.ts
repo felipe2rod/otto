@@ -16,6 +16,8 @@ export const FILAS = {
   limpezaDeExportacao: 'limpeza-de-exportacao',
   /** Roda uma parte da tarefa do Otto (entender e planejar, ou fazer e conferir). `id` é o da tarefa. */
   tarefaDoOtto: 'tarefa-do-otto',
+  /** Renderiza a miniatura de uma peça (a primeira prancheta, reduzida). `id` é o do documento. */
+  miniaturaDaPeca: 'miniatura-da-peca',
 } as const;
 export type NomeDaFila = (typeof FILAS)[keyof typeof FILAS];
 
@@ -54,6 +56,9 @@ export const REGRAS_DAS_FILAS: Record<NomeDaFila, RegrasDaFila> = {
   // falhou antes de começar (banco fora, worker morto ao pegar). A que caiu no meio é fechada como interrompida
   // pelo caso de uso, com o parcial em revisão. Esperar a vez da conta é adiar, sem gastar tentativa.
   [FILAS.tarefaDoOtto]: { expiraEmSegundos: 3600, tentativas: 3, reentregaEmSegundos: 5, adiamentoEmSegundos: 5, sinalDeVidaEmSegundos: 60 },
+  // A miniatura é um render pequeno, que pode ser refeito a qualquer hora: falhou, tenta de novo algumas vezes e
+  // desiste (a próxima edição pede outra).
+  [FILAS.miniaturaDaPeca]: { expiraEmSegundos: 120, tentativas: 3, reentregaEmSegundos: 10, adiamentoEmSegundos: 5 },
   // apagar objetos é rápido; se o armazenamento estiver fora, tenta de novo a cada 10 minutos por um dia
   [FILAS.limpezaDeExportacao]: { expiraEmSegundos: 300, tentativas: 144, reentregaEmSegundos: 600, adiamentoEmSegundos: 600 },
 };

@@ -1,0 +1,159 @@
+# Compose de produção MÍNIMO do Otto: as imagens de produção (docker/Dockerfile, alvos servidor, migracao e
+# web) subindo juntas numa máquina só, com banco e armazenamento próprios. Serve para PROVAR que as imagens
+# constroem e sobem; não é a decisão de hospedagem (docs/mvp/backend.md, 5.6 e decisão 3, do Felipe), e o
+# Otto ainda não tem login: NÃO exponha isto à internet.
+#
+#   docker compose -f compose.producao.yaml --env-file <arquivo> build
+#   docker compose -f compose.producao.yaml --env-file <arquivo> up -d
+#   curl http://localhost:8180/api/saude/pronto
+#
+# Diferenças para o compose de desenvolvimento:
+# - nada de código montado nem de node_modules em volume: tudo está dentro da imagem;
+# - nenhuma senha tem valor padrão: faltou a variável, o compose não sobe;
+# - AMBIENTE=producao: o worker só sobe com o modelo de verdade (MODELO_DO_AGENTE=claude) e a API só aceita
+#   briefing pelo formulário;
+# - migração e semeadura são passos de execução única, antes da API e do worker.
+name: otto-producao
+
+x-servidor: &servidor
+  AMBIENTE: producao
+  NIVEL_DE_LOG: ${NIVEL_DE_LOG:-info}
+  BANCO_URL_APP: postgresql://otto_app:${BANCO_SENHA_APP:?defina BANCO_SENHA_APP}@banco:5432/otto
+  # Sem login no MVP (ADR 035): uma conta fixa, semeada pela migração.
+  CONTA_FIXA_ID: 01990000-0000-7000-8000-000000000001
+  ARMAZENAMENTO_ADAPTADOR: s3
+  ARMAZENAMENTO_ENDERECO: http://armazenamento:7070
+  ARMAZENAMENTO_ENDERECO_PUBLICO: ${ARMAZENAMENTO_ENDERECO_PUBLICO:-http://localhost:8181}
+  ARMAZENAMENTO_BUCKET: otto
+  ARMAZENAMENTO_CHAVE_DE_ACESSO: ${ARMAZENAMENTO_CHAVE_DE_ACESSO:?defina ARMAZENAMENTO_CHAVE_DE_ACESSO}
+  ARMAZENAMENTO_CHAVE_SECRETA: ${ARMAZENAMENTO_CHAVE_SECRETA:?defina ARMAZENAMENTO_CHAVE_SECRETA}
+  MODELO_DO_AGENTE: claude
+  # Os padrões do código valem aqui: 30 tarefas por dia por conta, 3 na fila.
+  PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
+  CATALOGO_DE_FONTES: ${CATALOGO_DE_FONTES:-google}
+
+services:
+  borda:
+    image: caddy:2-alpine
+    volumes:
+      - ./docker/borda/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:${PORTA_DA_BORDA_DE_PRODUCAO:-8180}:8080"
+    depends_on:
+      api: { condition: service_healthy }
+      web: { condition: service_healthy }
+
+  api:
+    image: otto-servidor:local
+    build: { context: ., dockerfile: docker/Dockerfile, target: servidor }
+    init: true
+    environment:
+      <<: *servidor
+      PORTA: "3000"
+    mem_limit: 768m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/saude/pronto').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 5s
+    depends_on:
+      semear: { condition: service_completed_successfully }
+
+  worker:
+    image: otto-servidor:local
+    command: ["node", "dist/worker.mjs"]
+    init: true
+    environment:
+      <<: *servidor
+      PORTA: "3001"
+      # só o worker recebe a chave do modelo
+      MODELO_CHAVE: ${LLM_API_KEY_DO:?defina LLM_API_KEY_DO}
+      MODELO_NOME: ${MODELO_NOME:-}
+      ALAVANCAS_DE_CUSTO: ${ALAVANCAS_DE_CUSTO:-nenhuma}
+    # ao parar, o worker interrompe as tarefas do Otto em curso e grava o fecho; a exportação tem 30 s
+    stop_grace_period: 45s
+    mem_limit: 3g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/saude/pronto').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 5s
+    depends_on:
+      semear: { condition: service_completed_successfully }
+
+  web:
+    image: otto-web:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: web
+      args:
+        ENDERECO_PUBLICO: ${ENDERECO_PUBLICO:-https://ottobr.ai}
+    init: true
+    environment:
+      API_ENDERECO_INTERNO: http://api:3000
+    mem_limit: 512m
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_healthy }
+
+  # ---------- execução única, na ordem: migração, depois semeadura ----------
+  migracao:
+    image: otto-migracao:local
+    build: { context: ., dockerfile: docker/Dockerfile, target: migracao }
+    environment:
+      # o papel migrador só existe aqui
+      BANCO_URL_MIGRADOR: postgresql://otto_migrador:${BANCO_SENHA_MIGRADOR:?defina BANCO_SENHA_MIGRADOR}@banco:5432/otto
+    depends_on:
+      banco: { condition: service_healthy }
+
+  semear:
+    image: otto-servidor:local
+    # fontes da biblioteca, texturas do Otto e a peça de exemplo da conta. Idempotente.
+    command: ["node", "dist/semear-biblioteca.mjs"]
+    environment:
+      <<: *servidor
+    depends_on:
+      migracao: { condition: service_completed_successfully }
+      armazenamento: { condition: service_started }
+
+  # ---------- dados ----------
+  banco:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${BANCO_SENHA_SUPERUSUARIO:?defina BANCO_SENHA_SUPERUSUARIO}
+      BANCO_SENHA_MIGRADOR: ${BANCO_SENHA_MIGRADOR:?defina BANCO_SENHA_MIGRADOR}
+      BANCO_SENHA_APP: ${BANCO_SENHA_APP:?defina BANCO_SENHA_APP}
+      BANCO_SENHA_OPERACAO: ${BANCO_SENHA_OPERACAO:?defina BANCO_SENHA_OPERACAO}
+    volumes:
+      - dados_do_banco:/var/lib/postgresql/data
+      - ./docker/banco:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "psql -U otto_app -d otto -c 'select 1' >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  armazenamento:
+    # Compatível com S3. Numa hospedagem de verdade, o lugar disto é um serviço de objetos gerenciado.
+    image: versity/versitygw:v1.8.0
+    user: "0:0"
+    entrypoint: ["sh", "-c", "mkdir -p /dados/otto && exec versitygw posix /dados"]
+    environment:
+      ROOT_ACCESS_KEY: ${ARMAZENAMENTO_CHAVE_DE_ACESSO:?defina ARMAZENAMENTO_CHAVE_DE_ACESSO}
+      ROOT_SECRET_KEY: ${ARMAZENAMENTO_CHAVE_SECRETA:?defina ARMAZENAMENTO_CHAVE_SECRETA}
+    volumes:
+      - objetos:/dados
+    ports:
+      # o download de exportação é um link assinado que o navegador abre direto aqui
+      - "127.0.0.1:${PORTA_DO_ARMAZENAMENTO_DE_PRODUCAO:-8181}:7070"
+
+volumes:
+  dados_do_banco:
+  objetos:

@@ -184,3 +184,16 @@ describe('configuração do banco de imagens e do catálogo de fontes', () => {
     expect(comClaude.agente.modelo).toEqual({ adaptador: 'nenhum' });
   });
 });
+
+describe('alavancas de custo e o balde do fornecedor', () => {
+  it('as alavancas vêm desligadas; ligam por número ou por nome, e nome desconhecido impede a subida', () => {
+    expect(lerConfiguracao(valida).agente.alavancas).toEqual({});
+    expect(lerConfiguracao({ ...valida, ALAVANCAS_DE_CUSTO: '1,2' }).agente.alavancas).toEqual({ esquemaCompacto: true, conferenciaNoLote: true });
+    expect(lerConfiguracao({ ...valida, ALAVANCAS_DE_CUSTO: 'todas' }).agente.alavancas).toEqual({ esquemaCompacto: true, conferenciaNoLote: true, avisoEJulgamento: true, julgamentoEmMedio: true });
+    expect(erroDe({ ...valida, ALAVANCAS_DE_CUSTO: '1,9' }).variaveis).toEqual(['ALAVANCAS_DE_CUSTO']);
+  });
+
+  it('o balde do fornecedor tem tamanho e reposição configuráveis, com o que foi medido como padrão', () => {
+    expect(lerConfiguracao(valida).agente).toMatchObject({ restoMinimoNoFornecedor: 3_000_000, capacidadeDoFornecedor: 4_500_000, reposicaoPorHoraNoFornecedor: 900_000 });
+  });
+});

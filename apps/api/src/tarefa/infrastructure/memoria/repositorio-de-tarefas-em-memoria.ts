@@ -74,6 +74,7 @@ export class RepositorioDeTarefasEmMemoria extends RepositorioDeTarefas {
       enfileiradaEm: nova.criadaEm,
       ultimoEvento: -1,
       chamadas: 0,
+      consumo: { tokensDeEntrada: 0, tokensDeCacheLidos: 0, tokensDeCacheCriados: 0, tokensDeSaida: 0, imagens: 0 },
       duracaoMs: 0,
       criadaEm: nova.criadaEm,
     };
@@ -114,6 +115,13 @@ export class RepositorioDeTarefasEmMemoria extends RepositorioDeTarefas {
 
   async contarCriadasDesde(escopo: EscopoDaConta, desde: Date): Promise<number> {
     return this.daConta(escopo).filter((g) => g.tarefa.criadaEm >= desde).length;
+  }
+
+  async emAndamentoDaConta(escopo: EscopoDaConta): Promise<TarefaGuardada[]> {
+    return this.daConta(escopo)
+      .filter((g) => NA_FILA.includes(g.tarefa.estado))
+      .sort((a, b) => Number(a.tarefa.estado === 'na_fila') - Number(b.tarefa.estado === 'na_fila') || a.tarefa.enfileiradaEm.getTime() - b.tarefa.enfileiradaEm.getTime())
+      .map((g) => copia(g.tarefa));
   }
 
   async contarNaFila(escopo: EscopoDaConta): Promise<number> {
@@ -205,7 +213,18 @@ export class RepositorioDeTarefasEmMemoria extends RepositorioDeTarefas {
     const g = this.achar(escopo, id);
     if (!g) return;
     this.chamadas.push({ tarefaId: id, sequencia: g.tarefa.chamadas, chamada: copia(chamada) });
-    g.tarefa = { ...g.tarefa, chamadas: g.tarefa.chamadas + 1 };
+    const antes = g.tarefa.consumo;
+    g.tarefa = {
+      ...g.tarefa,
+      chamadas: g.tarefa.chamadas + 1,
+      consumo: {
+        tokensDeEntrada: antes.tokensDeEntrada + chamada.uso.entrada,
+        tokensDeCacheLidos: antes.tokensDeCacheLidos + chamada.uso.cacheLido,
+        tokensDeCacheCriados: antes.tokensDeCacheCriados + chamada.uso.cacheCriado,
+        tokensDeSaida: antes.tokensDeSaida + chamada.uso.saida,
+        imagens: antes.imagens + chamada.imagens,
+      },
+    };
   }
 
   async registrarLote(escopo: EscopoDaConta, id: string, tocados: readonly string[]): Promise<void> {

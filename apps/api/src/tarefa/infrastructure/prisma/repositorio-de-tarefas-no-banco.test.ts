@@ -42,7 +42,7 @@ describe('ConsumoDoModeloNoBanco (contador da plataforma, sem conta)', () => {
     expect(await consumo.hoje(dia)).toEqual({ tokens: 0, chamadas: 0 });
     await Promise.all([consumo.somar(dia, 1000), consumo.somar(dia, 2500), consumo.somar(dia, 500)]);
     await consumo.anotarRestante(dia, 41_000_000);
-    expect(await consumo.hoje(dia)).toEqual({ tokens: 4000, chamadas: 3, restanteNoFornecedor: 41_000_000 });
+    expect(await consumo.hoje(dia)).toEqual({ tokens: 4000, chamadas: 3, restanteNoFornecedor: 41_000_000, vistoEm: dia });
     expect(await consumo.hoje(new Date(dia.getTime() + 86_400_000))).toEqual({ tokens: 0, chamadas: 0 });
   });
 });

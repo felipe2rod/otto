@@ -22,7 +22,7 @@ import { CasosDeUsoDeTarefa } from '../../src/tarefa/application/casos-de-uso-de
 import { comoMigrador } from '../banco/conexoes';
 import { type ApiDeTeste, type ClienteDeTeste, ENTRADA_DE_BRIEFING, PECA_PARA_O_AJUSTE, subirApi } from './subir';
 
-const AJUSTE = { tipo: 'ajuste', pedido: 'deixa o título do Feed na cor de destaque e um pouco maior' };
+const AJUSTE = { tipo: 'ajuste', pedido: 'deixa o primeiro texto da peça em azul' };
 
 async function novaPeca(cliente: ClienteDeTeste, nome: string, operacoes?: unknown[]): Promise<DocumentoAberto> {
   const criado = DocumentoAberto.parse((await cliente.post('/api/documentos').send({ nome })).body);
@@ -81,7 +81,7 @@ describe('tarefa com o "pode": briefing de dois formatos, do pedido ao desfazer'
   it('antes de enviar, a consulta de limites diz que pode, em tarefas e não em tokens', async () => {
     const r = await A.get('/api/tarefas/limites');
     expect(r.status).toBe(200);
-    expect(LimitesDeTarefa.parse(r.body)).toEqual({ podeEnviar: true, tarefasHoje: 0, tarefasPorDia: 30, naFila: 0, naFilaNoMaximo: 3 });
+    expect(LimitesDeTarefa.parse(r.body)).toEqual({ podeEnviar: true, podeAjustar: true, tarefasHoje: 0, tarefasPorDia: 30, naFila: 0, naFilaNoMaximo: 3, naFrente: [] });
   });
 
   it('entrada malformada é 400 com o nome do campo; peça que não existe e id torto são 404', async () => {
@@ -257,7 +257,8 @@ describe('ajuste pontual: sem "pode", com pendência, e o desfazer depois de edi
     expect(t).toMatchObject({ estado: 'em_revisao', fim: 'entregue', lotes: 1, versaoInicial: 1, versaoFinal: 2 });
     expect(t.confirmacao?.plano.pontual).toBe(true);
     const titulo = (await abrir(A, peca.id)).arvore.pranchetas[0]?.filhos[0] as { cor?: string; tamanho?: number };
-    expect(titulo).toMatchObject({ cor: 'token:destaque', tamanho: 138 });
+    // o roteiro põe em azul a primeira camada de texto da peça, qualquer que seja
+    expect(titulo).toMatchObject({ cor: '#1F5FBF', tamanho: 120 });
     expect(api.fila.publicados.filter((p) => p.fila === 'tarefa-do-otto')).toHaveLength(1);
   });
 

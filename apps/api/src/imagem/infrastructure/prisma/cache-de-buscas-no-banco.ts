@@ -1,5 +1,5 @@
-// Adaptador de CacheDeBuscas sobre PostgreSQL. A tabela é catálogo global (sem conta_id, sem RLS, só
-// SELECT e INSERT para otto_app): por isso `noCatalogoGlobal`, que não abre escopo de conta.
+// Adaptador de CacheDeBuscas sobre PostgreSQL. A tabela é cache global (sem conta_id, sem RLS; otto_app lê,
+// acrescenta e apaga a linha vencida): por isso `noCatalogoGlobal`, que não abre escopo de conta.
 import type { JsonDoBanco, PrismaComEscopo } from '../../../plataforma/persistencia/prisma-com-escopo';
 import type { ImagemNoBanco } from '../../application/banco-de-imagens';
 import { CacheDeBuscas } from '../../application/cache-de-buscas';
@@ -16,12 +16,13 @@ export class CacheDeBuscasNoBanco extends CacheDeBuscas {
     return linha ? (linha.resultados as unknown as ImagemNoBanco[]) : undefined;
   }
 
-  async guardar(banco: string, chave: string, resultados: readonly ImagemNoBanco[], agora: Date): Promise<void> {
-    await this.prisma.noCatalogoGlobal(
-      (tx) =>
-        // duas buscas iguais no mesmo milissegundo: a segunda não acrescenta nada
-        tx.$executeRaw`INSERT INTO buscas_de_imagens (banco, chave, buscada_em, resultados) VALUES (${banco}, ${chave}, ${agora}, ${JSON.stringify(resultados)}::jsonb) ON CONFLICT DO NOTHING`,
-    );
+  async guardar(banco: string, chave: string, resultados: readonly ImagemNoBanco[], agora: Date, apagarAnterioresA?: Date): Promise<void> {
+    await this.prisma.noCatalogoGlobal(async (tx) => {
+      // a limpeza vai junto com a gravação: sem trabalho agendado, e a tabela fica do tamanho das buscas dos últimos dias
+      if (apagarAnterioresA) await tx.$executeRaw`DELETE FROM buscas_de_imagens WHERE buscada_em < ${apagarAnterioresA}`;
+      // duas buscas iguais no mesmo milissegundo: a segunda não acrescenta nada
+      await tx.$executeRaw`INSERT INTO buscas_de_imagens (banco, chave, buscada_em, resultados) VALUES (${banco}, ${chave}, ${agora}, ${JSON.stringify(resultados)}::jsonb) ON CONFLICT DO NOTHING`;
+    });
   }
 
   async vista(banco: string, id: string, desde: Date): Promise<ImagemNoBanco | undefined> {

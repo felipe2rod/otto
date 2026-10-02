@@ -99,7 +99,8 @@ export class CasosDeUsoDeImagens {
     if (!itens) {
       this.contarIdaAoBanco(escopo);
       itens = await this.noBanco(() => banco.buscar(consulta, pedido.orientacao));
-      await this.d.cache.guardar(banco.id, chave, itens, this.agora());
+      // guarda, e apaga o que venceu há mais de um dia além do prazo
+      await this.d.cache.guardar(banco.id, chave, itens, this.agora(), new Date(this.agora().getTime() - (horasDeCache + 24) * HORA_EM_MS));
     }
     this.uso.registrar(escopo, { evento: 'imagens_buscadas', banco: banco.id, origem, resultados: itens.length, doCache, duracaoMs: this.agora().getTime() - inicio });
     return {

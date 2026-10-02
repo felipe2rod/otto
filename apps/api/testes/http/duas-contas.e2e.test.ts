@@ -61,6 +61,8 @@ describe('com a sessão de B, o documento de A não existe', () => {
     ['DELETE /api/documentos/:id', () => B.delete(`/api/documentos/${docDeA.id}`)],
     ['POST .../duplicar', () => B.post(`/api/documentos/${docDeA.id}/duplicar`).send({})],
     ['GET .../historico', () => B.get(`/api/documentos/${docDeA.id}/historico`)],
+    ['GET .../miniatura', () => B.get(`/api/documentos/${docDeA.id}/miniatura`)],
+    ['GET .../miniatura?v=', () => B.get(`/api/documentos/${docDeA.id}/miniatura?v=1`)],
     ['POST .../lotes', () => B.post(`/api/documentos/${docDeA.id}/lotes`).send({ id: randomUUID(), versaoBase: 1, descricao: 'invasão', operacoes: [criarPrancheta('De B')] })],
     ['POST .../desfazer', () => B.post(`/api/documentos/${docDeA.id}/desfazer`).send({ versaoBase: 1 })],
     ['POST .../refazer', () => B.post(`/api/documentos/${docDeA.id}/refazer`).send({ versaoBase: 1 })],
@@ -266,6 +268,20 @@ describe('com a sessão de B, a marca, o briefing salvo e as imagens de A não e
     expect({ status: r.status, body: r.body }).toEqual(inexistente);
     expect(Marca.parse((await A.get(`/api/marcas/${marcaDeA.id}`)).body)).toEqual(marcaDeA);
     expect(BriefingSalvo.parse((await A.get(`/api/briefings/${briefingDeA.id}`)).body)).toEqual(briefingDeA);
+  });
+
+  it('peça com tarefa numa chamada: B não cria peça com a marca nem com o arquivo de A, e nenhuma peça de B fica para trás', async () => {
+    const antes = ListaDeDocumentos.parse((await B.get('/api/documentos?limite=100')).body).itens.length;
+    for (const briefing of [
+      { ...FORMULARIO, marcaId: marcaDeA.id },
+      { ...FORMULARIO, logo: { arquivo: logoDeA.no.origem.arquivo } },
+    ]) {
+      const r = await B.post('/api/documentos/com-tarefa').send({ tarefa: { tipo: 'briefing', briefing } });
+      expect(r.status).toBe(422);
+    }
+    expect(ListaDeDocumentos.parse((await B.get('/api/documentos?limite=100')).body).itens).toHaveLength(antes);
+    // filtrar a lista de B pela marca de A não mostra nada
+    expect(ListaDeDocumentos.parse((await B.get(`/api/documentos?marca=${marcaDeA.id}`)).body).itens).toEqual([]);
   });
 
   it('as listas de B não têm nada de A', async () => {

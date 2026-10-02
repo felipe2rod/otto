@@ -31,6 +31,12 @@ export function chaveDeExportacao(escopo: EscopoDaConta, exportacaoId: string, i
   return `contas/${escopo.contaId}/exportacoes/${exportacaoId}/${indice}.${extensao}`;
 }
 
+/** Chave da miniatura de uma peça numa versão: contas/{conta}/miniaturas/{documento}-{versão}.jpg. */
+export function chaveDeMiniatura(escopo: EscopoDaConta, documentoId: string, versao: number): string {
+  if (!SEGMENTO.test(documentoId) || !Number.isInteger(versao) || versao < 0) throw new ChaveDeObjetoInvalida();
+  return `contas/${escopo.contaId}/miniaturas/${documentoId}-${versao}.jpg`;
+}
+
 /**
  * Confere a chave contra o escopo. Todo adaptador chama isto antes de tocar o armazenamento.
  * - chave malformada (segmento vazio, "..", barra invertida, absoluta): ChaveDeObjetoInvalida;

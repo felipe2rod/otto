@@ -820,7 +820,7 @@ Li `docs/mvp/frontend.md` depois de fechar o desenho. O que confere, o que respo
 13. Os preços de hospedagem são os de `custos.md` (2026-09-26). Não reconferi.
 14. O tamanho relativo das fatias (P, M, G) é estimativa minha, sem base medida.
 
-## 17. O que mudou na implementação (fatias 0 a 4)
+## 17. O que mudou na implementação (fatias 0 a 4 e adoção)
 
 O plano acima foi escrito antes do código. Esta seção registra onde a implementação se afastou dele, e por quê. Onde ela e o texto das seções anteriores divergem, vale esta.
 
@@ -1268,3 +1268,61 @@ A prévia sai pelo servidor (`GET /api/imagens/:banco/:id/previa`): o navegador 
 - Fonte: a rota é aberta e traz no máximo 60 famílias novas por hora por processo; só os pesos de 300 a 700; família já na biblioteca com menos pesos não é completada pelo catálogo.
 - Leitura do site da marca, recorte de sujeito e chave própria de banco de imagens: fora.
 - Texto público a revisar: os textos da peça de exemplo e as descrições das texturas.
+
+### 17.13 Rodada de adoção depois da fatia 4
+
+**Do treinador, adotado.**
+
+- **Roteiros por tipo de entrada** (`ModelosRoteirizados`): `briefing` → `briefing-dois-formatos`, `criar` → `criar-uma-peca` (não pede o "pode"), `pedido` → `pedido-dois-formatos` (pede o "pode"), `ajuste` → `ajuste-em-qualquer-peca` (põe em azul a primeira camada de texto). Os roteiros leem a peça e não tocam no que já existia. Ajuste em peça sem camada de texto termina `falhou`, com erro `resposta_invalida`.
+- **Alavancas de custo** (`ALAVANCAS_DE_CUSTO`: `nenhuma`, `todas` ou números de 1 a 4). Desligadas por padrão; valor desconhecido impede a subida. Chegam às duas partes da tarefa (`prepararTarefa` e `executarTarefa`). **Ligar é decisão do Felipe.**
+- `@otto/shared` importa os tipos de `@otto/agente/contrato`.
+
+**O limite do fornecedor como balde que se repõe** (`docs/tecnico/custos.md`, seção 10; a confirmar com o fornecedor). O desenho anterior tratava o resto informado como contador do dia, com um mínimo único de 3 milhões. Com um balde de 4,5 milhões isso tinha dois defeitos: a tarefa em curso era parada assim que o resto caía abaixo de 3 milhões (logo depois de começar), e a última leitura trancava tudo até virar o dia, porque só é renovada quando chamamos o modelo.
+
+| Momento | Antes | Agora |
+|---|---|---|
+| Começar tarefa que cria ou muda várias pranchetas | resto ≥ 3 milhões | folga estimada ≥ `RESTO_MINIMO_NO_FORNECEDOR` (3 milhões) |
+| Começar ajuste pontual | resto ≥ 3 milhões | folga ≥ 300 mil |
+| Cada chamada da tarefa em curso | resto ≥ 3 milhões | folga ≥ 200 mil (uma chamada cabe) |
+| Leitura velha | valia até virar o dia | a folga cresce `REPOSICAO_POR_HORA_NO_FORNECEDOR` (900 mil, o mínimo compatível com as leituras) até `CAPACIDADE_DO_FORNECEDOR` (4,5 milhões) |
+
+`GET /api/tarefas/limites` ganhou `podeAjustar` (um ajuste cabe mesmo com `podeEnviar` falso por `limite_diario`). `RESTO_MINIMO_NO_FORNECEDOR=0` desliga as três conferências. Com 3 milhões de mínimo e balde de 4,5, **uma tarefa de briefing sem alavancas (2,6 milhões) deixa a seguinte esperando perto de uma hora**; com as quatro alavancas (1,0 milhão), cabem duas seguidas. O teto diário nosso (`TETO_DIARIO_DE_TOKENS`, 40 milhões) continua como teto de gasto, e com este balde não é alcançado.
+
+**Pedidos do react.**
+
+| Pedido | O que foi feito |
+|---|---|
+| Marca na lista de peças | `documentos.marca_id`: a peça fica com a marca do formulário que a criou. `DocumentoDaLista.marcaId` e `GET /api/documentos?marca=<id>`. Apagada a marca, o vínculo some. Peça criada por pedido livre não tem marca, e não há rota para definir à mão |
+| Qual peça está na frente | `LimitesDeTarefa.naFrente`: as tarefas da conta que trabalham ou esperam, na ordem, com o nome da peça |
+| Miniatura | Ver abaixo |
+| Peça vazia quando o envio falha | `POST /api/documentos/com-tarefa` (`{ nome?, tarefa }`, só formulário e `criar`) → `202 { documento, tarefa }`. Formulário e limites são conferidos **antes** de a peça nascer; se a fila falhar depois, a peça criada é arquivada |
+
+**Miniatura da peça.** JPEG da primeira prancheta, com 480 px no lado maior, guardado em `contas/<conta>/miniaturas/<peça>-<versão>.jpg`. Fila `miniatura-da-peca` (trabalho: conta e id da peça; o worker relê a peça sob a conta). É pedida ao fim de toda tarefa do Otto que gravou lote, na hora, e depois de edição do designer com **20 s de atraso e freio de 20 s** (o freio é uma atualização condicional em `documentos.miniatura_pedida_em`: dez edições seguidas publicam um trabalho). A lista devolve `miniatura: "/api/documentos/:id/miniatura?v=<versão>"`: o endereço muda quando a miniatura muda, e a rota responde com cache imutável e privado, conferindo a conta. Logo depois de editar, a miniatura ainda é a anterior.
+
+**Render da tarefa fora do laço principal.** `BancadaComRender` agora fala com uma thread (`oficina.thread.ts`, uma por processo de worker): render, verificação e redução de foto rodam lá; no laço principal fica só o resumo, que mede texto. A bancada guarda o que entregou (fontes e imagens): se a thread cair, outra sobe e a sessão é remontada. Parada por 60 s sem tarefa, a thread é encerrada e devolve a memória. A miniatura usa a mesma thread. O desligamento do worker a encerra.
+
+**Pendências minhas, fechadas.**
+
+- **A baixa por queda emite `tarefa_terminada`**, com o que estava gravado na tarefa (lotes, chamadas, tokens, imagens). Visto no desenvolvimento em 2026-10-02: um salvamento em `packages/psd` reiniciou os workers no meio de uma tarefa, que fechou `em_revisao`, `fim: interrompida`, com 2 lotes e o evento com 6 chamadas.
+- **Cache de busca de imagens**: cada busca nova apaga as feitas há mais de 48 h. A tabela mudou de motivo (`cache-global`: `otto_app` acrescenta e apaga, não altera).
+
+**Imagens de produção.** `compose.producao.yaml` é um compose mínimo (borda, API, worker, web, migração, semeadura, banco, armazenamento), sem código montado e sem senha padrão. Construídas e postas no ar aqui, a partir de uma cópia limpa da árvore (o que está no git mais as mudanças desta rodada):
+
+| Imagem | Tamanho | Observação |
+|---|---|---|
+| `otto-servidor` (API, worker, semeadura) | 569 MB | |
+| `otto-web` | 351 MB | |
+| `otto-migracao` | 2,09 GB | É a etapa de build inteira, com dependências de desenvolvimento: dá para emagrecer |
+
+No ar: migração e semeadura saíram com código 0 (18 fontes, 6 texturas, peça de exemplo); API, worker e web saudáveis em menos de um minuto; site e editor responderam 200 pela borda; uma exportação PSD saiu pela fila em 4 s (a thread do motor empacotada); a miniatura saiu depois de uma edição (a thread de render empacotada); o briefing solto foi recusado (`AMBIENTE=producao`); o worker parou em 1,2 s. Memória em repouso: API 157 MB, worker 346 MB, web 56 MB. **Nenhuma tarefa do Otto foi rodada ali** (a chave do modelo era de mentira), e nada foi publicado.
+
+Na árvore de trabalho de hoje a imagem **não** constrói: o teste de fronteira e o de tipos falham em arquivos em andamento de `packages/psd` (importação de PSD, do especialista-grafico). É o comportamento esperado da etapa de build.
+
+**Em aberto.**
+
+- A reposição do balde (900 mil por hora) é inferida de duas leituras. Se o fornecedor repuser mais devagar, a tarefa começa e para no meio com `limite_diario`, com o parcial em revisão.
+- Peça criada por pedido livre não tem marca; falta a rota para o designer definir.
+- A peça de exemplo nasce sem miniatura (a semeadura não tem fila): ganha na primeira edição.
+- Miniaturas de peças arquivadas ficam no armazenamento.
+- Uma thread de render por worker: dois renders de tarefas diferentes esperam um pelo outro.
+- A imagem de migração tem 2 GB.

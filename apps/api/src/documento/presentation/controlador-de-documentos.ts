@@ -22,20 +22,41 @@ import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
 import { Escopo } from '../../plataforma/http/escopo';
 import { validar } from '../../plataforma/http/validar';
 import { CasosDeUsoDeDocumento } from '../application/casos-de-uso-de-documento';
+import { CasosDeUsoDeMiniatura } from '../application/casos-de-uso-de-miniatura';
 
 @Controller('documentos')
 export class ControladorDeDocumentos {
-  constructor(@Inject(CasosDeUsoDeDocumento) private readonly documentos: CasosDeUsoDeDocumento) {}
+  constructor(
+    @Inject(CasosDeUsoDeDocumento) private readonly documentos: CasosDeUsoDeDocumento,
+    @Inject(CasosDeUsoDeMiniatura) private readonly miniaturas: CasosDeUsoDeMiniatura,
+  ) {}
 
   @Get()
   listar(@Escopo() escopo: EscopoDaConta, @Query() query: unknown): Promise<ListaDeDocumentos> {
     const { cursor, limite } = validar(Paginacao, query);
-    return this.documentos.listar(escopo, { limite, ...(cursor ? { cursor } : {}) });
+    // ?marca=<id> filtra pelas peças criadas com aquela marca; valor que não é id não acha nada
+    const marca = (query as { marca?: unknown } | null)?.marca;
+    return this.documentos.listar(escopo, { limite, ...(cursor ? { cursor } : {}), ...(typeof marca === 'string' && marca ? { marcaId: marca } : {}) });
   }
 
   @Post()
   criar(@Escopo() escopo: EscopoDaConta, @Body() corpo: unknown): Promise<DocumentoAberto> {
     return this.documentos.criar(escopo, validar(PedidoDeCriarDocumento, corpo));
+  }
+
+  /**
+   * A miniatura da peça (JPEG). O endereço que a lista devolve leva a versão: o conteúdo de um endereço não
+   * muda, então o cache é para sempre. Privado: é conteúdo da conta, e a conta é conferida em toda leitura.
+   */
+  @Get(':id/miniatura')
+  async miniatura(@Escopo() escopo: EscopoDaConta, @Param('id') id: string, @Query('v') v: unknown, @Res() res: Response): Promise<void> {
+    const miniatura = await this.miniaturas.ler(escopo, id);
+    // pedida com a versão certa, é imutável; sem versão ou com versão velha, serve a atual sem deixar em cache
+    res.setHeader('Cache-Control', String(v) === String(miniatura.versao) ? 'private, max-age=31536000, immutable' : 'private, no-cache');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Content-Length', String(miniatura.bytes.byteLength));
+    res.status(200).end(Buffer.from(miniatura.bytes.buffer, miniatura.bytes.byteOffset, miniatura.bytes.byteLength));
   }
 
   @Get(':id')

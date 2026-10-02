@@ -219,9 +219,11 @@ describe('pedir uma tarefa', () => {
 describe('limites, ditos antes', () => {
   it('a conta tem um número de tarefas por dia: a consulta diz quantas já foram, e a que passa do limite é recusada sem entrar na fila', async () => {
     montar({ limites: { tarefasPorDia: 2, naFilaPorConta: 3, tetoDiarioDeTokens: 40_000_000, restoMinimoNoFornecedor: 200_000 } });
-    expect(await casos.limites(contaA)).toEqual({ podeEnviar: true, tarefasHoje: 0, tarefasPorDia: 2, naFila: 0, naFilaNoMaximo: 3 });
+    expect(await casos.limites(contaA)).toEqual({ podeEnviar: true, podeAjustar: true, tarefasHoje: 0, tarefasPorDia: 2, naFila: 0, naFilaNoMaximo: 3, naFrente: [] });
     for (let i = 0; i < 2; i++) await casos.criar(contaA, await peca(), AJUSTE);
-    expect(await casos.limites(contaA)).toEqual({ podeEnviar: false, motivo: 'limite_da_conta', tarefasHoje: 2, tarefasPorDia: 2, naFila: 2, naFilaNoMaximo: 3 });
+    const cheio = await casos.limites(contaA);
+    expect(cheio).toMatchObject({ podeEnviar: false, podeAjustar: false, motivo: 'limite_da_conta', tarefasHoje: 2, tarefasPorDia: 2, naFila: 2, naFilaNoMaximo: 3 });
+    expect(cheio.naFrente).toHaveLength(2);
     expect(await erroDe(casos.criar(contaA, await peca(), AJUSTE))).toMatchObject({ codigo: CODIGOS_DE_ERRO.limiteDeTarefas, detalhe: { motivo: 'limite_da_conta', limite: 2 } });
     // o limite é da conta: a outra pede
     expect((await casos.criar(contaB, await peca(contaB), AJUSTE)).estado).toBe('na_fila');
@@ -243,9 +245,68 @@ describe('limites, ditos antes', () => {
     expect(fila.publicados).toEqual([]);
   });
 
-  it('o que o fornecedor diz que resta no dia também conta: abaixo do mínimo, não começa', async () => {
+  it('o que o fornecedor diz que resta também conta: abaixo do mínimo, não começa', async () => {
     await consumo.anotarRestante(AGORA, 150_000);
     expect((await casos.limites(contaA)).motivo).toBe('limite_diario');
+  });
+
+  describe('o limite do fornecedor é um balde que se repõe', () => {
+    const BALDE = {
+      tarefasPorDia: 6,
+      naFilaPorConta: 3,
+      tetoDiarioDeTokens: 1e9,
+      restoMinimoNoFornecedor: 3_000_000,
+      restoMinimoParaAjuste: 300_000,
+      restoMinimoParaContinuar: 200_000,
+      capacidadeDoFornecedor: 4_500_000,
+      reposicaoPorHoraNoFornecedor: 900_000,
+    };
+    const GRANDE: EntradaDaTarefa = { tipo: 'criar', pedido: 'um cartaz' };
+    beforeEach(() => montar({ limites: BALDE }));
+
+    it('com meio balde, a tarefa grande espera e o ajuste entra; a consulta de limites diz as duas coisas', async () => {
+      await consumo.anotarRestante(AGORA, 2_252_161);
+      expect(await casos.limites(contaA)).toMatchObject({ podeEnviar: false, motivo: 'limite_diario', podeAjustar: true });
+      expect((await erroDe(casos.criar(contaA, await peca(), GRANDE))).codigo).toBe(CODIGOS_DE_ERRO.limiteDiario);
+      expect((await casos.criar(contaA, await peca(), AJUSTE)).estado).toBe('na_fila');
+    });
+
+    it('a leitura velha não tranca: passada uma hora o balde já encheu o bastante e a tarefa grande entra', async () => {
+      await consumo.anotarRestante(AGORA, 2_252_161);
+      relogio = new Date(AGORA.getTime() + 50 * 60_000);
+      // 2,25 milhões + 0,75 milhão em 50 minutos: no limite
+      expect((await casos.limites(contaA)).podeEnviar).toBe(true);
+      expect((await casos.criar(contaA, await peca(), GRANDE)).estado).toBe('na_fila');
+    });
+
+    it('a tarefa que já começou não é parada por estar abaixo do mínimo para COMEÇAR: só para quando uma chamada não cabe', async () => {
+      const id = await peca();
+      modelos.roteiro([aplicar(TITULO_MAIOR), entregar()]);
+      const t = await casos.criar(contaA, id, AJUSTE);
+      // no meio da tarefa o fornecedor diz que resta menos que o mínimo de uma tarefa grande, e mais que uma chamada
+      await consumo.anotarRestante(relogio, 1_000_000);
+      await casos.trabalhar(contaA, t.id);
+      expect(await casos.consultar(contaA, t.id)).toMatchObject({ estado: 'em_revisao', fim: 'entregue' });
+    });
+
+    it('quando nem uma chamada cabe, a tarefa em curso para com limite_diario e o que fez fica para revisão', async () => {
+      const id = await peca();
+      modelos.roteiro([
+        aplicar(TITULO_MAIOR),
+        () => {
+          throw new Error('não devia chegar ao modelo');
+        },
+      ]);
+      const t = await casos.criar(contaA, id, AJUSTE);
+      const original = modelos.chamado.responder.bind(modelos.chamado);
+      modelos.chamado.responder = async (pedido) => {
+        const r = await original(pedido);
+        await consumo.anotarRestante(relogio, 50_000);
+        return r;
+      };
+      await casos.trabalhar(contaA, t.id);
+      expect(await casos.consultar(contaA, t.id)).toMatchObject({ estado: 'em_revisao', fim: 'erro', erro: { codigo: 'limite_diario' }, lotes: 1 });
+    });
   });
 });
 
@@ -956,5 +1017,177 @@ describe('fatia 4: limites por ambiente e a tarefa parada na fila', () => {
       throw new Error('fila fora do ar');
     };
     expect((await casos.consultar(contaA, t.id)).estado).toBe('na_fila');
+  });
+});
+
+describe('alavancas de custo do ciclo', () => {
+  async function rodarVendoAsOpcoes(extras: Partial<DependenciasDaTarefa>): Promise<unknown[]> {
+    const vistas: unknown[] = [];
+    const agente = await import('@otto/agente');
+    montar({
+      ...extras,
+      ciclo: {
+        preparar: async (_amb, _entrada, opcoes) => {
+          vistas.push(opcoes?.alavancas);
+          return {
+            versao: 1,
+            direcao: null,
+            cartao: null,
+            plano: { resumo: '', criar: [], alterar: [], remover: [], pontual: true },
+            pedeConfirmacao: false,
+            motivos: [],
+            custo: agente.custoVazio('x'),
+          };
+        },
+        executar: async (_amb, _entrada, _preparo, opcoes) => {
+          vistas.push(opcoes?.alavancas);
+          return { fim: 'entregue', entrega: { resumo: 'ok', pendencias: [] }, conferida: true, lotes: 0, custo: agente.custoVazio('x') };
+        },
+      },
+    });
+    const t = await casos.criar(contaA, await peca(), AJUSTE);
+    await casos.trabalhar(contaA, t.id);
+    return vistas;
+  }
+
+  it('desligadas por padrão: o ciclo roda como foi avaliado', async () => {
+    expect(await rodarVendoAsOpcoes({})).toEqual([undefined, undefined]);
+  });
+
+  it('as que a configuração liga chegam às duas partes da tarefa', async () => {
+    const alavancas = { esquemaCompacto: true, conferenciaNoLote: true };
+    expect(await rodarVendoAsOpcoes({ alavancas })).toEqual([alavancas, alavancas]);
+  });
+});
+
+describe('a baixa da tarefa cujo worker caiu', () => {
+  it('emite o evento de fim de tarefa, com o que estava gravado: o custo das chamadas que chegaram a acontecer não some do registro', async () => {
+    const id = await peca();
+    modelos.roteiro([aplicar(TITULO_MAIOR), entregar()]);
+    const agente = await import('@otto/agente');
+    // o "worker" grava um lote, registra uma chamada e morre: o ciclo nunca volta
+    montar({
+      ciclo: {
+        preparar: agente.prepararTarefa,
+        executar: async (amb) => {
+          await amb.aplicarLote({ id: randomUUID(), descricao: 'x', operacoes: TITULO_MAIOR });
+          await amb.registrarChamada?.({ papel: 'ajuste', modelo: 'm', uso: { entrada: 10, cacheLido: 900, cacheCriado: 100, saida: 50 }, duracaoMs: 1200, imagens: 1, resultado: 'ok' });
+          return new Promise(() => undefined);
+        },
+      },
+    });
+    const t = await casos.criar(contaA, id, AJUSTE);
+    void casos.trabalhar(contaA, t.id);
+    await new Promise((ok) => setTimeout(ok, 60));
+    uso.eventos = [];
+    relogio = new Date(relogio.getTime() + SEM_SINAL_DA_TAREFA_MS + 30_000);
+    // outro processo (a API) lê a tarefa: dá a baixa
+    montar();
+    expect(await casos.consultar(contaA, t.id)).toMatchObject({ estado: 'em_revisao', fim: 'interrompida', lotes: 1 });
+    expect(uso.eventos).toEqual([
+      expect.objectContaining({
+        evento: 'tarefa_terminada',
+        tarefaId: t.id,
+        tipo: 'ajuste',
+        estado: 'em_revisao',
+        fim: 'interrompida',
+        lotes: 1,
+        chamadas: 1,
+        tokensDeEntrada: 10,
+        tokensDeCacheLidos: 900,
+        tokensDeCacheCriados: 100,
+        tokensDeSaida: 50,
+        imagens: 1,
+        conferida: false,
+      }),
+    ]);
+    // a segunda leitura não emite de novo
+    await casos.consultar(contaA, t.id);
+    await casos.listar(contaA, id);
+    expect(uso.eventos).toHaveLength(1);
+  });
+});
+
+describe('o que está na frente, e peça com tarefa numa chamada só', () => {
+  it('a consulta de limites diz quais peças estão na frente de um pedido novo, pelo nome, na ordem', async () => {
+    const [um, dois] = [await peca(), await peca()];
+    await pecas.renomear(contaA, dois, { nome: 'Cardápio de inverno' });
+    const primeira = await casos.criar(contaA, um, AJUSTE);
+    relogio = new Date(relogio.getTime() + 1000);
+    const segunda = await casos.criar(contaA, dois, AJUSTE);
+    expect((await casos.limites(contaA)).naFrente).toEqual([
+      { tarefaId: primeira.id, documentoId: um, nome: 'Promoção', estado: 'na_fila' },
+      { tarefaId: segunda.id, documentoId: dois, nome: 'Cardápio de inverno', estado: 'na_fila' },
+    ]);
+    expect((await casos.limites(contaB)).naFrente).toEqual([]);
+  });
+
+  describe('criar a peça e a tarefa juntas', () => {
+    const CRIAR: EntradaDaTarefa = { tipo: 'criar', pedido: 'um cartaz de festa junina' };
+
+    it('cria a peça com o nome dado e a tarefa na fila', async () => {
+      const r = await casos.criarPecaComTarefa(contaA, { nome: 'Festa junina', tarefa: CRIAR });
+      expect(r.documento.nome).toBe('Festa junina');
+      expect(r.tarefa).toMatchObject({ documentoId: r.documento.id, tipo: 'criar', estado: 'na_fila' });
+      expect((await pecas.listar(contaA, { limite: 10 })).itens.map((d) => d.id)).toEqual([r.documento.id]);
+    });
+
+    it('se a tarefa não pode ser criada, nenhuma peça fica para trás: limite da conta, fila cheia, teto do dia, fila fora do ar', async () => {
+      const semPecas = async () => expect((await pecas.listar(contaA, { limite: 10 })).itens).toEqual([]);
+      montar({ limites: { tarefasPorDia: 0, naFilaPorConta: 3, tetoDiarioDeTokens: 1e9, restoMinimoNoFornecedor: 0 } });
+      expect((await erroDe(casos.criarPecaComTarefa(contaA, { tarefa: CRIAR }))).codigo).toBe(CODIGOS_DE_ERRO.limiteDeTarefas);
+      await semPecas();
+      montar({ limites: { tarefasPorDia: 9, naFilaPorConta: 0, tetoDiarioDeTokens: 1e9, restoMinimoNoFornecedor: 0 } });
+      expect(await erroDe(casos.criarPecaComTarefa(contaA, { tarefa: CRIAR }))).toMatchObject({ codigo: CODIGOS_DE_ERRO.limiteDeTarefas, detalhe: { motivo: 'fila_cheia' } });
+      await semPecas();
+      montar({ limites: { tarefasPorDia: 9, naFilaPorConta: 3, tetoDiarioDeTokens: 0, restoMinimoNoFornecedor: 0 } });
+      expect((await erroDe(casos.criarPecaComTarefa(contaA, { tarefa: CRIAR }))).codigo).toBe(CODIGOS_DE_ERRO.limiteDiario);
+      await semPecas();
+      montar();
+      fila.publicar = async () => {
+        throw new Error('fila fora do ar');
+      };
+      expect((await erroDe(casos.criarPecaComTarefa(contaA, { tarefa: CRIAR }))).codigo).toBe(CODIGOS_DE_ERRO.filaIndisponivel);
+      await semPecas();
+    });
+
+    it('formulário que cita o que a conta não tem é recusado antes de a peça nascer', async () => {
+      const recusa = new ErroDaAplicacao(CODIGOS_DE_ERRO.arquivoDesconhecido, { quantos: 1 });
+      const briefing = {
+        preparar: async () => Promise.reject(recusa),
+        paraOCiclo: async (_e: EscopoDaConta, entrada: EntradaDaTarefa) => entrada,
+        usado: async () => undefined,
+      } as unknown as BriefingDaTarefa;
+      montar({ briefing });
+      const pedido = PedidoDeTarefaPorBriefing.parse({
+        tipo: 'briefing',
+        briefing: { versao: 1, formatos: [{ nome: 'Feed', largura: 1080, altura: 1350 }], textos: { titulo: 'x' }, imagens: { fonte: 'nenhuma' } },
+      });
+      expect((await erroDe(casos.criarPecaComTarefa(contaA, { tarefa: pedido }))).codigo).toBe(CODIGOS_DE_ERRO.arquivoDesconhecido);
+      expect((await pecas.listar(contaA, { limite: 10 })).itens).toEqual([]);
+    });
+
+    it('pelo formulário, a peça nasce com o nome do briefing e com a marca dele', async () => {
+      const marcaId = randomUUID();
+      const briefing = {
+        preparar: async (_e: EscopoDaConta, p: PedidoDeTarefaPorBriefing) => ({
+          entrada: { tipo: 'briefing', briefing: p.briefing, esforco: 'REFINED', cuidado: p.cuidado } as unknown as EntradaDaTarefa,
+        }),
+        paraOCiclo: async (_e: EscopoDaConta, entrada: EntradaDaTarefa) => entrada,
+        usado: async () => undefined,
+      } as unknown as BriefingDaTarefa;
+      montar({ briefing });
+      const pedido = PedidoDeTarefaPorBriefing.parse({
+        tipo: 'briefing',
+        briefing: { versao: 1, nome: 'Novo horário', marcaId, formatos: [{ nome: 'Feed', largura: 1080, altura: 1350 }], textos: { titulo: 'x' }, imagens: { fonte: 'nenhuma' } },
+      });
+      const r = await casos.criarPecaComTarefa(contaA, { tarefa: pedido });
+      expect(r.documento.nome).toBe('Novo horário');
+      expect((await pecas.listar(contaA, { limite: 10 })).itens[0]).toMatchObject({ id: r.documento.id, marcaId });
+      // a tarefa criada numa peça que já existia também marca a peça
+      const outra = await pecas.criar(contaA, { nome: 'Outra' });
+      await casos.criarPorBriefing(contaA, outra.id, pedido);
+      expect((await pecas.listar(contaA, { limite: 10, marcaId })).itens.map((d) => d.id).sort()).toEqual([outra.id, r.documento.id].sort());
+    });
   });
 });

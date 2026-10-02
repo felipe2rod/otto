@@ -7,9 +7,11 @@
 // Fila fora do ar não derruba o processo: "vivo" não depende de dependência (docs/mvp/backend.md, 7.8).
 // A API continua abrindo e editando (pedir exportação responde 503) e o worker fica tentando ligar.
 import type { OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import type { CasosDeUsoDeMiniatura } from './documento/application/casos-de-uso-de-miniatura';
 import type { CasosDeUsoDeExportacao } from './exportacao/application/casos-de-uso-de-exportacao';
 import { consumirExportacoes } from './exportacao/infrastructure/consumidor-de-exportacoes';
-import type { BarramentoDeEventos } from './plataforma/fila/barramento-de-eventos';
+import { escopoDoTrabalho } from './plataforma/escopo/escopo-do-trabalho';
+import { type BarramentoDeEventos, FILAS } from './plataforma/fila/barramento-de-eventos';
 import { semConteudo } from './plataforma/log/sem-conteudo';
 import type { Servico } from './plataforma/servico';
 import type { CasosDeUsoDeTarefa } from './tarefa/application/casos-de-uso-de-tarefa';
@@ -27,6 +29,7 @@ export class CicloDeVida implements OnApplicationBootstrap, OnApplicationShutdow
     private readonly registro: { error(linha: Record<string, unknown>): void },
     private readonly opcoes: { exportacoesAoMesmoTempo: number; motor: { fechar(): Promise<void> }; intervaloEntreTentativasMs?: number; tarefasAoMesmoTempo?: number },
     private readonly tarefas?: CasosDeUsoDeTarefa,
+    private readonly miniaturas?: CasosDeUsoDeMiniatura,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -39,6 +42,9 @@ export class CicloDeVida implements OnApplicationBootstrap, OnApplicationShutdow
       if (this.servico === 'worker') {
         await consumirExportacoes(this.fila, this.exportacoes, this.opcoes.exportacoesAoMesmoTempo);
         if (this.tarefas) await consumirTarefas(this.fila, this.tarefas, this.opcoes.tarefasAoMesmoTempo ?? 1);
+        const miniaturas = this.miniaturas;
+        // a miniatura da peça: um render pequeno, um por vez (é a mesma thread de render das tarefas)
+        if (miniaturas) await this.fila.consumir(FILAS.miniaturaDaPeca, { concorrencia: 1 }, async (trabalho) => void (await miniaturas.gerar(escopoDoTrabalho(trabalho), trabalho.id)));
       }
     } catch (erro) {
       // uma linha por subida, não uma a cada tentativa

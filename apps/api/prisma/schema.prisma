@@ -62,6 +62,11 @@ model Documento {
   arquivadoEm     DateTime? @map("arquivado_em") @db.Timestamptz(3)
   /// Peça de exemplo semeada na conta nova.
   deExemplo       Boolean   @default(false) @map("de_exemplo")
+  /// A marca com que a peça foi criada pelo formulário. Apagada a marca, vira nulo.
+  marcaId          String?   @map("marca_id") @db.Uuid
+  /// A versão que a miniatura guardada mostra.
+  miniaturaVersao  Int?      @map("miniatura_versao")
+  miniaturaPedidaEm DateTime? @map("miniatura_pedida_em") @db.Timestamptz(3)
 
   conta   Conta               @relation(fields: [contaId], references: [id])
   versoes     VersaoDeDocumento[]

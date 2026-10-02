@@ -14,6 +14,7 @@
 // - o teto diário da plataforma é conferido antes de aceitar a tarefa e antes de cada chamada;
 // - o trabalho da fila traz só (conta, id): tudo é relido sob o escopo da conta.
 import {
+  type Alavancas,
   type AmbienteBase,
   type AmbienteDaTarefa,
   type BancoDeImagens as BancoDeImagensDoCiclo,
@@ -43,6 +44,7 @@ import {
   type LimitesDeTarefa,
   type ListaDePendencias,
   type ListaDeTarefas,
+  type PecaComTarefa,
   type PedidoDeAjusteDoPlano,
   type PedidoDeDescartar,
   type PedidoDeDesfazerTarefa,
@@ -60,6 +62,7 @@ import { type RegistroDeUso, RegistroDeUsoMudo } from '../../plataforma/uso/regi
 import type { BancadaDoOtto } from './bancada-do-otto';
 import type { BriefingDaTarefa } from './briefing-da-tarefa';
 import type { ConsumoDoModelo } from './consumo-do-modelo';
+import { folgaNoFornecedor } from './folga-no-fornecedor';
 import type { ModelosDoOtto } from './modelos-do-otto';
 import type { FontesDoOtto, ImagensDoOtto, TexturasDoOtto } from './recursos-do-otto';
 import type { PendenciaGuardada, RepositorioDeTarefas, TarefaGuardada } from './repositorio-de-tarefas';
@@ -78,6 +81,11 @@ export const NA_FILA_SEM_TRABALHO_MS = 5 * 60_000;
 /** Nada de download em massa (ADR 032): tetos de uma tarefa no banco de imagens. */
 const BUSCAS_POR_TAREFA = 8;
 const IMAGENS_POR_TAREFA = 6;
+/** O balde do fornecedor de inferência, como medido em 2026-10-02 (docs/tecnico/custos.md, seção 10). A confirmar. */
+const CAPACIDADE_DO_FORNECEDOR = 4_500_000;
+const REPOSICAO_POR_HORA = 900_000;
+const RESTO_PARA_AJUSTE = 300_000;
+const RESTO_PARA_CONTINUAR = 200_000;
 const TAREFAS_NA_LISTA = 20;
 /** Até quantos lotes para trás se olha para separar o que é da revisão da tarefa do que o designer fez depois. */
 const JANELA_DO_HISTORICO = 200;
@@ -90,8 +98,18 @@ export interface LimitesDaTarefa {
   naFilaPorConta: number;
   /** Teto nosso de tokens por dia, da plataforma inteira, abaixo do limite do fornecedor. */
   tetoDiarioDeTokens: number;
-  /** Se o fornecedor disse que resta menos que isto no dia, não começa nem continua. */
+  /**
+   * O fornecedor de inferência: quanto precisa restar para COMEÇAR uma tarefa que cria ou muda várias pranchetas
+   * (uma de briefing sem alavancas consome perto de 2,6 milhões de tokens).
+   */
   restoMinimoNoFornecedor: number;
+  /** Quanto precisa restar para começar um ajuste pontual (25 a 40 mil tokens). Padrão: 300 mil. */
+  restoMinimoParaAjuste?: number;
+  /** Com menos que isto, nem uma chamada cabe: a tarefa em curso para com o que já fez. Padrão: 200 mil. */
+  restoMinimoParaContinuar?: number;
+  /** O limite do fornecedor é um balde que se repõe (folga-no-fornecedor.ts): o tamanho dele e quanto volta por hora. */
+  capacidadeDoFornecedor?: number;
+  reposicaoPorHoraNoFornecedor?: number;
   /** Tetos de uma tarefa (custo, tempo, tokens, chamadas). Sem isto, os padrões de @otto/agente. */
   sistema?: Partial<LimitesDoSistema>;
   /**
@@ -124,6 +142,10 @@ export interface DependenciasDaTarefa {
   agora?: () => Date;
   uso?: RegistroDeUso;
   aoFalhar?: (falha: FalhaDaTarefa) => void;
+  /** A tarefa parou de trabalhar (entregou, falhou, foi interrompida) e a peça pode ter mudado: é a hora da miniatura. Nunca lança. */
+  aoParar?: (escopo: EscopoDaConta, documentoId: string) => Promise<void>;
+  /** As alavancas de custo do ciclo (@otto/agente, alavancas.ts). Ausente: todas desligadas, como o ciclo foi avaliado. */
+  alavancas?: Alavancas;
   /** O formulário de briefing. Ausente: só pedido livre e ajuste. */
   briefing?: BriefingDaTarefa;
   /** Banco de imagens. Ausente: o Otto não recebe buscarImagens nem trazerImagem. */
@@ -162,6 +184,34 @@ function pendenciaDaPeca(p: PendenciaGuardada): PendenciaDaPeca {
   };
 }
 
+/**
+ * O fim de uma tarefa que ninguém fechou (o worker caiu): o evento de uso sai de quem deu a baixa, com o que
+ * estava gravado na tarefa. As chamadas ao modelo que chegaram a acontecer custaram, e não somem do registro.
+ * Sai uma vez só: a baixa devolve cada tarefa a quem a fechou.
+ */
+export function registrarBaixa(uso: RegistroDeUso, escopo: EscopoDaConta, t: TarefaGuardada): void {
+  uso.registrar(escopo, {
+    evento: 'tarefa_terminada',
+    tarefaId: t.id,
+    documentoId: t.documentoId,
+    tipo: t.tipo,
+    estado: t.estado,
+    fim: t.fim ?? 'interrompida',
+    ...(t.erroCodigo ? { erro: t.erroCodigo } : {}),
+    lotes: t.lotes,
+    lotesRecusados: 0,
+    chamadas: t.chamadas,
+    tokensDeEntrada: t.consumo.tokensDeEntrada,
+    tokensDeCacheLidos: t.consumo.tokensDeCacheLidos,
+    tokensDeCacheCriados: t.consumo.tokensDeCacheCriados,
+    tokensDeSaida: t.consumo.tokensDeSaida,
+    imagens: t.consumo.imagens,
+    voltasDeConferencia: 0,
+    duracaoMs: t.iniciadaEm && t.terminadaEm ? Math.max(0, t.terminadaEm.getTime() - t.iniciadaEm.getTime()) : 0,
+    conferida: false,
+  });
+}
+
 export class CasosDeUsoDeTarefa {
   private readonly agora: () => Date;
   private readonly uso: RegistroDeUso;
@@ -183,7 +233,11 @@ export class CasosDeUsoDeTarefa {
   async limites(escopo: EscopoDaConta): Promise<LimitesDeTarefa> {
     const agora = this.agora();
     await this.varrer(escopo);
-    const [tarefasHoje, naFila, semTeto] = [await this.d.tarefas.contarCriadasDesde(escopo, inicioDoDia(agora)), await this.d.tarefas.contarNaFila(escopo), await this.plataformaSemTeto(agora)];
+    const [tarefasHoje, naFila, semTeto] = [
+      await this.d.tarefas.contarCriadasDesde(escopo, inicioDoDia(agora)),
+      await this.d.tarefas.contarNaFila(escopo),
+      await this.plataformaSemTeto(agora, 'comecar'),
+    ];
     const motivo = semTeto
       ? ('limite_diario' as const)
       : tarefasHoje >= this.d.limites.tarefasPorDia
@@ -191,7 +245,24 @@ export class CasosDeUsoDeTarefa {
         : naFila >= this.d.limites.naFilaPorConta
           ? ('fila_cheia' as const)
           : undefined;
-    return { podeEnviar: motivo === undefined, ...(motivo ? { motivo } : {}), tarefasHoje, tarefasPorDia: this.d.limites.tarefasPorDia, naFila, naFilaNoMaximo: this.d.limites.naFilaPorConta };
+    // o ajuste pontual gasta cem vezes menos: pode caber quando a tarefa grande não cabe
+    const podeAjustar = motivo === undefined || (motivo === 'limite_diario' && !(await this.plataformaSemTeto(agora, 'ajustar')));
+    // o que está na frente de um pedido novo, pelo nome da peça: é resposta para o dono, não é log
+    const naFrente: NonNullable<LimitesDeTarefa['naFrente']> = [];
+    for (const t of await this.d.tarefas.emAndamentoDaConta(escopo)) {
+      const peca = await this.d.documentos.abrir(escopo, t.documentoId);
+      naFrente.push({ tarefaId: t.id, documentoId: t.documentoId, nome: peca?.nome ?? '', estado: t.estado });
+    }
+    return {
+      podeEnviar: motivo === undefined,
+      ...(motivo ? { motivo } : {}),
+      podeAjustar,
+      tarefasHoje,
+      tarefasPorDia: this.d.limites.tarefasPorDia,
+      naFila,
+      naFilaNoMaximo: this.d.limites.naFilaPorConta,
+      naFrente,
+    };
   }
 
   /** Cria a tarefa sobre a versão atual da peça e põe a primeira parte na fila. */
@@ -199,7 +270,7 @@ export class CasosDeUsoDeTarefa {
     const agora = this.agora();
     await this.varrer(escopo);
     // parar no meio custa mais que recusar no começo: o teto do dia é conferido antes de aceitar
-    if (await this.plataformaSemTeto(agora)) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.limiteDiario);
+    if (await this.plataformaSemTeto(agora, entrada.tipo === 'ajuste' ? 'ajustar' : 'comecar')) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.limiteDiario);
     if ((await this.d.tarefas.contarCriadasDesde(escopo, inicioDoDia(agora))) >= this.d.limites.tarefasPorDia)
       throw new ErroDaAplicacao(CODIGOS_DE_ERRO.limiteDeTarefas, { motivo: 'limite_da_conta', limite: this.d.limites.tarefasPorDia });
 
@@ -237,8 +308,48 @@ export class CasosDeUsoDeTarefa {
     await this.exigirPeca(escopo, documentoId);
     const { entrada, briefingId } = await this.d.briefing.preparar(escopo, pedido);
     const tarefa = await this.criar(escopo, documentoId, entrada, undefined, briefingId);
-    if (briefingId) await this.d.briefing.usado(escopo, briefingId).catch(() => undefined);
+    await this.depoisDeCriarPeloFormulario(escopo, documentoId, pedido, briefingId);
     return tarefa;
+  }
+
+  /** A peça passa a ser da marca do formulário (para a lista filtrar por marca), e o briefing salvo ganha um uso. */
+  private async depoisDeCriarPeloFormulario(escopo: EscopoDaConta, documentoId: string, pedido: PedidoDeTarefaPorBriefing, briefingId: string | undefined): Promise<void> {
+    // `preparar` já conferiu que a marca é da conta
+    if (pedido.briefing.marcaId) await this.d.documentos.definirMarca(escopo, documentoId, pedido.briefing.marcaId).catch(() => false);
+    if (briefingId) await this.d.briefing?.usado(escopo, briefingId).catch(() => undefined);
+  }
+
+  /**
+   * Cria a peça e a tarefa numa chamada (o formulário de briefing e o pedido de criar partem de peça nova).
+   * Se a tarefa não puder ser criada, nenhuma peça fica para trás: o que dá para saber antes (formulário,
+   * limites) é conferido antes de a peça nascer; o que só se sabe na hora (fila fora) arquiva a peça criada.
+   */
+  async criarPecaComTarefa(escopo: EscopoDaConta, dados: { nome?: string; tarefa: PedidoDeTarefaPorBriefing | Extract<EntradaDaTarefa, { tipo: 'criar' }> }): Promise<PecaComTarefa> {
+    const pedido = dados.tarefa;
+    const doFormulario = 'cuidado' in pedido ? pedido : undefined;
+    if (doFormulario && !this.d.briefing) throw new NaoEncontrado();
+    const preparado = doFormulario && this.d.briefing ? await this.d.briefing.preparar(escopo, doFormulario) : undefined;
+    const entrada: EntradaDaTarefa = preparado?.entrada ?? (pedido as EntradaDaTarefa);
+
+    const agora = this.agora();
+    await this.varrer(escopo);
+    if (await this.plataformaSemTeto(agora, 'comecar')) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.limiteDiario);
+    if ((await this.d.tarefas.contarCriadasDesde(escopo, inicioDoDia(agora))) >= this.d.limites.tarefasPorDia)
+      throw new ErroDaAplicacao(CODIGOS_DE_ERRO.limiteDeTarefas, { motivo: 'limite_da_conta', limite: this.d.limites.tarefasPorDia });
+    if ((await this.d.tarefas.contarNaFila(escopo)) >= this.d.limites.naFilaPorConta)
+      throw new ErroDaAplicacao(CODIGOS_DE_ERRO.limiteDeTarefas, { motivo: 'fila_cheia', limite: this.d.limites.naFilaPorConta });
+
+    const nome = dados.nome?.trim() || doFormulario?.briefing.nome?.trim();
+    const peca = await this.d.pecas.criar(escopo, nome ? { nome } : {});
+    let tarefa: Tarefa;
+    try {
+      tarefa = await this.criar(escopo, peca.id, entrada, undefined, preparado?.briefingId);
+    } catch (erro) {
+      await this.d.pecas.arquivar(escopo, peca.id).catch(() => undefined);
+      throw erro;
+    }
+    if (doFormulario) await this.depoisDeCriarPeloFormulario(escopo, peca.id, doFormulario, preparado?.briefingId);
+    return { documento: { id: peca.id, nome: peca.nome }, tarefa };
   }
 
   async consultar(escopo: EscopoDaConta, id: string): Promise<Tarefa> {
@@ -467,6 +578,7 @@ export class CasosDeUsoDeTarefa {
     let versaoAtual = peca.versao;
     const bancada = await this.d.bancada.abrir(escopo, { nome: peca.nome, arvore: peca.arvore });
     const { fontes, texturas } = this.d;
+    const alavancas = this.d.alavancas && Object.keys(this.d.alavancas).length > 0 ? { alavancas: this.d.alavancas } : {};
     const imagens = this.d.imagens ? this.imagensDaTarefa(escopo, this.d.imagens, bancada) : undefined;
     const base = (aberto: { modelo: ModeloDoAgente; modeloDoJulgamento?: ModeloDoAgente; novoId(): string }, contarId: () => void): AmbienteBase => ({
       modelo: this.comTetoDiario(aberto.modelo),
@@ -497,7 +609,7 @@ export class CasosDeUsoDeTarefa {
         const amb = base(this.d.modelos.abrir({ entrada, parte: 'preparo', idsDoPreparo: 0 }), () => void ids++);
         try {
           const ajuste = ajustes.at(-1);
-          preparo = await this.ciclo.preparar(amb, entrada, ajuste && tarefa.preparo ? { ajuste: { anterior: tarefa.preparo, texto: ajuste } } : {});
+          preparo = await this.ciclo.preparar(amb, entrada, { ...(ajuste && tarefa.preparo ? { ajuste: { anterior: tarefa.preparo, texto: ajuste } } : {}), ...alavancas });
         } catch (erro) {
           await this.fecharPorErro(escopo, tarefa, emCurso, erro, 'preparo', versaoAtual);
           return;
@@ -534,7 +646,7 @@ export class CasosDeUsoDeTarefa {
       };
       let resultado: ResultadoDaTarefa;
       try {
-        resultado = await this.ciclo.executar(amb, entrada, preparo);
+        resultado = await this.ciclo.executar(amb, entrada, preparo, alavancas);
       } catch (erro) {
         await this.fecharPorErro(escopo, tarefa, emCurso, erro, 'execucao', versaoAtual);
         return;
@@ -610,6 +722,8 @@ export class CasosDeUsoDeTarefa {
       ...(c.dolares !== null ? { microDolares: Math.round(c.dolares * 1_000_000) } : {}),
       conferida: resultado.conferida,
     });
+    // a peça mudou (ou não): a miniatura é refeita agora, com o que ficou
+    if (lotes > 0) await this.d.aoParar?.(escopo, tarefa.documentoId).catch(() => undefined);
   }
 
   private async registrarEvento(escopo: EscopoDaConta, id: string, evento: EventoDaTarefa): Promise<void> {
@@ -670,7 +784,7 @@ export class CasosDeUsoDeTarefa {
       capacidades: modelo.capacidades,
       ...(modelo.preco ? { preco: modelo.preco } : {}),
       responder: async (pedido) => {
-        if (await this.plataformaSemTeto(this.agora())) throw new ErroDoModelo('limite_diario', 'o teto diário de tokens da plataforma foi atingido');
+        if (await this.plataformaSemTeto(this.agora(), 'continuar')) throw new ErroDoModelo('limite_diario', 'o teto de tokens da plataforma foi atingido');
         return modelo.responder(pedido);
       },
     };
@@ -678,10 +792,21 @@ export class CasosDeUsoDeTarefa {
 
   // ---------------------------------------------------------------- apoio
 
-  private async plataformaSemTeto(agora: Date): Promise<boolean> {
+  /**
+   * A plataforma tem folga para isto? Dois tetos: o nosso, de tokens somados no dia; e o do fornecedor, que é
+   * um balde que se repõe. O que precisa restar depende do que se quer fazer: começar uma tarefa grande,
+   * começar um ajuste, ou só mais uma chamada da tarefa que já está andando.
+   */
+  private async plataformaSemTeto(agora: Date, para: 'comecar' | 'ajustar' | 'continuar'): Promise<boolean> {
     if (!this.contaConsumo) return false;
+    const l = this.d.limites;
     const hoje = await this.d.consumo.hoje(agora);
-    return hoje.tokens >= this.d.limites.tetoDiarioDeTokens || (hoje.restanteNoFornecedor !== undefined && hoje.restanteNoFornecedor < this.d.limites.restoMinimoNoFornecedor);
+    if (hoje.tokens >= l.tetoDiarioDeTokens) return true;
+    const folga = folgaNoFornecedor(hoje, agora, { capacidade: l.capacidadeDoFornecedor ?? CAPACIDADE_DO_FORNECEDOR, reposicaoPorHora: l.reposicaoPorHoraNoFornecedor ?? REPOSICAO_POR_HORA });
+    if (folga === undefined) return false;
+    const minimo = para === 'comecar' ? l.restoMinimoNoFornecedor : para === 'ajustar' ? (l.restoMinimoParaAjuste ?? RESTO_PARA_AJUSTE) : (l.restoMinimoParaContinuar ?? RESTO_PARA_CONTINUAR);
+    // os mínimos menores nunca passam do de começar: com ele em 0, as três conferências ficam desligadas
+    return folga < Math.min(minimo, l.restoMinimoNoFornecedor);
   }
 
   private async publicar(escopo: EscopoDaConta, id: string, jaNaFila: number): Promise<void> {
@@ -713,9 +838,11 @@ export class CasosDeUsoDeTarefa {
     }
   }
 
-  private darBaixaNasParadas(escopo: EscopoDaConta): Promise<number> {
+  private async darBaixaNasParadas(escopo: EscopoDaConta): Promise<number> {
     const agora = this.agora();
-    return this.d.tarefas.darBaixaNasParadas(escopo, agora, new Date(agora.getTime() - SEM_SINAL_DA_TAREFA_MS)).then((fechadas) => fechadas.length);
+    const fechadas = await this.d.tarefas.darBaixaNasParadas(escopo, agora, new Date(agora.getTime() - SEM_SINAL_DA_TAREFA_MS));
+    for (const t of fechadas) registrarBaixa(this.uso, escopo, t);
+    return fechadas.length;
   }
 
   private async exigir(escopo: EscopoDaConta, id: string): Promise<TarefaGuardada> {

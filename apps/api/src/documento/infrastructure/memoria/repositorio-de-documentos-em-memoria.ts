@@ -52,9 +52,34 @@ export class RepositorioDeDocumentosEmMemoria extends RepositorioDeDocumentos {
     return { ...registro, arvore: novo.arvore };
   }
 
-  async listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number }): Promise<Pagina<RegistroDeDocumento>> {
+  private readonly miniaturasPedidas = new Map<string, Date>();
+
+  async definirMarca(escopo: EscopoDaConta, id: string, marcaId: string): Promise<boolean> {
+    const g = this.achar(escopo, id);
+    if (!g) return false;
+    g.registro = { ...g.registro, marcaId };
+    return true;
+  }
+
+  async pedirMiniatura(escopo: EscopoDaConta, id: string, agora: Date, seAnteriorA: Date): Promise<boolean> {
+    if (!this.achar(escopo, id)) return false;
+    const ultima = this.miniaturasPedidas.get(id);
+    if (ultima && ultima >= seAnteriorA) return false;
+    this.miniaturasPedidas.set(id, agora);
+    return true;
+  }
+
+  async gravarMiniatura(escopo: EscopoDaConta, id: string, versao: number): Promise<{ anterior?: number } | undefined> {
+    const g = this.achar(escopo, id);
+    if (!g) return undefined;
+    const anterior = g.registro.miniaturaVersao;
+    g.registro = { ...g.registro, miniaturaVersao: versao };
+    return anterior !== undefined ? { anterior } : {};
+  }
+
+  async listar(escopo: EscopoDaConta, pagina: { cursor?: string; limite: number; marcaId?: string }): Promise<Pagina<RegistroDeDocumento>> {
     const todos = [...this.docs.values()]
-      .filter((g) => g.contaId === escopo.contaId && !g.arquivado)
+      .filter((g) => g.contaId === escopo.contaId && !g.arquivado && (pagina.marcaId === undefined || g.registro.marcaId === pagina.marcaId))
       .map((g) => g.registro)
       .sort((a, b) => b.alteradoEm.getTime() - a.alteradoEm.getTime() || (a.id < b.id ? 1 : -1));
     const depoisDe = pagina.cursor ? lerCursor(pagina.cursor) : undefined;

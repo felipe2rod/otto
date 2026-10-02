@@ -68,6 +68,7 @@ export function contratoDoRepositorioDeTarefas(nome: string, criar: () => Promis
     it('nasce na fila, na fase de preparo, com a versão da peça naquele instante e a entrada guardada à parte', async () => {
       const t = await nova(sob.contaA, { versao: 3, entrada: { tipo: 'criar', pedido: 'cartaz de jazz', esforco: 'REFINED' } });
       expect(t).toMatchObject({ tipo: 'criar', esforco: 'REFINED', estado: 'na_fila', fase: 'preparo', versaoInicial: 3, lotes: 0, tocados: [], etapas: [], ultimoEvento: -1, chamadas: 0 });
+      expect(t.consumo).toEqual({ tokensDeEntrada: 0, tokensDeCacheLidos: 0, tokensDeCacheCriados: 0, tokensDeSaida: 0, imagens: 0 });
       expect(await r.buscar(sob.contaA, t.id)).toEqual(t);
       expect(await r.entradaDe(sob.contaA, t.id)).toEqual({ entrada: { tipo: 'criar', pedido: 'cartaz de jazz', esforco: 'REFINED' }, ajustes: [] });
       expect(await r.buscar(sob.contaA, randomUUID())).toBeUndefined();
@@ -323,6 +324,25 @@ export function contratoDoRepositorioDeTarefas(nome: string, criar: () => Promis
       // de outra conta, nada
       expect(await r.devolverAFila(sob.contaB, depois(99_999), depois(100_000))).toEqual([]);
       await encerrar(conta, parada.id);
+    });
+
+    it('lista as tarefas em andamento da conta, na ordem em que vão ser atendidas: a que trabalha, depois as da fila por ordem de chegada', async () => {
+      const { contaA: conta, contaB: outra } = await criar();
+      const primeira = await nova(conta, { criadaEm: AGORA });
+      const segunda = await nova(conta, { criadaEm: depois(10) });
+      const terceira = await nova(conta, { criadaEm: depois(20) });
+      await nova(outra, { criadaEm: depois(5) });
+      await r.iniciar(conta, segunda.id, depois(30));
+      expect((await r.emAndamentoDaConta(conta)).map((t) => [t.id, t.estado])).toEqual([
+        [segunda.id, 'preparando'],
+        [primeira.id, 'na_fila'],
+        [terceira.id, 'na_fila'],
+      ]);
+      // a que espera o "pode" e a que está em revisão não estão na frente de ninguém
+      await r.guardarPreparo(conta, segunda.id, { preparo: PREPARO, idsDoPreparo: 0, seguir: 'aguardar', agora: depois(31) });
+      expect((await r.emAndamentoDaConta(conta)).map((t) => t.id)).toEqual([primeira.id, terceira.id]);
+      for (const t of [primeira, segunda, terceira]) await encerrar(conta, t.id);
+      expect(await r.emAndamentoDaConta(conta)).toEqual([]);
     });
 
     it('guarda o briefing salvo de onde a tarefa partiu', async () => {

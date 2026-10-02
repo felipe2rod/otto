@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { aplicarLote, type Documento, documentoVazio } from '@otto/documento';
 import { lerContaId } from '@otto/shared';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ArmazenamentoEmMemoria } from '../../../arquivo/infrastructure/adaptadores/memoria/armazenamento-em-memoria';
 import { RepositorioDeArquivosEmMemoria } from '../../../arquivo/infrastructure/memoria/repositorio-de-arquivos-em-memoria';
 import { BibliotecaDeFontesEmMemoria } from '../../../biblioteca/infrastructure/memoria/biblioteca-de-fontes-em-memoria';
@@ -69,6 +69,10 @@ beforeAll(async () => {
     { op: 'criarNo', prancheta: 'Feed', no: { tipo: 'texto', nome: 'Título', x: 80, y: 800, largura: 900, altura: 200, conteudo: 'Promoção', fonte: 'Anton', tamanho: 120, cor: '#17171c' } },
   ]);
 }, 60_000);
+
+afterAll(async () => {
+  await bancada?.fechar();
+});
 
 const jpegDe = (base64: string) => Buffer.from(base64, 'base64');
 
@@ -137,12 +141,59 @@ describe('BancadaComRender', () => {
     }
   });
 
-  it('o motor é carregado uma vez por processo, e cada tarefa tem a própria sessão', async () => {
+  it('uma thread de render por processo, e cada tarefa tem a própria sessão dentro dela', async () => {
     const [um, dois] = [await bancada.abrir(contaA, { nome: 'x', arvore: peca }), await bancada.abrir(contaA, { nome: 'y', arvore: peca })];
     um.fechar();
     // fechar uma não derruba a outra
     expect((await dois.renderizar(peca, { prancheta: peca.pranchetas[0]?.id as string, ladoMaximo: 200 })).altura).toBe(200);
     dois.fechar();
-    expect(bancada.cargasDoMotor).toBe(1);
+    expect(bancada.threadsCriadas).toBe(1);
   });
+
+  it('o render roda fora do laço principal: enquanto uma prancheta grande é desenhada, o processo continua atendendo', async () => {
+    const grande = montar(documentoVazio(), [
+      { op: 'criarPrancheta', nome: 'Painel', largura: 6000, altura: 6000, fundo: '#f4efe3' },
+      ...Array.from({ length: 12 }, (_, i) => ({
+        op: 'criarNo',
+        prancheta: 'Painel',
+        no: { tipo: 'texto', nome: `T${i}`, x: 100, y: 100 + i * 450, largura: 5800, altura: 420, conteudo: 'Promoção da semana', fonte: 'Anton', tamanho: 400, cor: '#17171c' },
+      })),
+    ]);
+    const aberta = await bancada.abrir(contaA, { nome: 'Painel', arvore: grande });
+    try {
+      let batidas = 0;
+      const relogio = setInterval(() => batidas++, 5);
+      const inicio = Date.now();
+      await Promise.all([1, 2, 3].map(() => aberta.renderizar(grande, { prancheta: grande.pranchetas[0]?.id as string, ladoMaximo: 6000 })));
+      const duracao = Date.now() - inicio;
+      clearInterval(relogio);
+      // no laço principal, um render síncrono não deixaria o relógio bater nenhuma vez durante ele
+      expect(duracao).toBeGreaterThan(100);
+      expect(batidas).toBeGreaterThan(duracao / 50);
+    } finally {
+      aberta.fechar();
+    }
+  }, 60_000);
+
+  it('se a thread de render cair, outra sobe e a sessão é remontada com o que já tinha sido entregue', async () => {
+    const aberta = await bancada.abrir(contaA, { nome: 'Promoção', arvore: peca });
+    try {
+      const antes = await aberta.renderizar(peca, { prancheta: peca.pranchetas[0]?.id as string, ladoMaximo: 300 });
+      await bancada.derrubarThread();
+      const depois = await aberta.renderizar(peca, { prancheta: peca.pranchetas[0]?.id as string, ladoMaximo: 300 });
+      // a foto e a fonte voltaram para a sessão nova: o render é o mesmo
+      expect(depois.base64).toBe(antes.base64);
+      expect(bancada.threadsCriadas).toBe(2);
+    } finally {
+      aberta.fechar();
+    }
+  }, 60_000);
+
+  it('desligar encerra a thread, e a bancada não aceita mais trabalho', async () => {
+    const outra = new BancadaComRender(fontes, new RepositorioDeArquivosEmMemoria(), armazenamento);
+    const aberta = await outra.abrir(contaA, { nome: 'x', arvore: peca });
+    await aberta.renderizar(peca, { prancheta: peca.pranchetas[0]?.id as string, ladoMaximo: 100 });
+    await outra.fechar();
+    await expect(aberta.renderizar(peca, { prancheta: peca.pranchetas[0]?.id as string, ladoMaximo: 100 })).rejects.toThrow();
+  }, 60_000);
 });

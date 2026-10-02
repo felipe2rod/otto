@@ -10,7 +10,8 @@ const doMotivo = (motivo: string) =>
     .map(([tabela]) => tabela);
 const contadores = doMotivo('contador-global');
 // as tabelas sem RLS: catálogos e contadores globais
-const catalogos = [...doMotivo('catalogo-global'), ...contadores];
+const caches = doMotivo('cache-global');
+const catalogos = [...doMotivo('catalogo-global'), ...contadores, ...caches];
 const soCatalogos = doMotivo('catalogo-global');
 
 describe('toda tabela tem política', () => {
@@ -63,6 +64,26 @@ describe('toda tabela tem política', () => {
           const r = await c.query<{ pode: boolean }>(`SELECT has_table_privilege('otto_app', $1, $2) AS pode`, [`public.${tabela}`, privilegio]);
           expect(r.rows[0]?.pode, `${privilegio} em ${tabela}`).toBe(esperado);
         }
+      }
+    });
+  });
+
+  it('cache global: otto_app lê, acrescenta e apaga o que venceu, e não altera linha; nenhuma coluna guarda conta', async () => {
+    await comoMigrador(async (c) => {
+      for (const tabela of caches) {
+        for (const [privilegio, esperado] of [
+          ['SELECT', true],
+          ['INSERT', true],
+          ['DELETE', true],
+          ['UPDATE', false],
+          ['TRUNCATE', false],
+        ] as const) {
+          const r = await c.query<{ pode: boolean }>(`SELECT has_table_privilege('otto_app', $1, $2) AS pode`, [`public.${tabela}`, privilegio]);
+          expect(r.rows[0]?.pode, `${privilegio} em ${tabela}`).toBe(esperado);
+        }
+        const colunas = await c.query<{ nome: string }>(`SELECT column_name AS nome FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`, [tabela]);
+        expect(colunas.rows.length, `${tabela} está nas exceções e não existe no banco`).toBeGreaterThan(0);
+        expect(colunas.rows.map((x) => x.nome).filter((n) => /conta|usuario|documento/.test(n))).toEqual([]);
       }
     });
   });

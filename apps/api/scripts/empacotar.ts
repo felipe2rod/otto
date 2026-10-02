@@ -18,6 +18,8 @@ await build({
     main: 'src/main.ts',
     worker: 'src/worker.ts',
     'motor.thread': 'src/exportacao/infrastructure/render/motor.thread.ts',
+    // a thread de render da tarefa do Otto, que o worker sobe pelo arquivo vizinho (oficina-de-render.ts)
+    'oficina.thread': 'src/tarefa/infrastructure/render/oficina.thread.ts',
     'semear-biblioteca': 'src/comandos/semear-biblioteca.ts',
   },
   outdir: 'dist',

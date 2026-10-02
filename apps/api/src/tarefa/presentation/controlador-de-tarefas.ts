@@ -8,9 +8,11 @@ import {
   EstadoDaPendencia,
   type EventosDaTarefa,
   FORMATOS_POR_TAREFA,
+  LIMITES,
   type LimitesDeTarefa,
   type ListaDePendencias,
   type ListaDeTarefas,
+  type PecaComTarefa,
   PedidoDeAjusteDoPlano,
   PedidoDeDescartar,
   PedidoDeDesfazerTarefa,
@@ -20,6 +22,7 @@ import {
   type Tarefa,
 } from '@otto/shared';
 import type { Request, Response } from 'express';
+import { z } from 'zod';
 import type { Configuracao } from '../../plataforma/config/configuracao';
 import { NaoEncontrado, PedidoInvalido } from '../../plataforma/erros/erro-da-aplicacao';
 import type { EscopoDaConta } from '../../plataforma/escopo/escopo-da-conta';
@@ -28,6 +31,9 @@ import { validar } from '../../plataforma/http/validar';
 import { CONFIGURACAO } from '../../plataforma/servico';
 import { CasosDeUsoDeTarefa } from '../application/casos-de-uso-de-tarefa';
 import { cursorDe, transmitir } from './fluxo-de-eventos';
+
+/** O envelope de POST /api/documentos/com-tarefa. A tarefa é validada depois, pelo esquema do tipo dela. */
+const PedidoDePecaComTarefa = z.strictObject({ nome: z.string().trim().min(1).max(LIMITES.caracteresDoNome).optional(), tarefa: z.unknown() });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Id que não é UUID não existe: a resposta é a mesma de id de outra conta. */
@@ -71,6 +77,18 @@ export class ControladorDeTarefas {
     // Em produção só entra briefing pelo formulário, e o teto de formatos vale nos dois caminhos.
     if (entrada.tipo === 'briefing' && (!this.briefingSolto || entrada.briefing.formatos.length > FORMATOS_POR_TAREFA)) throw new PedidoInvalido(['briefing']);
     return this.tarefas.criar(escopo, id(documentoId), entrada);
+  }
+
+  /** 202: cria a peça E a tarefa. Se a tarefa não puder ser criada, nenhuma peça fica para trás. */
+  @Post('documentos/com-tarefa')
+  @HttpCode(202)
+  criarPecaComTarefa(@Escopo() escopo: EscopoDaConta, @Body() corpo: unknown): Promise<PecaComTarefa> {
+    const { nome, tarefa } = validar(PedidoDePecaComTarefa, corpo);
+    if (ehFormularioDeBriefing(tarefa)) return this.tarefas.criarPecaComTarefa(escopo, { ...(nome ? { nome } : {}), tarefa: validar(PedidoDeTarefaPorBriefing, tarefa) });
+    const entrada = validar(EntradaDaTarefa, tarefa);
+    // peça nova só nasce de formulário ou de pedido de criar: ajuste e pedido sobre a peça precisam de uma peça que já existe
+    if (entrada.tipo !== 'criar') throw new PedidoInvalido(['tarefa']);
+    return this.tarefas.criarPecaComTarefa(escopo, { ...(nome ? { nome } : {}), tarefa: entrada });
   }
 
   @Get('documentos/:id/tarefas')

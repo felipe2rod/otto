@@ -6,17 +6,19 @@
 // - 'propria-conta': a tabela é a conta; o RLS confere a chave primária;
 // - 'catalogo-global': igual para todas as contas; sem RLS, e otto_app não altera nem apaga linha;
 // - 'contador-global': um número da plataforma inteira; sem RLS, e a tabela só tem coluna de número e de data
-//   (nenhum texto, nenhum JSON, nenhum id): não há como guardar dado de conta nela.
+//   (nenhum texto, nenhum JSON, nenhum id): não há como guardar dado de conta nela;
+// - 'cache-global': resposta de terceiros guardada por prazo curto, igual para todas as contas; sem RLS, e
+//   otto_app acrescenta e apaga (a linha vencida), mas não altera linha. Nenhuma coluna é de conta.
 export interface ExcecaoDeIsolamento {
-  motivo: 'propria-conta' | 'catalogo-global' | 'contador-global';
+  motivo: 'propria-conta' | 'catalogo-global' | 'contador-global' | 'cache-global';
   justificativa: string;
 }
 
 export const TABELAS_SEM_CONTA_ID: Record<string, ExcecaoDeIsolamento> = {
   buscas_de_imagens: {
-    motivo: 'catalogo-global',
+    motivo: 'cache-global',
     justificativa:
-      'Cache de 24 h das buscas no banco de imagens (ADR 032): o resultado de uma busca é o mesmo para qualquer conta e a chave do Otto é uma só. Não guarda o texto da busca (a chave é um hash) nem dado de conta. Só cresce.',
+      'Cache de 24 h das buscas no banco de imagens (ADR 032): o resultado de uma busca é o mesmo para qualquer conta e a chave do Otto é uma só. Não guarda o texto da busca (a chave é um hash) nem dado de conta. A busca vencida é apagada.',
   },
   contas: { motivo: 'propria-conta', justificativa: 'É a própria conta: participa do RLS pela chave primária (id = app.conta_id).' },
   consumo_diario_do_modelo: {
