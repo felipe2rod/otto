@@ -25,7 +25,7 @@ describe('EscopoDaConta', () => {
   });
 });
 
-describe('ResolvedorDeContaFixa (sem login no MVP: suposição a confirmar com o Felipe)', () => {
+describe('ResolvedorDeContaFixa (sem login no MVP, ADR 035)', () => {
   it('resolve sempre a conta fixa da configuração, com ou sem credencial', async () => {
     const resolvedor = new ResolvedorDeContaFixa(lerContaId(CONTA));
     expect((await resolvedor.resolverDaRequisicao(undefined)).contaId).toBe(CONTA);

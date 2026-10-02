@@ -11,6 +11,7 @@ import {
   type NovaExportacao,
   type OpcoesGuardadas,
   RepositorioDeExportacoes,
+  type Retomada,
 } from '../../application/repositorio-de-exportacoes';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,6 +48,7 @@ function paraGuardada(l: Linha): ExportacaoGuardada {
     criadaEm: l.criadaEm,
     ...(l.terminadaEm ? { terminadaEm: l.terminadaEm } : {}),
     ...(l.expiraEm ? { expiraEm: l.expiraEm } : {}),
+    tentativas: l.tentativas,
     ...(l.arquivosRemovidosEm ? { arquivosRemovidosEm: l.arquivosRemovidosEm } : {}),
   };
 }
@@ -61,22 +63,35 @@ export class RepositorioDeExportacoesNoBanco extends RepositorioDeExportacoes {
     return l ? paraGuardada(l) : undefined;
   }
 
+  private async inserir(tx: TransacaoComEscopo, escopo: EscopoDaConta, nova: NovaExportacao): Promise<ExportacaoGuardada> {
+    await tx.exportacao.create({
+      data: {
+        id: nova.id,
+        contaId: escopo.contaId,
+        documentoId: nova.documentoId,
+        versao: nova.versao,
+        nome: nova.nome,
+        formato: nova.opcoes.formato,
+        opcoes: nova.opcoes as unknown as JsonDoBanco,
+        pranchetasNoTotal: nova.opcoes.pranchetas.length,
+        ...(nova.criadaEm ? { criadaEm: nova.criadaEm } : {}),
+      },
+    });
+    return (await this.ler(tx, escopo, nova.id)) as ExportacaoGuardada;
+  }
+
   async criar(escopo: EscopoDaConta, nova: NovaExportacao): Promise<ExportacaoGuardada> {
+    return this.prisma.executar(escopo, (tx) => this.inserir(tx, escopo, nova));
+  }
+
+  async criarSeCouber(escopo: EscopoDaConta, nova: NovaExportacao, limite: number): Promise<{ exportacao: ExportacaoGuardada; jaEmAndamento: number } | undefined> {
     return this.prisma.executar(escopo, async (tx) => {
-      await tx.exportacao.create({
-        data: {
-          id: nova.id,
-          contaId: escopo.contaId,
-          documentoId: nova.documentoId,
-          versao: nova.versao,
-          nome: nova.nome,
-          formato: nova.opcoes.formato,
-          opcoes: nova.opcoes as unknown as JsonDoBanco,
-          pranchetasNoTotal: nova.opcoes.pranchetas.length,
-          ...(nova.criadaEm ? { criadaEm: nova.criadaEm } : {}),
-        },
-      });
-      return (await this.ler(tx, escopo, nova.id)) as ExportacaoGuardada;
+      // Uma trava por conta, solta no fim da transação: dois pedidos simultâneos da mesma conta contam e
+      // criam um depois do outro. Contas diferentes não esperam uma pela outra.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`exportacoes:${escopo.contaId}`}, 0))`;
+      const jaEmAndamento = await tx.exportacao.count({ where: { contaId: escopo.contaId, estado: { in: ['na_fila', 'rodando'] } } });
+      if (jaEmAndamento >= limite) return undefined;
+      return { exportacao: await this.inserir(tx, escopo, nova), jaEmAndamento };
     });
   }
 
@@ -121,20 +136,41 @@ export class RepositorioDeExportacoesNoBanco extends RepositorioDeExportacoes {
     return this.prisma.executar(escopo, (tx) => tx.exportacao.count({ where: { contaId: escopo.contaId, estado: { in: ['na_fila', 'rodando'] } } }));
   }
 
-  async iniciar(escopo: EscopoDaConta, id: string, agora: Date, semSinalDesde: Date): Promise<InicioDeExportacao> {
+  async iniciar(escopo: EscopoDaConta, id: string, agora: Date, semSinalDesde: Date, retomar?: Retomada): Promise<InicioDeExportacao> {
     if (!UUID.test(id)) return { resultado: 'ignorada' };
+    const semSinal = (desde: Date) => ({ OR: [{ batimentoEm: { lt: desde } }, { batimentoEm: null }] });
     try {
       return await this.prisma.executar(escopo, async (tx) => {
-        // worker que morreu no meio não pode segurar a conta para sempre
+        // worker que morreu no meio não pode segurar a conta para sempre (a própria exportação, quando há retomada, é decidida abaixo)
         await tx.exportacao.updateMany({
-          where: { contaId: escopo.contaId, estado: 'rodando', OR: [{ batimentoEm: { lt: semSinalDesde } }, { batimentoEm: null }] },
+          where: { contaId: escopo.contaId, estado: 'rodando', ...(retomar ? { id: { not: id } } : {}), ...semSinal(semSinalDesde) },
           data: { estado: 'falhou', erroCodigo: 'interrompida', terminadaEm: agora },
         });
         const alvo = await tx.exportacao.findFirst({ where: { id, contaId: escopo.contaId }, select: { estado: true } });
+        if (alvo?.estado === 'rodando' && retomar) {
+          // A condição vai no próprio UPDATE: de dois workers com o mesmo trabalho reentregue, um só retoma.
+          const retomou = await tx.exportacao.updateMany({
+            where: { id, contaId: escopo.contaId, estado: 'rodando', tentativas: { lt: retomar.maximoDeTentativas }, ...semSinal(retomar.semSinalDesde) },
+            data: { iniciadaEm: agora, batimentoEm: agora, pranchetasProntas: 0, falhas: [], tentativas: { increment: 1 } },
+          });
+          if (retomou.count === 1) {
+            await tx.arquivoDeExportacao.deleteMany({ where: { exportacaoId: id, contaId: escopo.contaId } });
+            return { resultado: 'iniciada' as const, exportacao: (await this.ler(tx, escopo, id)) as ExportacaoGuardada, retomada: true as const };
+          }
+          // parada e sem tentativa sobrando: fecha. Com o dono vivo, este UPDATE não pega nada.
+          await tx.exportacao.updateMany({
+            where: { id, contaId: escopo.contaId, estado: 'rodando', ...semSinal(retomar.semSinalDesde) },
+            data: { estado: 'falhou', erroCodigo: 'interrompida', terminadaEm: agora },
+          });
+          return { resultado: 'ignorada' as const };
+        }
         if (alvo?.estado !== 'na_fila') return { resultado: 'ignorada' as const };
         if ((await tx.exportacao.count({ where: { contaId: escopo.contaId, estado: 'rodando' } })) > 0) return { resultado: 'ocupada' as const };
         // a condição no próprio UPDATE é o que torna o consumidor idempotente
-        const mudou = await tx.exportacao.updateMany({ where: { id, contaId: escopo.contaId, estado: 'na_fila' }, data: { estado: 'rodando', iniciadaEm: agora, batimentoEm: agora } });
+        const mudou = await tx.exportacao.updateMany({
+          where: { id, contaId: escopo.contaId, estado: 'na_fila' },
+          data: { estado: 'rodando', iniciadaEm: agora, batimentoEm: agora, tentativas: { increment: 1 } },
+        });
         if (mudou.count === 0) return { resultado: 'ignorada' as const };
         return { resultado: 'iniciada' as const, exportacao: (await this.ler(tx, escopo, id)) as ExportacaoGuardada };
       });

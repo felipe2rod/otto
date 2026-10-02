@@ -49,6 +49,8 @@ export interface ExportacaoGuardada {
   criadaEm: Date;
   terminadaEm?: Date;
   expiraEm?: Date;
+  /** Quantas vezes começou a rodar. 2 é uma retomada (o worker da primeira morreu). */
+  tentativas: number;
   /** Quando os arquivos foram apagados do armazenamento. O registro fica. */
   arquivosRemovidosEm?: Date;
 }
@@ -64,12 +66,18 @@ export interface NovaExportacao {
 }
 
 export type InicioDeExportacao =
-  /** Passou de na_fila para rodando: este worker é o dono. */
-  | { resultado: 'iniciada'; exportacao: ExportacaoGuardada }
+  /** Passou de na_fila para rodando: este worker é o dono. `retomada`: ela estava rodando num worker que morreu, e recomeça do zero. */
+  | { resultado: 'iniciada'; exportacao: ExportacaoGuardada; retomada?: true }
   /** Outra exportação da MESMA conta está rodando: tente depois. */
   | { resultado: 'ocupada' }
   /** Não existe nesta conta, ou não está mais na fila (outro worker pegou, ou já terminou): não há o que fazer. */
   | { resultado: 'ignorada' };
+
+export interface Retomada {
+  semSinalDesde: Date;
+  /** Contando a primeira. 2: uma retomada só. */
+  maximoDeTentativas: number;
+}
 
 export interface Conclusao {
   estado: 'pronta' | 'pronta_em_parte' | 'falhou';
@@ -83,6 +91,12 @@ export interface Conclusao {
 
 export abstract class RepositorioDeExportacoes {
   abstract criar(escopo: EscopoDaConta, nova: NovaExportacao): Promise<ExportacaoGuardada>;
+  /**
+   * Cria só se a conta tem menos de `limite` exportações esperando ou rodando. Contar e criar é uma
+   * coisa só: pedidos simultâneos da mesma conta não passam do limite. undefined: não coube.
+   * `jaEmAndamento` é quantas a conta já tinha na frente desta.
+   */
+  abstract criarSeCouber(escopo: EscopoDaConta, nova: NovaExportacao, limite: number): Promise<{ exportacao: ExportacaoGuardada; jaEmAndamento: number } | undefined>;
   /** undefined se não existe ou é de outra conta. */
   abstract buscar(escopo: EscopoDaConta, id: string): Promise<ExportacaoGuardada | undefined>;
   /** As exportações de um documento criadas desde a data, da mais nova para a mais velha. Lista vazia se o documento não é da conta. */
@@ -100,9 +114,12 @@ export abstract class RepositorioDeExportacoes {
   /**
    * na_fila → rodando, só se nenhuma outra exportação da conta está rodando. É o que torna o
    * consumidor idempotente e o que garante uma por vez por conta.
-   * Exportação "rodando" sem sinal de vida desde `semSinalDesde` é dada como interrompida antes.
+   * OUTRA exportação da conta "rodando" sem sinal de vida desde `semSinalDesde` é dada como interrompida antes.
+   * Com `retomar`, a PRÓPRIA exportação, se está rodando sem sinal desde `retomar.semSinalDesde` (o worker
+   * dela morreu e a fila reentregou o trabalho), recomeça do zero: arquivos, falhas e progresso da tentativa
+   * que morreu são apagados. Passou de `maximoDeTentativas`, falha como interrompida.
    */
-  abstract iniciar(escopo: EscopoDaConta, id: string, agora: Date, semSinalDesde: Date): Promise<InicioDeExportacao>;
+  abstract iniciar(escopo: EscopoDaConta, id: string, agora: Date, semSinalDesde: Date, retomar?: Retomada): Promise<InicioDeExportacao>;
   /** Sinal de vida do worker. */
   abstract bater(escopo: EscopoDaConta, id: string, agora: Date): Promise<void>;
   /** Um arquivo saiu. `pranchetas` é quantas pranchetas ele cobre (1, ou todas no PSD com as pranchetas juntas). */

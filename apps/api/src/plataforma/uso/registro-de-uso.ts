@@ -18,6 +18,8 @@ export type EventoDeUso =
       documentoId: string;
       formato: FormatoExportado;
       pacote: boolean;
+      /** 1 é o normal; 2 é uma retomada (o worker da primeira morreu). */
+      tentativa: number;
       resultado: 'pronta' | 'pronta_em_parte' | 'falhou';
       pranchetas: number;
       falhas: number;

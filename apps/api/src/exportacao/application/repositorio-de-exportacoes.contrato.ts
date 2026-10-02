@@ -241,6 +241,93 @@ export function contratoDoRepositorioDeExportacoes(nome: string, criar: () => Pr
       await r.concluir(sob.contaA, id, { estado: 'falhou', erroCodigo: 'teste', terminadaEm: AGORA, duracaoMs: 1 });
     });
 
+    it('o limite da conta é atômico: de doze pedidos ao mesmo tempo, com limite de cinco, entram exatamente cinco', async () => {
+      const escopo = (await criar()).contaA;
+      const doc = await sob.criarDocumento(escopo);
+      const pedidos = Array.from({ length: 12 }, () =>
+        r.criarSeCouber(escopo, { id: randomUUID(), documentoId: doc, versao: 1, nome: 'Promoção', opcoes: { formato: 'png', escala: 1, semFundo: false, pranchetas: ['p0'] }, criadaEm: AGORA }, 5),
+      );
+      const resultados = await Promise.all(pedidos);
+      const criadas = resultados.filter((x) => x !== undefined);
+      expect(criadas).toHaveLength(5);
+      expect(await r.contarEmAndamento(escopo)).toBe(5);
+      // cada uma sabe quantas a conta já tinha na frente: é o que dá a vez entre contas na fila
+      expect(criadas.map((c) => c.jaEmAndamento).sort()).toEqual([0, 1, 2, 3, 4]);
+      expect(criadas[0]?.exportacao).toMatchObject({ estado: 'na_fila', tentativas: 0 });
+      // o limite é por conta: outra conta entra
+      const outra = sob.contaB;
+      expect(
+        await r.criarSeCouber(
+          outra,
+          { id: randomUUID(), documentoId: await sob.criarDocumento(outra), versao: 1, nome: 'x', opcoes: { formato: 'png', escala: 1, semFundo: false, pranchetas: ['p0'] } },
+          5,
+        ),
+      ).toBeDefined();
+    });
+
+    describe('retomada depois de um worker morrer', () => {
+      const RETOMAR = (semSinalDesde: Date) => ({ semSinalDesde, maximoDeTentativas: 2 });
+      let escopo: EscopoDaConta;
+      let doc: string;
+      beforeAll(async () => {
+        escopo = (await criar()).contaA;
+        doc = await sob.criarDocumento(escopo);
+      });
+      const fechar = (id: string) => r.concluir(escopo, id, { estado: 'falhou', erroCodigo: 'teste', terminadaEm: AGORA, duracaoMs: 1 });
+
+      it('o trabalho reentregue de uma exportação que parou no meio recomeça do zero: sem os arquivos, as falhas e o progresso da tentativa que morreu', async () => {
+        const id = await criarEm(escopo, doc, AGORA, { formato: 'psd', arquivos: 'por-prancheta', pranchetas: ['p0', 'p1', 'p2'] });
+        const primeira = await r.iniciar(escopo, id, AGORA, HA_MUITO_TEMPO);
+        expect(primeira).toMatchObject({ resultado: 'iniciada', exportacao: { tentativas: 1 } });
+        await r.registrarArquivo(escopo, id, arquivo(0), 1, depois(5));
+        await r.registrarFalha(escopo, id, { pranchetaId: 'p1', codigo: 'falha_na_prancheta' }, depois(6));
+        // o worker morreu aos 6 s. Aos 40 s a fila reentrega: sem sinal há mais de 20 s, é retomada.
+        const retomada = await r.iniciar(escopo, id, depois(40), HA_MUITO_TEMPO, RETOMAR(depois(20)));
+        expect(retomada).toMatchObject({ resultado: 'iniciada', retomada: true, exportacao: { estado: 'rodando', tentativas: 2, pranchetasProntas: 0, arquivos: [], falhas: [] } });
+        // os arquivos da retomada entram nos mesmos índices
+        await r.registrarArquivo(escopo, id, arquivo(0), 1, depois(41));
+        expect((await r.buscar(escopo, id))?.arquivos).toEqual([arquivo(0)]);
+        await fechar(id);
+      });
+
+      it('entrega repetida com o dono vivo (sinal de vida recente) é ignorada: ninguém toma a exportação de quem está rodando', async () => {
+        const id = await criarEm(escopo, doc, AGORA);
+        await r.iniciar(escopo, id, AGORA, HA_MUITO_TEMPO);
+        await r.bater(escopo, id, depois(35));
+        expect(await r.iniciar(escopo, id, depois(40), HA_MUITO_TEMPO, RETOMAR(depois(20)))).toEqual({ resultado: 'ignorada' });
+        expect(await r.buscar(escopo, id)).toMatchObject({ estado: 'rodando', tentativas: 1 });
+        await fechar(id);
+      });
+
+      it('a exportação que já foi retomada o máximo de vezes não é retomada de novo: falha como interrompida (ela pode ser o que derruba o worker)', async () => {
+        const id = await criarEm(escopo, doc, AGORA);
+        await r.iniciar(escopo, id, AGORA, HA_MUITO_TEMPO);
+        expect((await r.iniciar(escopo, id, depois(40), HA_MUITO_TEMPO, RETOMAR(depois(20)))).resultado).toBe('iniciada');
+        expect(await r.iniciar(escopo, id, depois(80), HA_MUITO_TEMPO, RETOMAR(depois(60)))).toEqual({ resultado: 'ignorada' });
+        expect(await r.buscar(escopo, id)).toMatchObject({ estado: 'falhou', erroCodigo: 'interrompida', tentativas: 2 });
+      });
+
+      it('outra exportação da conta parada há pouco não é derrubada por quem chega: quem chega espera, para o trabalho dela poder retomá-la', async () => {
+        const [parada, seguinte] = [await criarEm(escopo, doc, AGORA), await criarEm(escopo, doc, AGORA)];
+        await r.iniciar(escopo, parada, AGORA, HA_MUITO_TEMPO);
+        // aos 40 s, sem sinal há mais de 20 s mas há menos que o limite longo (aqui, 5 minutos)
+        expect(await r.iniciar(escopo, seguinte, depois(40), depois(40 - 300), RETOMAR(depois(20)))).toEqual({ resultado: 'ocupada' });
+        expect((await r.buscar(escopo, parada))?.estado).toBe('rodando');
+        // a parada é retomada pelo trabalho dela, termina, e a seguinte entra
+        expect((await r.iniciar(escopo, parada, depois(41), depois(41 - 300), RETOMAR(depois(21)))).resultado).toBe('iniciada');
+        await fechar(parada);
+        expect((await r.iniciar(escopo, seguinte, depois(42), depois(42 - 300), RETOMAR(depois(22)))).resultado).toBe('iniciada');
+        await fechar(seguinte);
+      });
+
+      it('sem pedir retomada (como antes), a entrega repetida de uma exportação rodando é sempre ignorada', async () => {
+        const id = await criarEm(escopo, doc, AGORA);
+        await r.iniciar(escopo, id, AGORA, HA_MUITO_TEMPO);
+        expect(await r.iniciar(escopo, id, depois(40), HA_MUITO_TEMPO)).toEqual({ resultado: 'ignorada' });
+        await fechar(id);
+      });
+    });
+
     it('marca os arquivos como removidos sem apagar o registro; outra conta não marca', async () => {
       const doc = await sob.criarDocumento(sob.contaA);
       const id = await criarEm(sob.contaA, doc, AGORA);

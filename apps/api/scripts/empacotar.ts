@@ -13,7 +13,13 @@ const deTerceiros = Object.keys(manifesto.dependencies).filter((nome) => !nome.s
 await build({
   absWorkingDir: raiz,
   // main e worker são os processos; semear-biblioteca é o comando que roda depois da migração
-  entryPoints: { main: 'src/main.ts', worker: 'src/worker.ts', 'semear-biblioteca': 'src/comandos/semear-biblioteca.ts' },
+  // motor.thread é a thread de exportação, que o worker sobe pelo arquivo vizinho (motor-em-thread.ts)
+  entryPoints: {
+    main: 'src/main.ts',
+    worker: 'src/worker.ts',
+    'motor.thread': 'src/exportacao/infrastructure/render/motor.thread.ts',
+    'semear-biblioteca': 'src/comandos/semear-biblioteca.ts',
+  },
   outdir: 'dist',
   outExtension: { '.js': '.mjs' },
   bundle: true,

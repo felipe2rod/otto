@@ -21,6 +21,13 @@ export const VALIDADE_DO_LINK_EM_SEGUNDOS = 300;
 export const DIAS_DE_RETENCAO_DA_EXPORTACAO = 7;
 /** Quantas exportações uma conta pode ter esperando na fila. */
 export const EXPORTACOES_NA_FILA_POR_CONTA = 5;
+/**
+ * Teto de uma prancheta numa exportação, em megapixels NA ESCALA DE SAÍDA: largura × altura × escala².
+ * A escala é a do pedido no PNG e 1 no PSD. No SVG e no PDF, as camadas que viram imagem saem em 2x
+ * quando a prancheta em 2x cabe no teto, e em 1x quando não cabe; só é recusada a que não cabe nem em 1x.
+ * Acima do teto, pedir responde 422 exportacao_grande_demais. 36 megapixels é 6000 × 6000 (um A2 a 300 dpi cabe).
+ */
+export const MEGAPIXELS_POR_PRANCHETA_NA_EXPORTACAO = 36;
 /** Quantas exportações a lista de uma peça traz, no máximo. */
 export const EXPORTACOES_NA_LISTA = 20;
 
@@ -142,6 +149,12 @@ export const Exportacao = z.object({
   /** A versão do documento que foi exportada. */
   versao: z.int().min(0),
   formato: z.enum(['psd', 'png', 'svg', 'pdf']),
+  /**
+   * O pedido que criou esta exportação, com `pranchetas` já resolvidas (todas, se o pedido não disse quais),
+   * na ordem do documento. Serve de corpo para pedir de novo: "tentar só as que falharam" é este pedido
+   * com `pranchetas` trocadas pelas de `falhas`. Ausente só em resposta de servidor antigo.
+   */
+  pedido: PedidoDeExportacao.and(z.object({ pranchetas: z.array(z.string().min(1)).min(1) })).optional(),
   /** true: `arquivos` tem um .zip só, com os arquivos do formato, as fontes e o relatório. */
   pacote: z.boolean().optional(),
   estado: EstadoDaExportacao,

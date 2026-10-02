@@ -214,6 +214,8 @@ model Exportacao {
   terminadaEm       DateTime?           @map("terminada_em") @db.Timestamptz(3)
   /// quando os arquivos podem ser apagados (7 dias depois de prontos)
   expiraEm          DateTime?           @map("expira_em") @db.Timestamptz(3)
+  /// quantas vezes começou a rodar (2 = retomada depois de um worker morrer)
+  tentativas        Int                 @default(0)
   /// quando os arquivos foram apagados do armazenamento (a linha fica)
   arquivosRemovidosEm DateTime?         @map("arquivos_removidos_em") @db.Timestamptz(3)
 

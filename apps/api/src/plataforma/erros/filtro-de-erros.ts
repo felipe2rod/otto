@@ -34,6 +34,7 @@ const STATUS_POR_CODIGO: Record<CodigoDeErro, number> = {
   [C.exportacaoNaoPronta]: 409,
   [C.exportacaoExpirada]: 410,
   [C.filaIndisponivel]: 503,
+  [C.exportacaoGrandeDemais]: 422,
   [C.erroInterno]: 500,
 };
 

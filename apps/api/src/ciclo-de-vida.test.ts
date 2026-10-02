@@ -34,7 +34,14 @@ function montar(servico: 'api' | 'worker', fila: BarramentoEmMemoria) {
     ordem.push('fila');
     await paradaOriginal();
   };
-  const ciclo = new CicloDeVida(servico, { fechar: async () => void ordem.push('banco') }, fila, exportacoes, { error: (linha) => void linhas.push(linha) }, 5);
+  const ciclo = new CicloDeVida(
+    servico,
+    { fechar: async () => void ordem.push('banco') },
+    fila,
+    exportacoes,
+    { error: (linha) => void linhas.push(linha) },
+    { exportacoesAoMesmoTempo: 2, motor: { fechar: async () => void ordem.push('motor') }, intervaloEntreTentativasMs: 5 },
+  );
   return { ciclo, linhas, executadas, limpas, ordem };
 }
 
@@ -62,6 +69,38 @@ describe('CicloDeVida', () => {
     await fila.ociosa();
     expect(limpas).toEqual([`${CONTA}:${ID}`]);
     expect(executadas).toEqual([]);
+    await ciclo.onApplicationShutdown();
+  });
+
+  it('no worker, roda tantas exportações ao mesmo tempo quantas a configuração manda, de contas diferentes', async () => {
+    const fila = new BarramentoEmMemoria();
+    const { ciclo } = montar('worker', fila);
+    let rodando = 0;
+    let maximo = 0;
+    (ciclo as unknown as { exportacoes: CasosDeUsoDeExportacao }).exportacoes.executar = (async () => {
+      rodando++;
+      maximo = Math.max(maximo, rodando);
+      await esperar(60);
+      rodando--;
+      return 'feita';
+    }) as CasosDeUsoDeExportacao['executar'];
+    await ciclo.onApplicationBootstrap();
+    for (const conta of ['a', 'b', 'c']) await fila.publicar('exportacao', { contaId: `01990000-0000-7000-8000-00000000000${conta}`, id: ID });
+    await fila.ociosa();
+    expect(maximo).toBe(2);
+    await ciclo.onApplicationShutdown();
+  });
+
+  it('conta ocupada em outro worker: o trabalho é adiado, não falha', async () => {
+    const fila = new BarramentoEmMemoria();
+    const { ciclo } = montar('worker', fila);
+    const respostas: ('ocupada' | 'feita')[] = ['ocupada', 'ocupada', 'feita'];
+    let chamadas = 0;
+    (ciclo as unknown as { exportacoes: CasosDeUsoDeExportacao }).exportacoes.executar = (async () => respostas[chamadas++]) as CasosDeUsoDeExportacao['executar'];
+    await ciclo.onApplicationBootstrap();
+    await fila.publicar('exportacao', { contaId: CONTA, id: ID });
+    await fila.ociosa();
+    expect(chamadas).toBe(3);
     await ciclo.onApplicationShutdown();
   });
 
@@ -97,6 +136,7 @@ describe('CicloDeVida', () => {
     const tentativas = fila.tentativas;
     await esperar(30);
     expect(fila.tentativas).toBe(tentativas);
-    expect(ordem).toEqual(['fila', 'banco']);
+    // a fila primeiro (espera a exportação em curso), depois as threads do motor, por último o banco
+    expect(ordem).toEqual(['fila', 'motor', 'banco']);
   });
 });

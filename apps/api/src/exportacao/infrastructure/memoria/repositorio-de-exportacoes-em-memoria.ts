@@ -8,6 +8,7 @@ import {
   type InicioDeExportacao,
   type NovaExportacao,
   RepositorioDeExportacoes,
+  type Retomada,
 } from '../../application/repositorio-de-exportacoes';
 
 interface Guardada {
@@ -40,10 +41,34 @@ export class RepositorioDeExportacoesEmMemoria extends RepositorioDeExportacoes 
       pranchetasProntas: 0,
       arquivos: [],
       falhas: [],
+      tentativas: 0,
       criadaEm: nova.criadaEm ?? new Date(1_790_000_000_000 + this.relogio),
     };
     this.todas.set(nova.id, { contaId: escopo.contaId, exportacao });
     return copia(exportacao);
+  }
+
+  async criarSeCouber(escopo: EscopoDaConta, nova: NovaExportacao, limite: number): Promise<{ exportacao: ExportacaoGuardada; jaEmAndamento: number } | undefined> {
+    // sem espera entre contar e criar: num processo só, isto é atômico
+    const jaEmAndamento = [...this.todas.values()].filter((g) => g.contaId === escopo.contaId && (g.exportacao.estado === 'na_fila' || g.exportacao.estado === 'rodando')).length;
+    if (jaEmAndamento >= limite) return undefined;
+    this.relogio += 1;
+    const exportacao: ExportacaoGuardada = {
+      id: nova.id,
+      documentoId: nova.documentoId,
+      versao: nova.versao,
+      nome: nova.nome,
+      opcoes: structuredClone(nova.opcoes),
+      estado: 'na_fila',
+      pranchetasNoTotal: nova.opcoes.pranchetas.length,
+      pranchetasProntas: 0,
+      arquivos: [],
+      falhas: [],
+      tentativas: 0,
+      criadaEm: nova.criadaEm ?? new Date(1_790_000_000_000 + this.relogio),
+    };
+    this.todas.set(nova.id, { contaId: escopo.contaId, exportacao });
+    return { exportacao: copia(exportacao), jaEmAndamento };
   }
 
   async buscar(escopo: EscopoDaConta, id: string): Promise<ExportacaoGuardada | undefined> {
@@ -81,16 +106,28 @@ export class RepositorioDeExportacoesEmMemoria extends RepositorioDeExportacoes 
     return [...this.todas.values()].filter((g) => g.contaId === escopo.contaId && (g.exportacao.estado === 'na_fila' || g.exportacao.estado === 'rodando')).length;
   }
 
-  async iniciar(escopo: EscopoDaConta, id: string, agora: Date, semSinalDesde: Date): Promise<InicioDeExportacao> {
+  async iniciar(escopo: EscopoDaConta, id: string, agora: Date, semSinalDesde: Date, retomar?: Retomada): Promise<InicioDeExportacao> {
     for (const g of this.todas.values()) {
+      // a própria exportação, quando há retomada, é decidida logo abaixo
+      if (retomar && g.exportacao.id === id) continue;
       if (g.contaId === escopo.contaId && g.exportacao.estado === 'rodando' && (g.batimentoEm ?? new Date(0)) < semSinalDesde) {
         g.exportacao = { ...g.exportacao, estado: 'falhou', erroCodigo: 'interrompida', terminadaEm: agora };
       }
     }
     const alvo = this.achar(escopo, id);
-    if (alvo?.exportacao.estado !== 'na_fila') return { resultado: 'ignorada' };
+    if (!alvo) return { resultado: 'ignorada' };
+    if (alvo.exportacao.estado === 'rodando' && retomar && (alvo.batimentoEm ?? new Date(0)) < retomar.semSinalDesde) {
+      if (alvo.exportacao.tentativas >= retomar.maximoDeTentativas) {
+        alvo.exportacao = { ...alvo.exportacao, estado: 'falhou', erroCodigo: 'interrompida', terminadaEm: agora };
+        return { resultado: 'ignorada' };
+      }
+      alvo.exportacao = { ...alvo.exportacao, arquivos: [], falhas: [], pranchetasProntas: 0, tentativas: alvo.exportacao.tentativas + 1 };
+      alvo.batimentoEm = agora;
+      return { resultado: 'iniciada', exportacao: copia(alvo.exportacao), retomada: true };
+    }
+    if (alvo.exportacao.estado !== 'na_fila') return { resultado: 'ignorada' };
     if ([...this.todas.values()].some((g) => g.contaId === escopo.contaId && g.exportacao.estado === 'rodando')) return { resultado: 'ocupada' };
-    alvo.exportacao = { ...alvo.exportacao, estado: 'rodando' };
+    alvo.exportacao = { ...alvo.exportacao, estado: 'rodando', tentativas: alvo.exportacao.tentativas + 1 };
     alvo.batimentoEm = agora;
     return { resultado: 'iniciada', exportacao: copia(alvo.exportacao) };
   }

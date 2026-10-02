@@ -20,6 +20,7 @@ import {
   EXPORTACOES_NA_LISTA,
   type Exportacao,
   type ListaDeExportacoes,
+  MEGAPIXELS_POR_PRANCHETA_NA_EXPORTACAO,
   type PedidoDeExportacao,
   type RelatorioDeExportacao,
   VALIDADE_DO_LINK_EM_SEGUNDOS,
@@ -40,14 +41,6 @@ import type { ArquivoGerado, EntreEtapas, MotorDeExportacao } from './motor-de-e
 import { fontesDoPacote, montarPacote } from './pacote';
 import type { ArquivoGuardado, ExportacaoGuardada, OpcoesGuardadas, RepositorioDeExportacoes } from './repositorio-de-exportacoes';
 
-/** Outra exportação da mesma conta está rodando. Quem consome a fila devolve o trabalho para tentar depois. */
-export class ContaOcupada extends Error {
-  constructor() {
-    super('outra exportação da mesma conta está rodando');
-    this.name = 'ContaOcupada';
-  }
-}
-
 /** O que aconteceu de errado, sem conteúdo: a mensagem do erro pode citar nome de camada ou de fonte, e não sai daqui. */
 export interface FalhaObservada {
   exportacaoId: string;
@@ -67,6 +60,12 @@ export interface DependenciasDaExportacao {
   agora?: () => Date;
   uso?: RegistroDeUso;
   aoFalhar?: (falha: FalhaObservada) => void;
+  /** De quanto em quanto tempo o worker grava o sinal de vida da exportação que está rodando. Padrão: 5 s. */
+  intervaloDoSinalDeVidaMs?: number;
+  /** Teto de megapixels de uma prancheta na escala de saída. Padrão: o do contrato. */
+  megapixelsPorPrancheta?: number;
+  /** Teto da soma dos arquivos de um pacote, que ficam em memória até o .zip fechar. Padrão: BYTES_NO_MAXIMO_POR_PACOTE. */
+  bytesNoMaximoPorPacote?: number;
 }
 
 /**
@@ -80,9 +79,27 @@ export const SEM_SINAL_DEPOIS_DE_MS = 300_000;
  * as tentativas (10 minutos esperando a vez da conta, mais 10 de um trabalho que expirou).
  */
 export const NA_FILA_NO_MAXIMO_MS = 30 * 60_000;
+/**
+ * Retomada: o trabalho de uma exportação "rodando" foi entregue de novo (a fila deu o worker por morto).
+ * Se a exportação também está sem sinal de vida há mais que isto, outro worker a refaz do zero. O sinal
+ * sai a cada 5 s por relógio, então 20 s são quatro sinais perdidos.
+ */
+export const RETOMAR_SEM_SINAL_DEPOIS_DE_MS = 20_000;
+/** Contando a primeira. Uma exportação que derruba o worker (falta de memória) é tentada duas vezes, não para sempre. */
+export const TENTATIVAS_NO_MAXIMO = 2;
+/**
+ * Teto da soma dos arquivos de um pacote. Eles ficam em memória até o .zip fechar, e o .zip também:
+ * no pior caso (nada comprime) o pacote ocupa duas vezes isto no processo do worker. O maior pacote
+ * medido tem 27 MB; 400 MB dá folga de quinze vezes e cabe no teto de memória do worker.
+ */
+export const BYTES_NO_MAXIMO_POR_PACOTE = 400 * 1024 * 1024;
+/** O pacote passou do teto de bytes. Vira `erro.codigo` da exportação. */
+class PacoteGrandeDemais extends Error {}
 /** A limpeza é agendada para um pouco depois do vencimento: relógio do worker e do banco não são o mesmo. */
 const FOLGA_DA_LIMPEZA_MS = 60_000;
 const INTERVALO_DO_SINAL_DE_VIDA_MS = 5_000;
+/** As camadas que viram imagem no SVG e no PDF saem em 2x (padrão de @otto/psd). */
+const ESCALA_DA_IMAGEM_NO_VETORIAL = 2 as const;
 const UM_DIA_MS = 86_400_000;
 const TIPO_POR_EXTENSAO: Record<string, string> = {
   psd: 'image/vnd.adobe.photoshop',
@@ -137,6 +154,7 @@ function paraContrato(e: ExportacaoGuardada, comRelatorio = true): Exportacao {
     documentoId: e.documentoId,
     versao: e.versao,
     formato: e.opcoes.formato,
+    pedido: e.opcoes,
     ...(e.opcoes.pacote ? { pacote: true } : {}),
     estado: e.estado,
     progresso: { pranchetasProntas: e.pranchetasProntas, pranchetasNoTotal: e.pranchetasNoTotal },
@@ -186,22 +204,18 @@ export class CasosDeUsoDeExportacao {
     const doc = await this.d.documentos.abrir(escopo, documentoId);
     if (!doc) throw new NaoEncontrado();
     const pranchetas = this.pranchetasDoPedido(doc.arvore, pedido.pranchetas);
+    this.conferirTamanho(doc.arvore, pedido, pranchetas);
     // o que parou não segura o limite da conta
     await this.darBaixaNasParadas(escopo);
-    if ((await this.d.exportacoes.contarEmAndamento(escopo)) >= EXPORTACOES_NA_FILA_POR_CONTA)
-      throw new ErroDaAplicacao(CODIGOS_DE_ERRO.limiteDeExportacoes, { limite: EXPORTACOES_NA_FILA_POR_CONTA });
-
-    const criada = await this.d.exportacoes.criar(escopo, {
-      id: this.d.gerarId(),
-      documentoId,
-      versao: doc.versao,
-      nome: doc.nome,
-      opcoes: opcoesGuardadas(pedido, pranchetas),
-      criadaEm: this.agora(),
-    });
+    // contar e criar é uma operação só no repositório: dois pedidos simultâneos não passam do limite
+    const nova = { id: this.d.gerarId(), documentoId, versao: doc.versao, nome: doc.nome, opcoes: opcoesGuardadas(pedido, pranchetas), criadaEm: this.agora() };
+    const coube = await this.d.exportacoes.criarSeCouber(escopo, nova, EXPORTACOES_NA_FILA_POR_CONTA);
+    if (!coube) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.limiteDeExportacoes, { limite: EXPORTACOES_NA_FILA_POR_CONTA });
+    const criada = coube.exportacao;
     try {
       // só identificadores na fila: nada de conteúdo, e nada em que o worker precise confiar
-      await this.d.fila.publicar(FILAS.exportacao, { contaId: escopo.contaId, id: criada.id });
+      // quem tem menos na fila passa na frente: a exportação única de uma conta não espera as cinco de outra
+      await this.d.fila.publicar(FILAS.exportacao, { contaId: escopo.contaId, id: criada.id }, { jaNaFilaDaConta: coube.jaEmAndamento });
     } catch (erro) {
       // sem fila não há quem execute: a exportação não fica pendurada contando no limite da conta
       await this.d.exportacoes.concluir(escopo, criada.id, { estado: 'falhou', erroCodigo: CODIGOS_DE_ERRO.filaIndisponivel, terminadaEm: this.agora(), duracaoMs: 0 });
@@ -265,15 +279,21 @@ export class CasosDeUsoDeExportacao {
    * O trabalho do worker. `escopo` vem do que estava na fila e é hipótese: tudo é relido sob ele, e
    * exportação que não existe nessa conta não é processada.
    * - 'ignorada': não existe nesta conta, ou não está mais na fila (entrega repetida);
-   * - lança ContaOcupada: outra exportação da conta está rodando; o trabalho volta para a fila.
+   * - 'ocupada': outra exportação da conta está rodando; quem consome a fila adia o trabalho.
    */
-  async executar(escopo: EscopoDaConta, id: string): Promise<'feita' | 'ignorada'> {
+  async executar(escopo: EscopoDaConta, id: string): Promise<'feita' | 'ignorada' | 'ocupada'> {
     const comeco = this.agora();
-    const inicio = await this.d.exportacoes.iniciar(escopo, id, comeco, new Date(comeco.getTime() - SEM_SINAL_DEPOIS_DE_MS));
+    const inicio = await this.d.exportacoes.iniciar(escopo, id, comeco, new Date(comeco.getTime() - SEM_SINAL_DEPOIS_DE_MS), {
+      semSinalDesde: new Date(comeco.getTime() - RETOMAR_SEM_SINAL_DEPOIS_DE_MS),
+      maximoDeTentativas: TENTATIVAS_NO_MAXIMO,
+    });
     if (inicio.resultado === 'ignorada') return 'ignorada';
-    if (inicio.resultado === 'ocupada') throw new ContaOcupada();
+    if (inicio.resultado === 'ocupada') return 'ocupada';
     const e = inicio.exportacao;
     const pacote = e.opcoes.pacote === true;
+    // Sinal de vida por relógio: o render roda fora do laço principal, então o sinal sai mesmo no meio de
+    // uma prancheta de 40 s. É por ele que outro worker sabe se pode retomar esta exportação.
+    const relogio = setInterval(() => void this.d.exportacoes.bater(escopo, id, this.agora()).catch(() => undefined), this.d.intervaloDoSinalDeVidaMs ?? INTERVALO_DO_SINAL_DE_VIDA_MS);
 
     /** O que foi guardado no armazenamento. */
     const guardados: ArquivoGuardado[] = [];
@@ -306,14 +326,18 @@ export class CasosDeUsoDeExportacao {
             for (const [i, gerado] of gerados.entries()) {
               const arquivo = { nome: nomeLivre(gerado.nome, nomes), bytes: gerado.bytes };
               nomes.add(arquivo.nome);
-              if (pacote) paraOPacote.push(arquivo);
-              else guardados.push(await this.guardar(escopo, e.id, guardados.length, arquivo, juntas ? undefined : grupo[0], i === 0 ? grupo.length : 0));
+              if (pacote) {
+                paraOPacote.push(arquivo);
+                if (paraOPacote.reduce((soma, a) => soma + a.bytes.byteLength, 0) > (this.d.bytesNoMaximoPorPacote ?? BYTES_NO_MAXIMO_POR_PACOTE)) throw new PacoteGrandeDemais();
+              } else guardados.push(await this.guardar(escopo, e.id, guardados.length, arquivo, juntas ? undefined : grupo[0], i === 0 ? grupo.length : 0));
             }
             if (pacote) await this.d.exportacoes.registrarProgresso(escopo, e.id, grupo.length, this.agora());
             feitas.push(...grupo);
             usados.fontes.push(...achados.fontes);
             usados.imagens.push(...achados.imagens);
           } catch (erro) {
+            // o teto do pacote não é falha de uma prancheta: é da exportação inteira
+            if (erro instanceof PacoteGrandeDemais) throw erro;
             this.d.aoFalhar?.({ exportacaoId: e.id, etapa: juntas ? 'exportacao' : 'prancheta', erro });
             if (juntas) break;
             falhas++;
@@ -347,7 +371,9 @@ export class CasosDeUsoDeExportacao {
     } catch (erro) {
       // falha fora de uma prancheta (banco, armazenamento, pacote): a exportação termina como falha, não fica "rodando"
       this.d.aoFalhar?.({ exportacaoId: e.id, etapa: 'exportacao', erro });
-      erroCodigo = 'falha_na_exportacao';
+      erroCodigo = erro instanceof PacoteGrandeDemais ? 'pacote_grande_demais' : 'falha_na_exportacao';
+    } finally {
+      clearInterval(relogio);
     }
 
     const fim = this.agora();
@@ -370,6 +396,7 @@ export class CasosDeUsoDeExportacao {
       documentoId: e.documentoId,
       formato: e.opcoes.formato,
       pacote,
+      tentativa: e.tentativas,
       resultado: estado,
       pranchetas: e.pranchetasNoTotal,
       falhas,
@@ -398,6 +425,27 @@ export class CasosDeUsoDeExportacao {
     return 'limpa';
   }
 
+  /** Recusa, antes de criar qualquer coisa, a prancheta que na escala de saída passa do que uma exportação aguenta. */
+  private conferirTamanho(doc: Documento, pedido: PedidoDeExportacao, pranchetas: readonly string[]): void {
+    // no SVG e no PDF a escala das camadas que viram imagem é escolhida na hora (2x se couber): o que decide é 1x
+    const escala = pedido.formato === 'png' ? pedido.escala : 1;
+    const limite = this.limiteDeMegapixels();
+    for (const p of doc.pranchetas) {
+      if (!pranchetas.includes(p.id)) continue;
+      const megapixels = megapixelsDe(p, escala);
+      if (megapixels > limite) throw new ErroDaAplicacao(CODIGOS_DE_ERRO.exportacaoGrandeDemais, { pranchetaId: p.id, megapixels, limite });
+    }
+  }
+
+  private limiteDeMegapixels(): number {
+    return this.d.megapixelsPorPrancheta ?? MEGAPIXELS_POR_PRANCHETA_NA_EXPORTACAO;
+  }
+
+  /** SVG e PDF: as camadas que viram imagem saem em 2x, a não ser que alguma prancheta do grupo não caiba no teto em 2x. */
+  private escalaDaImagem(doc: Documento, pranchetas: readonly string[]): 1 | 2 {
+    return doc.pranchetas.some((p) => pranchetas.includes(p.id) && megapixelsDe(p, ESCALA_DA_IMAGEM_NO_VETORIAL) > this.limiteDeMegapixels()) ? 1 : ESCALA_DA_IMAGEM_NO_VETORIAL;
+  }
+
   private darBaixaNasParadas(escopo: EscopoDaConta): Promise<number> {
     const agora = this.agora();
     return this.d.exportacoes.darBaixaNasParadas(escopo, agora, { naFilaDesde: new Date(agora.getTime() - NA_FILA_NO_MAXIMO_MS), semSinalDesde: new Date(agora.getTime() - SEM_SINAL_DEPOIS_DE_MS) });
@@ -419,9 +467,9 @@ export class CasosDeUsoDeExportacao {
       case 'png':
         return this.d.motor.png(doc, recursos, { nome, pranchetas, escala: opcoes.escala, semFundo: opcoes.semFundo }, entreEtapas);
       case 'svg':
-        return this.d.motor.svg(doc, recursos, { nome, pranchetas }, entreEtapas);
+        return this.d.motor.svg(doc, recursos, { nome, pranchetas, escalaDaImagem: this.escalaDaImagem(doc, pranchetas) }, entreEtapas);
       case 'pdf':
-        return this.d.motor.pdf(doc, recursos, { nome, pranchetas, arquivos: opcoes.arquivos }, entreEtapas);
+        return this.d.motor.pdf(doc, recursos, { nome, pranchetas, arquivos: opcoes.arquivos, escalaDaImagem: this.escalaDaImagem(doc, pranchetas) }, entreEtapas);
     }
   }
 
@@ -508,6 +556,11 @@ export class CasosDeUsoDeExportacao {
       await this.d.exportacoes.bater(escopo, id, this.agora());
     };
   }
+}
+
+/** Megapixels de uma prancheta numa escala, com duas casas. */
+function megapixelsDe(p: { largura: number; altura: number }, escala: number): number {
+  return Math.round((p.largura * p.altura * escala * escala) / 10_000) / 100;
 }
 
 function soAsPranchetas(doc: Documento, ids: readonly string[]): Documento {

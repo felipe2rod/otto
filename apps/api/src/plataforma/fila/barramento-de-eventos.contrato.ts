@@ -16,7 +16,7 @@ async function ate(condicao: () => boolean, limiteMs: number): Promise<void> {
 export function contratoDoBarramentoDeEventos(
   nome: string,
   criar: () => Promise<{ barramento: BarramentoDeEventos; limpar(): Promise<void> }>,
-  tempos: { entregaMs: number; reentregaMs: number },
+  tempos: { entregaMs: number; reentregaMs: number; adiamentoMs: number },
 ): void {
   describe(`contrato de BarramentoDeEventos: ${nome}`, () => {
     let barramento: BarramentoDeEventos;
@@ -140,6 +140,58 @@ export function contratoDoBarramentoDeEventos(
       expect(Date.now()).toBeGreaterThanOrEqual(hora.getTime() - 50);
       expect(naLimpeza).toEqual([trabalho]);
       expect(naExportacao).toEqual([]);
+      await barramento.parar();
+      await limpar();
+    });
+  });
+
+  describe(`contrato de BarramentoDeEventos: ${nome} (mais de um worker)`, () => {
+    it('responde: diz se a fila está no ar, antes e depois de parar', async () => {
+      const { barramento, limpar } = await criar();
+      expect(await barramento.responde()).toBe(false);
+      await barramento.iniciar();
+      expect(await barramento.responde()).toBe(true);
+      await barramento.parar();
+      expect(await barramento.responde()).toBe(false);
+      await limpar();
+    });
+
+    it('quem trata pode adiar: o trabalho volta mais tarde, quantas vezes for preciso, sem contar como falha', async () => {
+      const { barramento, limpar } = await criar();
+      await barramento.iniciar();
+      const trabalho = { contaId: randomUUID(), id: randomUUID() };
+      const entregas: number[] = [];
+      await barramento.consumir(FILAS.exportacao, { concorrencia: 1 }, async (t) => {
+        if (t.contaId !== trabalho.contaId) return undefined;
+        entregas.push(Date.now());
+        return entregas.length < 4 ? 'adiar' : undefined;
+      });
+      await barramento.publicar(FILAS.exportacao, trabalho);
+      await ate(() => entregas.length === 4, tempos.entregaMs + 3 * (tempos.adiamentoMs + tempos.entregaMs));
+      // adiado não volta na hora: espera o intervalo de reentrega
+      expect((entregas[1] as number) - (entregas[0] as number)).toBeGreaterThanOrEqual(tempos.adiamentoMs * 0.8);
+      await esperar(Math.min(1500, tempos.adiamentoMs + 500));
+      expect(entregas).toHaveLength(4);
+      await barramento.parar();
+      await limpar();
+    });
+
+    it('justiça entre contas: com um trabalho por vez, o primeiro de uma conta passa na frente do terceiro de outra', async () => {
+      const { barramento, limpar } = await criar();
+      await barramento.iniciar();
+      const [contaCheia, contaNova] = [randomUUID(), randomUUID()];
+      const ordem: string[] = [];
+      // tudo é publicado antes de haver consumidor: a ordem de saída é só da fila
+      for (let posicao = 0; posicao < 3; posicao++) await barramento.publicar(FILAS.exportacao, { contaId: contaCheia, id: randomUUID() }, { jaNaFilaDaConta: posicao });
+      await barramento.publicar(FILAS.exportacao, { contaId: contaNova, id: randomUUID() }, { jaNaFilaDaConta: 0 });
+      await barramento.consumir(FILAS.exportacao, { concorrencia: 1 }, async (t) => {
+        if (t.contaId === contaCheia) ordem.push('cheia');
+        if (t.contaId === contaNova) ordem.push('nova');
+        return undefined;
+      });
+      await ate(() => ordem.length === 4, tempos.entregaMs * 4);
+      // a conta nova não fica atrás dos três da conta cheia: sai até a segunda posição
+      expect(ordem.indexOf('nova')).toBeLessThanOrEqual(1);
       await barramento.parar();
       await limpar();
     });

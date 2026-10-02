@@ -3,8 +3,18 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { aplicarLote, type Documento, documentoVazio } from '@otto/documento';
-import type { RecursosDaExportacao } from '@otto/psd';
-import { CODIGOS_DE_ERRO, DIAS_DE_RETENCAO_DA_EXPORTACAO, EXPORTACOES_NA_FILA_POR_CONTA, EXPORTACOES_NA_LISTA, Exportacao, lerContaId, RelatorioDeExportacao } from '@otto/shared';
+import { type RecursosDaExportacao, relatorioDeExportacaoVetorial } from '@otto/psd';
+import {
+  CODIGOS_DE_ERRO,
+  DIAS_DE_RETENCAO_DA_EXPORTACAO,
+  EXPORTACOES_NA_FILA_POR_CONTA,
+  EXPORTACOES_NA_LISTA,
+  Exportacao,
+  lerContaId,
+  MEGAPIXELS_POR_PRANCHETA_NA_EXPORTACAO,
+  PedidoDeExportacao,
+  RelatorioDeExportacao,
+} from '@otto/shared';
 import { unzipSync } from 'fflate';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CasosDeUsoDeArquivo } from '../../arquivo/application/casos-de-uso-de-arquivo';
@@ -18,7 +28,7 @@ import { BarramentoEmMemoria } from '../../plataforma/fila/adaptadores/memoria/b
 import { FILAS } from '../../plataforma/fila/barramento-de-eventos';
 import { type EventoDeUso, RegistroDeUso } from '../../plataforma/uso/registro-de-uso';
 import { RepositorioDeExportacoesEmMemoria } from '../infrastructure/memoria/repositorio-de-exportacoes-em-memoria';
-import { CasosDeUsoDeExportacao, ContaOcupada, NA_FILA_NO_MAXIMO_MS, SEM_SINAL_DEPOIS_DE_MS } from './casos-de-uso-de-exportacao';
+import { CasosDeUsoDeExportacao, type DependenciasDaExportacao, NA_FILA_NO_MAXIMO_MS, RETOMAR_SEM_SINAL_DEPOIS_DE_MS, SEM_SINAL_DEPOIS_DE_MS } from './casos-de-uso-de-exportacao';
 import { type ArquivoGerado, type EntreEtapas, MotorDeExportacao } from './motor-de-exportacao';
 
 const contaA = EscopoDaConta.abrir(lerContaId('01990000-0000-7000-8000-00000000000a'));
@@ -50,7 +60,7 @@ class MotorFalso extends MotorDeExportacao {
   png(doc: Documento, recursos: RecursosDaExportacao, opcoes: { nome: string; pranchetas: readonly string[]; escala: 1 | 2; semFundo: boolean }, e: EntreEtapas) {
     return this.gerar('png', doc, recursos, opcoes, e);
   }
-  svg(doc: Documento, recursos: RecursosDaExportacao, opcoes: { nome: string; pranchetas: readonly string[] }, e: EntreEtapas) {
+  svg(doc: Documento, recursos: RecursosDaExportacao, opcoes: { nome: string; pranchetas: readonly string[]; escalaDaImagem?: 1 | 2 }, e: EntreEtapas) {
     return this.gerar('svg', doc, recursos, opcoes, e);
   }
   pdf(doc: Documento, recursos: RecursosDaExportacao, opcoes: { nome: string; pranchetas: readonly string[]; arquivos: 'por-prancheta' | 'juntas' }, e: EntreEtapas) {
@@ -82,9 +92,9 @@ let casos: CasosDeUsoDeExportacao;
 let relogio: Date;
 let uso: UsoEspiao;
 
-function montar(barramento: BarramentoEmMemoria = new BarramentoEmMemoria()) {
+function montar(barramento: BarramentoEmMemoria = new BarramentoEmMemoria(), extras: Partial<DependenciasDaExportacao> = {}) {
   fila = barramento;
-  casos = new CasosDeUsoDeExportacao({ documentos, exportacoes, arquivos: repositorioDeArquivos, armazenamento, fontes, fila, motor, gerarId: randomUUID, agora: () => relogio, uso });
+  casos = new CasosDeUsoDeExportacao({ documentos, exportacoes, arquivos: repositorioDeArquivos, armazenamento, fontes, fila, motor, gerarId: randomUUID, agora: () => relogio, uso, ...extras });
 }
 let repositorioDeArquivos: RepositorioDeArquivosEmMemoria;
 
@@ -306,11 +316,11 @@ describe('executar exportação (o worker)', () => {
     expect((await casos.consultar(contaA, pedida.id)).estado).toBe('na_fila');
   });
 
-  it('uma por vez por conta: com outra rodando, lança ContaOcupada e a exportação continua na fila', async () => {
+  it('uma por vez por conta: com outra rodando, responde "ocupada" (a fila adia, sem gastar tentativa) e a exportação continua na fila', async () => {
     const doc = await documento();
     const [um, dois] = [await casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'juntas' }), await casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'juntas' })];
     await exportacoes.iniciar(contaA, um.id, AGORA, new Date(0));
-    await expect(casos.executar(contaA, dois.id)).rejects.toBeInstanceOf(ContaOcupada);
+    expect(await casos.executar(contaA, dois.id)).toBe('ocupada');
     expect((await casos.consultar(contaA, dois.id)).estado).toBe('na_fila');
     expect(motor.chamadas).toEqual([]);
   });
@@ -456,15 +466,17 @@ describe('SVG e PDF', () => {
     expect(e.arquivos.map((a) => a.nome)).toEqual(['Promoção - Story.pdf']);
   });
 
-  it('o relatório prévio do SVG e do PDF é o vetorial: a camada de ajuste fica de fora, com aviso', async () => {
+  it('o relatório prévio do SVG e do PDF é o vetorial de @otto/psd, e não o do PSD', async () => {
     const ajuste = { nome: 'Curvas', tipo: 'ajuste', ajuste: { tipo: 'curvas' } };
     const doc = await documento(contaA, arvoreCom(['Feed'], texto([ajuste])));
+    // o destino de cada camada é decisão do mapeamento vetorial (do especialista-grafico): aqui só se confere a origem
+    const direto = (formato: 'svg' | 'pdf') => relatorioDeExportacaoVetorial(doc.arvore, { fontes: [], imagens: [] }, { pranchetas: ['p1'], formato }).camadas.map((c) => [c.camada, c.destino]);
     const svg = RelatorioDeExportacao.parse(await casos.relatorio(contaA, doc.id, { formato: 'svg' }));
-    expect(svg.camadas.find((c) => c.camada === 'Curvas')?.destino).toBe('omitido-com-aviso');
-    const psd = await casos.relatorio(contaA, doc.id, { formato: 'psd', arquivos: 'por-prancheta' });
-    expect(psd.camadas.find((c) => c.camada === 'Curvas')?.destino).not.toBe('omitido-com-aviso');
     const pdf = RelatorioDeExportacao.parse(await casos.relatorio(contaA, doc.id, { formato: 'pdf', arquivos: 'juntas' }));
-    expect(pdf.camadas.map((c) => c.camada)).toEqual(svg.camadas.map((c) => c.camada));
+    const psd = await casos.relatorio(contaA, doc.id, { formato: 'psd', arquivos: 'por-prancheta' });
+    expect(svg.camadas.map((c) => [c.camada, c.destino])).toEqual(direto('svg'));
+    expect(pdf.camadas.map((c) => [c.camada, c.destino])).toEqual(direto('pdf'));
+    expect(psd.camadas.length).toBeGreaterThan(0);
   });
 });
 
@@ -696,5 +708,197 @@ describe('uso: baixar', () => {
     const { exportacao: e } = await pedirE({ formato: 'pdf', arquivos: 'juntas', pacote: true });
     await casos.linkDoArquivo(contaA, e.id, 0);
     expect(uso.eventos.at(-1)).toEqual({ evento: 'exportacao_baixada', exportacaoId: e.id, documentoId: e.documentoId, formato: 'pdf', pacote: true });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Mais de um worker: limite atômico, justiça entre contas, retomada, sinal de vida, teto de tamanho.
+// ---------------------------------------------------------------------------------------------
+
+describe('mais de um worker', () => {
+  it('o limite de exportações esperando é atômico: de doze pedidos ao mesmo tempo, entram cinco e sete recebem 429', async () => {
+    const doc = await documento();
+    const resultados = await Promise.allSettled(Array.from({ length: 12 }, () => casos.pedir(contaA, doc.id, { formato: 'png', escala: 1, semFundo: false })));
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(EXPORTACOES_NA_FILA_POR_CONTA);
+    const recusas = resultados.flatMap((r) => (r.status === 'rejected' ? [(r.reason as ErroDaAplicacao).codigo] : []));
+    expect(recusas).toEqual(Array(7).fill(CODIGOS_DE_ERRO.limiteDeExportacoes));
+    expect(fila.publicados).toHaveLength(EXPORTACOES_NA_FILA_POR_CONTA);
+  });
+
+  it('justiça entre contas: cada pedido vai para a fila sabendo quantos a conta já tem na frente', async () => {
+    const [docA, docB] = [await documento(contaA), await documento(contaB)];
+    const deA = [];
+    for (let i = 0; i < 3; i++) deA.push(await casos.pedir(contaA, docA.id, { formato: 'png', escala: 1, semFundo: false }));
+    const deB = await casos.pedir(contaB, docB.id, { formato: 'png', escala: 1, semFundo: false });
+    expect(deA.map((e) => fila.posicoes.get(e.id))).toEqual([0, 1, 2]);
+    // a única exportação de B entra na frente da segunda e da terceira de A
+    expect(fila.posicoes.get(deB.id)).toBe(0);
+  });
+
+  it('retomada: a exportação que estava rodando num worker que morreu, reentregue pela fila, é refeita do zero por outro worker', async () => {
+    const doc = await documento();
+    const pedida = await casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'por-prancheta' });
+    // o primeiro worker começou, guardou a primeira prancheta e morreu
+    await exportacoes.iniciar(contaA, pedida.id, AGORA, new Date(0));
+    await exportacoes.registrarArquivo(
+      contaA,
+      pedida.id,
+      { indice: 0, nome: 'Promoção - Feed.psd', tipoMime: 'image/vnd.adobe.photoshop', bytes: 6, pranchetaId: 'p1', chaveDoObjeto: `contas/${contaA.contaId}/exportacoes/${pedida.id}/0.psd` },
+      1,
+      AGORA,
+    );
+
+    // a fila reentrega antes de dar o tempo de retomada: o dono pode estar vivo, ninguém mexe
+    relogio = new Date(AGORA.getTime() + RETOMAR_SEM_SINAL_DEPOIS_DE_MS - 1000);
+    expect(await casos.executar(contaA, pedida.id)).toBe('ignorada');
+    expect(motor.chamadas).toEqual([]);
+
+    relogio = new Date(AGORA.getTime() + RETOMAR_SEM_SINAL_DEPOIS_DE_MS + 1000);
+    expect(await casos.executar(contaA, pedida.id)).toBe('feita');
+    const e = Exportacao.parse(await casos.consultar(contaA, pedida.id));
+    expect(e).toMatchObject({ estado: 'pronta', progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 } });
+    expect(e.arquivos.map((a) => [a.indice, a.nome])).toEqual([
+      [0, 'Promoção - Feed.psd'],
+      [1, 'Promoção - Story.psd'],
+    ]);
+    expect(uso.eventos.at(-1)).toMatchObject({ evento: 'exportacao_terminada', resultado: 'pronta', tentativa: 2 });
+  });
+
+  it('a exportação que derruba o worker duas vezes não é tentada uma terceira: fecha como interrompida', async () => {
+    const doc = await documento();
+    const pedida = await casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'juntas' });
+    await exportacoes.iniciar(contaA, pedida.id, AGORA, new Date(0));
+    // segunda tentativa: o motor "morre" (a promessa nunca volta ao caso de uso, como num processo morto)
+    await exportacoes.iniciar(contaA, pedida.id, new Date(AGORA.getTime() + 60_000), new Date(0), { semSinalDesde: new Date(AGORA.getTime() + 30_000), maximoDeTentativas: 2 });
+    relogio = new Date(AGORA.getTime() + 120_000 + RETOMAR_SEM_SINAL_DEPOIS_DE_MS);
+    expect(await casos.executar(contaA, pedida.id)).toBe('ignorada');
+    expect(await casos.consultar(contaA, pedida.id)).toMatchObject({ estado: 'falhou', erro: { codigo: 'interrompida' } });
+    expect(motor.chamadas).toEqual([]);
+  });
+
+  it('enquanto roda, grava o sinal de vida por relógio, sem depender do motor ceder a vez', async () => {
+    montar(undefined, { intervaloDoSinalDeVidaMs: 10 });
+    const doc = await documento();
+    const pedida = await casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'juntas' });
+    let batidas = 0;
+    const original = exportacoes.bater.bind(exportacoes);
+    exportacoes.bater = async (...a) => {
+      batidas++;
+      return original(...a);
+    };
+    // um motor que demora e nunca chama entreEtapas, como o render de uma prancheta pesada na thread
+    motor.psd = async (_doc, _recursos, opcoes) => {
+      await new Promise((ok) => setTimeout(ok, 80));
+      return [{ nome: `${opcoes.nome}.psd`, bytes: new Uint8Array(3) }];
+    };
+    await casos.executar(contaA, pedida.id);
+    expect(batidas).toBeGreaterThanOrEqual(3);
+    // e o relógio para quando a exportação termina
+    const depois = batidas;
+    await new Promise((ok) => setTimeout(ok, 40));
+    expect(batidas).toBe(depois);
+  });
+});
+
+describe('o pedido original', () => {
+  it('a exportação devolve o pedido, com as pranchetas resolvidas na ordem do documento, e ele vale como corpo de um novo pedido', async () => {
+    const doc = await documento();
+    const todas = await casos.pedir(contaA, doc.id, { formato: 'pdf', arquivos: 'por-prancheta', pacote: true });
+    expect(todas.pedido).toEqual({ formato: 'pdf', arquivos: 'por-prancheta', pranchetas: ['p1', 'p2'], pacote: true });
+    relogio = new Date(AGORA.getTime() + 1000);
+    const uma = await casos.pedir(contaA, doc.id, { formato: 'png', escala: 2, semFundo: true, pranchetas: ['p2'] });
+    expect(uma.pedido).toEqual({ formato: 'png', escala: 2, semFundo: true, pranchetas: ['p2'] });
+    expect(PedidoDeExportacao.parse(uma.pedido)).toEqual(uma.pedido);
+    // e vem também na lista: é o que deixa a tela retomada mostrar o andamento por prancheta
+    expect((await casos.listar(contaA, doc.id)).itens.map((e) => e.pedido?.formato)).toEqual(['png', 'pdf']);
+  });
+
+  it('"tentar só as que falharam": o pedido original com as pranchetas das falhas', async () => {
+    const doc = await documento();
+    motor.falharEm.add('p2');
+    const pedida = await casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'por-prancheta' });
+    await casos.executar(contaA, pedida.id);
+    const e = await casos.consultar(contaA, pedida.id);
+    motor.falharEm.clear();
+    const deNovo = await casos.pedir(contaA, doc.id, PedidoDeExportacao.parse({ ...e.pedido, pranchetas: e.falhas.map((f) => f.pranchetaId) }));
+    await casos.executar(contaA, deNovo.id);
+    expect((await casos.consultar(contaA, deNovo.id)).arquivos.map((a) => a.nome)).toEqual(['Promoção - Story.psd']);
+  });
+});
+
+describe('teto de tamanho', () => {
+  const comPrancheta = (largura: number, altura: number) => {
+    const r = aplicarLote(
+      documentoVazio(),
+      [
+        { op: 'criarPrancheta', nome: 'Painel', largura, altura, fundo: '#ffffff' },
+        { op: 'criarPrancheta', nome: 'Feed', largura: 1080, altura: 1350, fundo: '#ffffff' },
+      ],
+      {
+        autoria: { tipo: 'designer' },
+        idDoLote: randomUUID(),
+        gerarId: (indice) => `p${indice + 1}`,
+      },
+    );
+    if (!r.ok) throw new Error(r.erro.mensagem);
+    return documento(contaA, r.doc);
+  };
+
+  it('prancheta que passa do teto de megapixels na escala de saída é recusada ao pedir, com código próprio, e nada vai para a fila', async () => {
+    const doc = await comPrancheta(9000, 9000); // 81 MP
+    const erro = await erroDe(casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'por-prancheta' }));
+    expect(erro).toMatchObject({ codigo: CODIGOS_DE_ERRO.exportacaoGrandeDemais, detalhe: { pranchetaId: 'p1', megapixels: 81, limite: MEGAPIXELS_POR_PRANCHETA_NA_EXPORTACAO } });
+    expect(fila.publicados).toEqual([]);
+    expect(await exportacoes.contarEmAndamento(contaA)).toBe(0);
+    // só a prancheta que cabe: passa
+    expect((await casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'por-prancheta', pranchetas: ['p2'] })).estado).toBe('na_fila');
+  });
+
+  it('a escala conta: 5000 × 5000 passa em PNG 1x e em PSD e é recusada em PNG 2x; em SVG e PDF passa, com as camadas que viram imagem em 1x em vez de 2x', async () => {
+    const doc = await comPrancheta(5000, 5000); // 25 MP em 1x, 100 MP em 2x
+    const pedidos = {
+      png1: { formato: 'png', escala: 1, semFundo: false },
+      psd: { formato: 'psd', arquivos: 'por-prancheta' },
+      png2: { formato: 'png', escala: 2, semFundo: false },
+      svg: { formato: 'svg' },
+      pdf: { formato: 'pdf', arquivos: 'juntas' },
+    } as const;
+    const resultado: Record<string, string> = {};
+    for (const [nome, pedido] of Object.entries(pedidos)) {
+      resultado[nome] = await casos.pedir(contaA, doc.id, { ...pedido, pranchetas: ['p1'] }).then(
+        async (e) => {
+          await casos.executar(contaA, e.id);
+          return 'aceita';
+        },
+        (e: ErroDaAplicacao) => e.codigo,
+      );
+    }
+    expect(resultado).toEqual({ png1: 'aceita', psd: 'aceita', png2: 'exportacao_grande_demais', svg: 'aceita', pdf: 'aceita' });
+    expect(motor.chamadas.filter((c) => c.formato === 'svg' || c.formato === 'pdf').map((c) => (c.opcoes as { escalaDaImagem?: number }).escalaDaImagem)).toEqual([1, 1]);
+    // a prancheta comum (1080 × 1350) continua saindo em 2x
+    const comum = await casos.pedir(contaA, doc.id, { formato: 'svg', pranchetas: ['p2'] });
+    await casos.executar(contaA, comum.id);
+    expect(motor.chamadas.at(-1)?.opcoes).toMatchObject({ escalaDaImagem: 2 });
+  });
+
+  it('SVG e PDF de prancheta que não cabe nem em 1x são recusados', async () => {
+    const doc = await comPrancheta(7000, 7000); // 49 MP
+    for (const pedido of [{ formato: 'svg' }, { formato: 'pdf', arquivos: 'juntas' }] as const) {
+      expect((await erroDe(casos.pedir(contaA, doc.id, { ...pedido, pranchetas: ['p1'] }))).codigo).toBe(CODIGOS_DE_ERRO.exportacaoGrandeDemais);
+    }
+  });
+
+  it('o relatório prévio não é recusado pelo tamanho: ele não renderiza', async () => {
+    const doc = await comPrancheta(9000, 9000);
+    expect((await casos.relatorio(contaA, doc.id, { formato: 'psd', arquivos: 'por-prancheta' })).camadas).toBeDefined();
+  });
+
+  it('pacote cujos arquivos, somados, passam do teto de bytes: a exportação falha com código próprio ANTES de montar o .zip, sem guardar nada', async () => {
+    montar(undefined, { bytesNoMaximoPorPacote: 10 });
+    const doc = await documento();
+    const pedida = await casos.pedir(contaA, doc.id, { formato: 'psd', arquivos: 'por-prancheta', pacote: true });
+    await casos.executar(contaA, pedida.id);
+    expect(await casos.consultar(contaA, pedida.id)).toMatchObject({ estado: 'falhou', erro: { codigo: 'pacote_grande_demais' }, arquivos: [] });
+    expect(await armazenamento.existe(contaA, `contas/${contaA.contaId}/exportacoes/${pedida.id}/0.zip`)).toBe(false);
   });
 });

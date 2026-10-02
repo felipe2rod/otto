@@ -152,7 +152,7 @@ GRANT UPDATE ("desfeito_por") ON "lotes_de_operacoes" TO otto_app;
 GRANT SELECT, INSERT ON "arquivos" TO otto_app;
 
 -- ============================================================================
--- Conta fixa do MVP (ADR 035, itens 4 e 7). SUPOSIÇÃO A CONFIRMAR com o Felipe:
+-- Conta fixa do MVP (ADR 035, itens 4 e 7; aceito pelo Felipe em 2026-10-02):
 -- sem login, existe uma conta só, semeada aqui, e o servidor resolve o escopo sempre para ela.
 -- Inserida antes de ligar o RLS, porque depois nem o dono escreve sem escopo aberto.
 -- ============================================================================

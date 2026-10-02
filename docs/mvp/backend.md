@@ -260,6 +260,28 @@ Nada no código sabe onde roda: a porta de hospedagem é o Docker (ADR 020). Dua
 
 Nas duas: banco gerenciado desde o primeiro dia (dado de cliente não mora em volume de Droplet, e o backup vem pronto), Spaces atrás de `ArmazenamentoDeArquivo`, imagens construídas no CI. Recomendo B para o MVP fechado e A quando houver pagante. É decisão do Felipe (seção 13).
 
+**O que o worker precisa, medido em 2026-10-02 (detalhe em 17.10).** Cada exportação ao mesmo tempo é uma thread que ocupa **um núcleo inteiro** enquanto roda e tem a própria memória de render:
+
+| | CPU | Memória |
+|---|---|---|
+| Processo do worker parado | perto de zero | 0,25 GB |
+| Uma exportação comum (1080 px, 2 pranchetas) | 1 núcleo por 1 a 3 s | mais 0,2 a 0,3 GB |
+| Uma exportação pesada (desfoque de movimento, PDF) | 1 núcleo por 30 a 50 s | mais 0,4 a 0,5 GB |
+| Uma prancheta no teto de tamanho (36 megapixels) | 1 núcleo por 20 a 25 s | perto de 1,3 GB (limite de cima: a medida teve outras exportações ao lado) |
+
+Um worker com duas exportações ao mesmo tempo pede **2 vCPU e 3 GB de teto** (uma máquina de 4 GiB); com uma só, 1 vCPU e 2 GB. A premissa de `docs/tecnico/custos.md` ("4 GiB, não medido") se confirma para duas ao mesmo tempo.
+
+O que isso faz com o custo:
+
+| Forma | O que roda | Custo fixo | Exportações ao mesmo tempo |
+|---|---|---|---|
+| B, um Droplet de 2 vCPU e 4 GiB com tudo dentro | `WORKERS=1`, `EXPORTACOES_POR_WORKER=1`, para a API e a página ficarem com um núcleo | US$ 44 por mês, como estava | **Uma.** Uma exportação de 40 s segura a fila por 40 s; a ordem entre contas continua justa |
+| B com um segundo Droplet básico só para o worker (2 vCPU, 4 GiB) | `EXPORTACOES_POR_WORKER=2` | US$ 68 por mês (44 + 24) | Duas |
+| B com o worker num Droplet CPU-Optimized de 2 vCPU | idem | US$ 86 por mês (44 + 42) | Duas, com núcleo dedicado |
+| A, worker `apps-s-2vcpu-4gb` | `EXPORTACOES_POR_WORKER=2` | US$ 94 por mês, como estava (o plano já contava esse tamanho) | Duas. Cada réplica a mais do worker: US$ 50 |
+
+Não medi render em vCPU compartilhada da DigitalOcean: os tempos acima são de uma máquina de 8 núcleos com outros processos rodando. A fatia 3 muda esta conta de novo: a tarefa do agente é espera de rede, cabe várias no mesmo núcleo, mas dura de 14 a 30 minutos e não pode morrer num deploy.
+
 ## 6. Dados
 
 ### 6.1 Forma
@@ -988,3 +1010,67 @@ O pico é o da maior exportação, não a soma: sobe até um patamar e fica (a m
 - Exportações terminadas antes desta rodada não têm limpeza agendada.
 - As três pendências do jurídico sobre fontes, acima.
 - SVG e PDF não foram abertos no Illustrator por ninguém (`packages/psd/README.md`).
+
+### 17.10 Mais de um worker
+
+Pedido do Felipe em 2026-10-02: "faça o worker". Havia um processo, uma exportação por vez para todas as contas, e uma peça pesada segurava a fila inteira.
+
+**O que mudou no desenho.**
+
+| Antes | Agora | Por quê |
+|---|---|---|
+| O render rodava no laço principal do worker | Cada exportação roda numa **thread** (`MotorDeExportacaoEmThread`, `worker_threads`) | O render é síncrono e leva até 43 s numa prancheta. No laço principal, o processo inteiro parava: sem sinal de vida, sem rota de saúde, sem pegar outro trabalho |
+| Uma exportação por processo | `EXPORTACOES_AO_MESMO_TEMPO` por processo (padrão 2, de 1 a 8), e `WORKERS` réplicas no `compose` (padrão 2) | Vazão: quatro exportações ao mesmo tempo no desenvolvimento |
+| Fila em ordem de chegada | Cada trabalho entra com a posição dele na fila **da conta** (0 para o primeiro, 1 para o segundo…); quem tem menos passa na frente | Uma conta com cinco na fila não atrasa a exportação única de outra |
+| Conta ocupada: o trabalho falhava e gastava tentativa (200 de 3 em 3 s) | Conta ocupada: o consumidor devolve `'adiar'` e o trabalho volta em 3 s **sem gastar tentativa**. A fila também agrupa por conta (`group` do pg-boss com `groupConcurrency: 1`, consulta ao vivo) | A exportação órfã por tentativas esgotadas deixa de existir. As tentativas (5) ficam para falha de infraestrutura |
+| Worker morto: a exportação virava `interrompida` | Worker morto: **outro worker refaz a exportação do zero**, uma vez. Na segunda morte, `interrompida` | Ver "Retomada" |
+| Sinal de vida gravado entre as etapas do motor | Sinal de vida por relógio, a cada 5 s, no banco e na fila | Com o render na thread, o laço principal está sempre livre |
+| Limite de 5 na fila: contar e depois criar | `criarSeCouber`: contar e criar numa transação, com trava por conta (`pg_advisory_xact_lock`) | Dois pedidos simultâneos passavam do limite |
+| `/api/saude/pronto`: banco e armazenamento | Mais `fila`. Sem fila, 503 | Sem fila a exportação não entra nem sai |
+| A thread nunca devolvia memória | A thread parada por 10 s é encerrada e outra sobe no lugar, de prontidão | A memória do WebAssembly só volta ao sistema quando a thread termina |
+
+**A regra "uma exportação por vez por conta" entre workers** continua sendo do banco: o índice único parcial `exportacoes_uma_rodando_por_conta` e o `UPDATE` condicional de `iniciar`. A fila ajuda (não entrega trabalho de conta com trabalho ativo), mas não é a garantia. Prova: `barramento-com-pg-boss.test.ts`, "dois workers sobre a mesma fila", com dois consumidores do pg-boss, o PostgreSQL de verdade e um motor lento: quatro vagas livres, cinco exportações de duas contas, e uma amostragem do banco a cada 25 ms nunca vê duas `rodando` da mesma conta.
+
+**Retomada.** A fila de exportação tem sinal de vida de 30 s (`REGRAS_DAS_FILAS`). Worker morto para de avisar, a fila dá o trabalho por perdido e o entrega a outro worker. Esse worker chama `iniciar` com `retomar`: se a exportação está `rodando` sem sinal no banco há mais de 20 s e ainda tem tentativa (são 2, contando a primeira), ele apaga os arquivos, as falhas e o progresso da tentativa morta e recomeça. Entrega repetida com o dono vivo é ignorada. Outra exportação da conta que chegue no meio espera (`'adiar'`), em vez de derrubar a parada. Para apagar as linhas dos arquivos da tentativa morta, `otto_app` ganhou `DELETE` em `arquivos_de_exportacao` (migração `20261002150000_retomada_de_exportacao`); é a única tabela em que ele apaga, e ela não é histórico.
+
+Medido matando o worker de verdade (`docker kill` no contêiner que rodava um PDF pesado, perto de 9 s depois do começo): o outro worker assumiu **29 s depois da morte** e terminou a exportação; do pedido ao arquivo, 88 s em vez de 29 s. Duas mortes seguidas (aconteceu sem querer: outro agente salvou arquivos e a recarga automática reiniciou os dois workers duas vezes no meio de um PNG) fecham como `interrompida`, com `tentativas = 2`.
+
+**Tempos, antes e depois** (2026-10-02, máquina de desenvolvimento com 8 núcleos e outros agentes rodando testes; `pnpm --filter @otto/api medir:fila`, duas contas de medição):
+
+| Cenário | Antes (1 worker, 1 por vez) | 1 worker, 2 por vez | 2 workers, 1 por vez | 2 workers, 2 por vez |
+|---|---|---|---|---|
+| Conta P pede um PDF pesado; 2 s depois a conta L pede um PNG leve. **Espera de L** | 36,3 s | 0,7 s | 1,2 s | 1,3 s |
+| O PDF pesado, do pedido ao pronto | 38,4 s | 41,7 s | 31,7 s | 29,0 s |
+| Conta P pede cinco PSDs de 5 pranchetas; 1 s depois L pede um PNG leve. **Posição e espera de L** | 6ª a terminar, 30,0 s | — | — | 1ª a terminar, 0,5 a 1,4 s |
+
+Com um worker e uma por vez (medido de novo depois da mudança: 48,9 s de espera), a exportação leve continua esperando a pesada: justiça entre contas ordena a fila, não cria vaga. O tempo da exportação pesada varia de 29 a 51 s entre medidas pelo que mais roda na máquina, não pelo desenho.
+
+Memória por worker, com duas vagas: 1,2 GB de pico com duas exportações pesadas de todos os formatos lado a lado (desenvolvimento); 0,7 GB no worker empacotado como em produção, com um PDF pesado e exportações leves. O teto no `compose.yaml` passou a 3 GB e 2 CPUs por worker.
+
+**Teto de tamanho** (item "arquivos inteiros em memória"). Gravar em fluxo não é barato: `@otto/psd` devolve cada arquivo como um bloco de bytes, e o `.zip` do pacote é montado sobre eles. Fora de pacote, só um arquivo fica em memória por vez. Então o teto é declarado, e recusado antes de estourar:
+
+- **Prancheta: 36 megapixels na escala de saída** (6000 × 6000; um A2 a 300 dpi cabe). Passou, `POST .../exportacoes` responde `422 exportacao_grande_demais` com `{ pranchetaId, megapixels, limite }`, sem criar nada. A escala é a do pedido no PNG e 1 no PSD. No SVG e no PDF as camadas que viram imagem saem em 2x quando a prancheta em 2x cabe no teto, e em 1x quando não cabe.
+- **Pacote: 400 MB somando os arquivos.** Passou, a exportação termina como `falhou` com `erro.codigo = "pacote_grande_demais"`, antes de montar o `.zip`.
+
+De onde saiu o 36: uma prancheta de 31 megapixels em PSD levou 21 s e o worker chegou a 1,3 GB; uma de 64 megapixels levou 24 s e chegou a 2,3 GB. As duas medidas são limite de cima (havia outras exportações na máquina). Com 36, duas ao mesmo tempo cabem nos 3 GB do worker.
+
+**Contrato.** `Exportacao.pedido` (na consulta e na lista): o pedido original, com `pranchetas` já resolvidas, na ordem do documento. É aceito de volta como corpo de `POST .../exportacoes`: "tentar só as que falharam" é `{ ...pedido, pranchetas: falhas.map(f => f.pranchetaId) }`. Código novo `exportacao_grande_demais` (422). `RespostaDeSaude.dependencias.fila`. `erro.codigo` de exportação pode ser também `pacote_grande_demais`.
+
+**A fila pronta para a fatia 3.** O comportamento de cada fila é uma linha em `REGRAS_DAS_FILAS` (`plataforma/fila/barramento-de-eventos.ts`): teto do trabalho, tentativas, reentrega, adiamento e sinal de vida. A tarefa do agente entra como fila própria, com consumidor e concorrência próprios, sem tocar no adaptador. O que ela pede de diferente está escrito na tabela: teto de uma hora com sinal de vida curto (quem diz que o worker morreu é a falta de sinal), **zero tentativas** para falha (repetir gasta token; retomar de onde parou é decisão do caso de uso), `'adiar'` para esperar a vez da conta, e o prazo de "abandonada" (hoje 30 minutos, pensado para exportação) por tipo de trabalho. O que falta decidir na fatia 3: desligamento do worker com tarefa de 30 minutos em curso (hoje a espera é de 30 s) e onde registrar o custo de token de uma tentativa que morreu.
+
+**CI.** `.github/workflows/ci.yml`: sobe o `compose`, espera API, worker e página, roda testes, Biome e tipos pelo serviço `teste`, exporta um pacote pela fila, e num segundo job constrói as três imagens de produção. O job `navegador` (Playwright, do especialista-react) está no arquivo e só roda com a variável de repositório `TESTES_DE_NAVEGADOR = ligado`. **O workflow nunca rodou.** Conferido aqui: a sintaxe (`actionlint`, sem apontamento) e os passos de espera e de exportação, rodados à mão contra a pilha. Sem prova: o `chown` para o usuário do contêiner na máquina do GitHub, o tempo total (o teto é 40 minutos por job), o cache de camadas (não há) e o build das imagens, que hoje falha no teste de fronteira por nome de fornecedor em `packages/agente` (trabalho em curso do treinador-do-otto).
+
+**Achados de ambiente.**
+
+- Dois `docker compose run` ao mesmo tempo regravavam o cliente do banco um por cima do outro e o arquivo gerado saía corrompido ("File appears to be binary"). O serviço `instalar` agora roda com `flock`.
+- Em desenvolvimento, salvar um arquivo em qualquer pacote reinicia API e workers (recarga automática). Com vários agentes editando, uma exportação longa pode ser morta duas vezes e fechar como `interrompida`. Não acontece na imagem de produção.
+- O comentário "suposição a confirmar" saiu do código, do `compose.yaml`, do README e da migração inicial. Editar o comentário de uma migração já aplicada não quebra o `prisma migrate deploy` (conferido); o `migrate dev`, que não usamos, reclamaria da soma.
+
+**Em aberto.**
+
+- Vazão ainda é uma exportação por núcleo. Uma conta com cinco exportações pesadas espera por elas em série (é a regra de uma por conta).
+- A conta com muitas exportações pode ficar para trás enquanto outras contas mandam a primeira delas sem parar (a posição na fila da conta é fixada no pedido). Com cinco por conta, não vi isso acontecer; sob carga sustentada de muitas contas, pode.
+- O desligamento espera a exportação em curso por 30 s; passou disso, ela é retomada por outro worker (ou por este, quando voltar).
+- Objetos órfãos no armazenamento: a tentativa morta pode ter gravado um arquivo que a retomada não regrava (índice maior). Ficam sem linha e sem limpeza agendada.
+- Medidas com ruído: outros agentes rodavam testes e exportações na mesma máquina. Os números de espera (de 36 s para perto de 1 s) não dependem disso; os de duração e de memória são aproximados.
+

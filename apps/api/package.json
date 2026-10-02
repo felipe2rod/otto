@@ -17,6 +17,7 @@
     "biblioteca:semear": "tsx src/comandos/semear-biblioteca.ts",
     "importar:poc": "tsx src/comandos/importar-da-poc.ts",
     "fila:preparar": "tsx src/comandos/preparar-fila.ts",
+    "medir:fila": "tsx scripts/medir-fila.ts",
     "banco:preparar": "prisma migrate deploy && tsx src/comandos/preparar-fila.ts"
   },
   "dependencies": {

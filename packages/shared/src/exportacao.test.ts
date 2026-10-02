@@ -181,6 +181,28 @@ describe('acréscimos da rodada de fechamento', () => {
     expect(RelatorioDeExportacao.safeParse({ ...relatorio, pacote: { fontes: [{ ...fontes[1], motivo: 'porque sim' }] } }).success).toBe(false);
   });
 
+  it('a exportação devolve o pedido original, com as pranchetas já resolvidas, e ele serve de corpo para pedir de novo', () => {
+    const base = {
+      id: ID,
+      documentoId: ID,
+      versao: 3,
+      formato: 'psd',
+      estado: 'pronta_em_parte',
+      progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 },
+      arquivos: [],
+      falhas: [{ pranchetaId: 'p2', codigo: 'falha_na_prancheta' }],
+      criadaEm: QUANDO,
+    };
+    const pedido = { formato: 'psd', arquivos: 'por-prancheta', pranchetas: ['p1', 'p2'], pacote: true };
+    const e = Exportacao.parse({ ...base, pedido });
+    expect(e.pedido).toEqual(pedido);
+    // "tentar só as que falharam": o mesmo pedido, com as pranchetas que estão em `falhas`
+    expect(PedidoDeExportacao.parse({ ...e.pedido, pranchetas: e.falhas.map((f) => f.pranchetaId) })).toEqual({ ...pedido, pranchetas: ['p2'] });
+    expect(Exportacao.parse(base).pedido).toBeUndefined();
+    expect(Exportacao.safeParse({ ...base, pedido: { formato: 'psd', arquivos: 'por-prancheta' } }).success).toBe(false);
+    expect(CODIGOS_DE_ERRO.exportacaoGrandeDemais).toBe('exportacao_grande_demais');
+  });
+
   it('a exportação aceita os formatos novos e diz se é pacote; a lista é um envelope de exportações', () => {
     const base = { id: ID, documentoId: ID, versao: 3, estado: 'pronta', progresso: { pranchetasProntas: 2, pranchetasNoTotal: 2 }, arquivos: [], falhas: [], criadaEm: QUANDO };
     expect(Exportacao.parse({ ...base, formato: 'svg' }).formato).toBe('svg');

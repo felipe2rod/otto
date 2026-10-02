@@ -36,7 +36,7 @@ export class GuardaDeEscopo implements CanActivate {
       if (catalogoDoEditor !== undefined && Number(catalogoDoEditor) !== VERSAO_DO_CATALOGO)
         throw new ErroDaAplicacao(CODIGOS_DE_ERRO.catalogoDesatualizado, { catalogoDoServidor: VERSAO_DO_CATALOGO });
     }
-    // Sem login no MVP, o adaptador em uso ignora a credencial e devolve a conta fixa (suposição a confirmar).
+    // Sem login no MVP, o adaptador em uso ignora a credencial e devolve a conta fixa (ADR 035).
     req.escopo = await this.resolvedor.resolverDaRequisicao(cookie(req.get('cookie'), COOKIE_DE_SESSAO));
     return true;
   }

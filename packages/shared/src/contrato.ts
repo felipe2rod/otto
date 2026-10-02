@@ -82,6 +82,8 @@ export const CODIGOS_DE_ERRO = {
   exportacaoExpirada: 'exportacao_expirada',
   /** 503. A fila de trabalho não aceitou o pedido. Tente de novo. */
   filaIndisponivel: 'fila_indisponivel',
+  /** 422. detalhe: { pranchetaId, megapixels, limite }. A prancheta, na escala pedida, passa do que uma exportação aguenta. */
+  exportacaoGrandeDemais: 'exportacao_grande_demais',
   /** 500. */
   erroInterno: 'erro_interno',
 } as const;

@@ -12,9 +12,9 @@ const Esquema = z
     BANCO_URL_APP: z.string().regex(/^postgres(ql)?:\/\//),
     // A URL do papel migrador não pode existir no processo que atende requisição (ADR 023, decisão 3).
     BANCO_URL_MIGRADOR: z.never().optional(),
-    // SUPOSIÇÃO A CONFIRMAR com o Felipe (ADR 035, item 7): sem login no MVP, o servidor resolve
-    // o escopo sempre para uma conta fixa, semeada pela migração. Quando o login entrar, esta
-    // variável some e só troca o adaptador de ResolvedorDeEscopo.
+    // Sem login no MVP (ADR 035, aceito pelo Felipe em 2026-10-02): o servidor resolve o escopo sempre
+    // para uma conta fixa, semeada pela migração. Quando o login entrar, esta variável some e só
+    // troca o adaptador de ResolvedorDeEscopo.
     CONTA_FIXA_ID: ContaId,
     // 's3' é o contrato (qualquer servidor compatível); 'disco-local' é o plano B, de uma máquina só.
     ARMAZENAMENTO_ADAPTADOR: z.enum(['s3', 'disco-local']),
@@ -43,6 +43,9 @@ const Esquema = z
       .default(25 * 1024 * 1024),
     LADO_MAXIMO_DE_IMAGEM: z.coerce.number().int().min(16).max(30_000).default(12_000),
     MEGAPIXELS_MAXIMOS_DE_IMAGEM: z.coerce.number().int().min(1).max(400).default(80),
+    // Quantas exportações cada processo de worker roda ao mesmo tempo. Cada uma ocupa um núcleo e tem a
+    // própria memória de render (até 0,9 GB medido): o teto de memória do contêiner sai daqui.
+    EXPORTACOES_AO_MESMO_TEMPO: z.coerce.number().int().min(1).max(8).default(2),
   })
   .superRefine((env, ctx) => {
     const exigidas =
@@ -74,6 +77,7 @@ export interface Configuracao {
   readonly contaFixaId: ContaId;
   readonly armazenamento: ConfiguracaoDoArmazenamento;
   readonly limites: { readonly bytesPorArquivo: number; readonly ladoMaximoDeImagem: number; readonly megapixelsNoMaximo: number };
+  readonly worker: { readonly exportacoesAoMesmoTempo: number };
 }
 
 /** A mensagem cita o NOME das variáveis com problema e nunca o valor: o valor pode ser segredo. */
@@ -99,6 +103,7 @@ export function lerConfiguracao(env: Record<string, string | undefined>): Config
     nivelDeLog: e.NIVEL_DE_LOG,
     banco: Object.freeze({ urlDoApp: e.BANCO_URL_APP }),
     contaFixaId: e.CONTA_FIXA_ID,
+    worker: Object.freeze({ exportacoesAoMesmoTempo: e.EXPORTACOES_AO_MESMO_TEMPO }),
     limites: Object.freeze({ bytesPorArquivo: e.BYTES_MAXIMOS_POR_ARQUIVO, ladoMaximoDeImagem: e.LADO_MAXIMO_DE_IMAGEM, megapixelsNoMaximo: e.MEGAPIXELS_MAXIMOS_DE_IMAGEM }),
     armazenamento: Object.freeze(
       e.ARMAZENAMENTO_ADAPTADOR === 'disco-local'

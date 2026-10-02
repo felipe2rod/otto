@@ -103,7 +103,7 @@ describe('isolamento entre contas no banco', () => {
   });
 });
 
-describe('a conta fixa do MVP (suposição a confirmar: sem login, uma conta semeada pela migração)', () => {
+describe('a conta fixa do MVP (sem login, uma conta semeada pela migração: ADR 035)', () => {
   it('existe, com o id fixo, e é visível só no próprio escopo', async () => {
     const fixa = '01990000-0000-7000-8000-000000000001';
     const contas = await prisma.executar(EscopoDaConta.abrir(lerContaId(fixa)), (tx) => tx.conta.findMany());

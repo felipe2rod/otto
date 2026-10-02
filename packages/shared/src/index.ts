@@ -18,7 +18,7 @@ export const RespostaDeSaude = z.object({
   servico: z.enum(['api', 'worker']),
   /** Nome do pacote do núcleo carregado pelo processo: prova de que o núcleo ESM roda dentro do NestJS. */
   nucleo: z.string(),
-  dependencias: z.object({ banco: z.boolean(), armazenamento: z.boolean() }).optional(),
+  dependencias: z.object({ banco: z.boolean(), armazenamento: z.boolean(), fila: z.boolean().optional() }).optional(),
 });
 export type RespostaDeSaude = z.infer<typeof RespostaDeSaude>;
 

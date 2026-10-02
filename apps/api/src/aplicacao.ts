@@ -29,7 +29,7 @@ import { CasosDeUsoDeExportacao, type FalhaObservada } from './exportacao/applic
 import { MotorDeExportacao } from './exportacao/application/motor-de-exportacao';
 import { RepositorioDeExportacoes } from './exportacao/application/repositorio-de-exportacoes';
 import { RepositorioDeExportacoesNoBanco } from './exportacao/infrastructure/prisma/repositorio-de-exportacoes-no-banco';
-import { MotorDeExportacaoComRender } from './exportacao/infrastructure/render/motor-de-exportacao-com-render';
+import { MotorDeExportacaoEmThread } from './exportacao/infrastructure/render/motor-em-thread';
 import { ControladorDeExportacoes } from './exportacao/presentation/controlador-de-exportacoes';
 import { type Configuracao, type ConfiguracaoDoArmazenamento, ConfiguracaoInvalida, lerConfiguracao } from './plataforma/config/configuracao';
 import { FiltroDeErros } from './plataforma/erros/filtro-de-erros';
@@ -72,7 +72,7 @@ export class ModuloRaiz {
         { provide: PrismaComEscopo, useFactory: () => new PrismaComEscopo(config.banco.urlDoApp) },
         { provide: SondaDoBanco, useFactory: (prisma: PrismaComEscopo) => new SondaDoPrisma(prisma), inject: [PrismaComEscopo] },
         { provide: ArmazenamentoDeArquivo, useFactory: () => criarArmazenamento(config.armazenamento) },
-        // Ponto único em que a conta é decidida. Sem login no MVP: conta fixa (suposição a confirmar).
+        // Ponto único em que a conta é decidida. Sem login no MVP: conta fixa (ADR 035).
         { provide: ResolvedorDeEscopo, useFactory: () => new ResolvedorDeContaFixa(config.contaFixaId) },
         { provide: APP_GUARD, useFactory: (resolvedor: ResolvedorDeEscopo) => new GuardaDeEscopo(resolvedor), inject: [ResolvedorDeEscopo] },
         { provide: RegistroDeUso, useFactory: (registro: Registro) => new RegistroDeUsoNoLog(registro), inject: [Registro] },
@@ -92,8 +92,9 @@ export class ModuloRaiz {
             new BarramentoComPgBoss(config.banco.urlDoApp, { consumidor: servico === 'worker', aoErrar: (tipo) => registro.warn({ evento: 'erro_na_fila', erro: tipo }) }),
           inject: [Registro],
         },
-        // o WebAssembly do motor só é carregado na primeira exportação: na API, nunca
-        { provide: MotorDeExportacao, useFactory: () => new MotorDeExportacaoComRender() },
+        // As threads do motor só nascem na primeira exportação: na API, nunca. No worker, uma por exportação
+        // ao mesmo tempo.
+        { provide: MotorDeExportacao, useFactory: () => new MotorDeExportacaoEmThread({ threads: config.worker.exportacoesAoMesmoTempo }) },
         { provide: MedidorDeTexto, useFactory: (fontes: BibliotecaDeFontes) => new MedidorComCanvasKit(fontes), inject: [BibliotecaDeFontes] },
         // casos de uso: classes puras, montadas aqui
         {
@@ -147,8 +148,9 @@ export class ModuloRaiz {
         { provide: CasosDeUsoDeFontes, useFactory: (fontes: BibliotecaDeFontes) => new CasosDeUsoDeFontes(fontes), inject: [BibliotecaDeFontes] },
         {
           provide: CicloDeVida,
-          useFactory: (prisma: PrismaComEscopo, fila: BarramentoDeEventos, exportacoes: CasosDeUsoDeExportacao, registro: Registro) => new CicloDeVida(servico, prisma, fila, exportacoes, registro),
-          inject: [PrismaComEscopo, BarramentoDeEventos, CasosDeUsoDeExportacao, Registro],
+          useFactory: (prisma: PrismaComEscopo, fila: BarramentoDeEventos, exportacoes: CasosDeUsoDeExportacao, registro: Registro, motor: MotorDeExportacao) =>
+            new CicloDeVida(servico, prisma, fila, exportacoes, registro, { exportacoesAoMesmoTempo: config.worker.exportacoesAoMesmoTempo, motor }),
+          inject: [PrismaComEscopo, BarramentoDeEventos, CasosDeUsoDeExportacao, Registro, MotorDeExportacao],
         },
       ],
     };

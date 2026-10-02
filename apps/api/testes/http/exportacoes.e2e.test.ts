@@ -254,6 +254,18 @@ describe('retomar depois de recarregar a página', () => {
     expect((await A.get(pronta?.arquivos[0]?.baixar as string)).status).toBe(302);
   });
 
+  it('cada exportação, na consulta e na lista, traz o pedido original com as pranchetas resolvidas: é o que deixa a tela retomada mostrar o andamento e tentar só as que falharam', async () => {
+    const pedida = Exportacao.parse((await A.post(`/api/documentos/${doc.id}/exportacoes`).send({ formato: 'pdf', arquivos: 'por-prancheta', pacote: true })).body);
+    expect(pedida.pedido).toEqual({ formato: 'pdf', arquivos: 'por-prancheta', pranchetas: [feed, story], pacote: true });
+    await api.fila.ociosa();
+    const naLista = ListaDeExportacoes.parse((await A.get(`/api/documentos/${doc.id}/exportacoes`)).body).itens.find((e) => e.id === pedida.id);
+    expect(naLista?.pedido).toEqual(pedida.pedido);
+    // o pedido devolvido é aceito de volta como corpo, com outras pranchetas
+    const deNovo = await A.post(`/api/documentos/${doc.id}/exportacoes`).send({ ...pedida.pedido, pranchetas: [story] });
+    expect(deNovo.status).toBe(202);
+    await api.fila.ociosa();
+  });
+
   it('peça sem exportação: lista vazia; peça que não existe: 404', async () => {
     const nova = DocumentoAberto.parse((await A.post('/api/documentos').send({ nome: 'Sem exportação' })).body);
     expect((await A.get(`/api/documentos/${nova.id}/exportacoes`)).body).toEqual({ itens: [] });
@@ -279,6 +291,21 @@ describe('recusas', () => {
     const r = await A.post(`/api/documentos/${doc.id}/exportacoes`).send({ formato: 'psd', pranchetas: ['nao-existe'] });
     expect(r.status).toBe(422);
     expect(ErroDaApi.parse(r.body).codigo).toBe(CODIGOS_DE_ERRO.pranchetaDesconhecida);
+  });
+
+  it('prancheta grande demais para exportar: 422 exportacao_grande_demais, com a prancheta e o teto, e nada vai para a fila', async () => {
+    const painel = DocumentoAberto.parse((await A.post('/api/documentos').send({ nome: 'Painel' })).body);
+    await A.post(`/api/documentos/${painel.id}/lotes`).send({
+      id: randomUUID(),
+      versaoBase: 0,
+      descricao: 'monta',
+      operacoes: [{ op: 'criarPrancheta', nome: 'Painel', largura: 9000, altura: 9000, fundo: '#ffffff' }],
+    });
+    const antes = api.fila.publicados.length;
+    const r = await A.post(`/api/documentos/${painel.id}/exportacoes`).send({ formato: 'psd' });
+    expect(r.status).toBe(422);
+    expect(ErroDaApi.parse(r.body)).toMatchObject({ codigo: CODIGOS_DE_ERRO.exportacaoGrandeDemais, detalhe: { megapixels: 81, limite: 36 } });
+    expect(api.fila.publicados.length).toBe(antes);
   });
 
   it('documento sem prancheta: 422 nada_para_exportar', async () => {

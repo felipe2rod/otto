@@ -1,5 +1,6 @@
 // Liga a fila na subida e desliga tudo, em ordem, quando o processo recebe o sinal de término:
-// primeiro a fila (espera a exportação em curso terminar), depois o pool do banco.
+// primeiro a fila (espera a exportação em curso terminar), depois as threads do motor de exportação, por
+// último o pool do banco.
 // Só o worker consome; a API só publica.
 //
 // Fila fora do ar não derruba o processo: "vivo" não depende de dependência (docs/mvp/backend.md, 7.8).
@@ -21,7 +22,7 @@ export class CicloDeVida implements OnApplicationBootstrap, OnApplicationShutdow
     private readonly fila: BarramentoDeEventos,
     private readonly exportacoes: CasosDeUsoDeExportacao,
     private readonly registro: { error(linha: Record<string, unknown>): void },
-    private readonly intervaloEntreTentativasMs = 5_000,
+    private readonly opcoes: { exportacoesAoMesmoTempo: number; motor: { fechar(): Promise<void> }; intervaloEntreTentativasMs?: number },
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -31,12 +32,12 @@ export class CicloDeVida implements OnApplicationBootstrap, OnApplicationShutdow
   private async ligarFila(primeiraVez: boolean): Promise<void> {
     try {
       await this.fila.iniciar();
-      if (this.servico === 'worker') await consumirExportacoes(this.fila, this.exportacoes);
+      if (this.servico === 'worker') await consumirExportacoes(this.fila, this.exportacoes, this.opcoes.exportacoesAoMesmoTempo);
     } catch (erro) {
       // uma linha por subida, não uma a cada tentativa
       if (primeiraVez) this.registro.error({ evento: 'fila_indisponivel', ...semConteudo(erro) });
       if (this.encerrado) return;
-      this.novaTentativa = setTimeout(() => void this.ligarFila(false), this.intervaloEntreTentativasMs);
+      this.novaTentativa = setTimeout(() => void this.ligarFila(false), this.opcoes.intervaloEntreTentativasMs ?? 5_000);
       this.novaTentativa.unref();
     }
   }
@@ -45,6 +46,7 @@ export class CicloDeVida implements OnApplicationBootstrap, OnApplicationShutdow
     this.encerrado = true;
     clearTimeout(this.novaTentativa);
     await this.fila.parar();
+    await this.opcoes.motor.fechar();
     await this.banco.fechar();
   }
 }

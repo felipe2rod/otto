@@ -33,6 +33,15 @@ class SondaFixa extends SondaDoBanco {
   }
 }
 
+class FilaForaDoAr extends BarramentoEmMemoria {
+  override async iniciar(): Promise<void> {
+    throw new Error('fila fora do ar');
+  }
+  override async responde(): Promise<boolean> {
+    return false;
+  }
+}
+
 class ArmazenamentoForaDoAr extends ArmazenamentoEmMemoria {
   override async responde(): Promise<boolean> {
     return false;
@@ -46,7 +55,7 @@ describe.each(['api', 'worker'] as const)('saúde do serviço %s', (servico) => 
     app = undefined;
   });
 
-  const subir = async (banco: boolean, armazenamento: ArmazenamentoDeArquivo = new ArmazenamentoEmMemoria()) => {
+  const subir = async (banco: boolean, armazenamento: ArmazenamentoDeArquivo = new ArmazenamentoEmMemoria(), fila: BarramentoDeEventos = new BarramentoEmMemoria()) => {
     const modulo = await Test.createTestingModule({ imports: [ModuloRaiz.para(servico, lerConfiguracao(env))] })
       .overrideProvider(SondaDoBanco)
       .useValue(new SondaFixa(banco))
@@ -54,7 +63,7 @@ describe.each(['api', 'worker'] as const)('saúde do serviço %s', (servico) => 
       .useValue(armazenamento)
       // a fila de verdade mora no banco, e este teste não tem banco
       .overrideProvider(BarramentoDeEventos)
-      .useValue(new BarramentoEmMemoria())
+      .useValue(fila)
       .compile();
     app = configurarAplicacao(modulo.createNestApplication({ bodyParser: false }));
     await app.init();
@@ -72,21 +81,29 @@ describe.each(['api', 'worker'] as const)('saúde do serviço %s', (servico) => 
     const http = await subir(true);
     const r = await http.get('/api/saude/pronto');
     expect(r.status).toBe(200);
-    expect(RespostaDeSaude.parse(r.body)).toEqual({ estado: 'pronto', servico, nucleo: '@otto/documento', dependencias: { banco: true, armazenamento: true } });
+    expect(RespostaDeSaude.parse(r.body)).toEqual({ estado: 'pronto', servico, nucleo: '@otto/documento', dependencias: { banco: true, armazenamento: true, fila: true } });
   });
 
   it('GET /api/saude/pronto responde 503 quando o banco não responde', async () => {
     const http = await subir(false);
     const r = await http.get('/api/saude/pronto');
     expect(r.status).toBe(503);
-    expect(RespostaDeSaude.parse(r.body).dependencias).toEqual({ banco: false, armazenamento: true });
+    expect(RespostaDeSaude.parse(r.body).dependencias).toEqual({ banco: false, armazenamento: true, fila: true });
   });
 
   it('GET /api/saude/pronto responde 503 quando o armazenamento não responde', async () => {
     const http = await subir(true, new ArmazenamentoForaDoAr());
     const r = await http.get('/api/saude/pronto');
     expect(r.status).toBe(503);
-    expect(RespostaDeSaude.parse(r.body).dependencias).toEqual({ banco: true, armazenamento: false });
+    expect(RespostaDeSaude.parse(r.body).dependencias).toEqual({ banco: true, armazenamento: false, fila: true });
+  });
+
+  it('GET /api/saude/pronto responde 503 quando a fila não responde (sem fila, exportação não entra nem sai), e "vivo" continua 200', async () => {
+    const http = await subir(true, new ArmazenamentoEmMemoria(), new FilaForaDoAr());
+    const r = await http.get('/api/saude/pronto');
+    expect(r.status).toBe(503);
+    expect(RespostaDeSaude.parse(r.body)).toMatchObject({ estado: 'indisponivel', dependencias: { banco: true, armazenamento: true, fila: false } });
+    expect((await http.get('/api/saude/vivo')).status).toBe(200);
   });
 
   it('rota desconhecida responde 404 no formato de erro da API, sem frase de interface', async () => {

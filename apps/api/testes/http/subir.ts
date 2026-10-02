@@ -2,7 +2,8 @@
 // Trocados só na borda: armazenamento, biblioteca de fontes e fila em memória, o registro (para ler
 // o log) e o resolvedor de escopo, que nos testes escolhe a conta pelo cookie. É assim que a suíte
 // "duas-contas" existe antes do login: o ponto único de escopo é o mesmo da produção.
-// A fila roda no próprio processo, com o MESMO consumidor do worker e o motor de exportação de verdade.
+// A fila roda no próprio processo, com o MESMO consumidor do worker e o motor de exportação de verdade
+// (no laço principal, sem a thread).
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { INestApplication } from '@nestjs/common';
@@ -15,7 +16,9 @@ import { ArmazenamentoEmMemoria } from '../../src/arquivo/infrastructure/adaptad
 import { BibliotecaDeFontes } from '../../src/biblioteca/application/biblioteca-de-fontes';
 import { BibliotecaDeFontesEmMemoria } from '../../src/biblioteca/infrastructure/memoria/biblioteca-de-fontes-em-memoria';
 import { CasosDeUsoDeExportacao } from '../../src/exportacao/application/casos-de-uso-de-exportacao';
+import { MotorDeExportacao } from '../../src/exportacao/application/motor-de-exportacao';
 import { consumirExportacoes } from '../../src/exportacao/infrastructure/consumidor-de-exportacoes';
+import { MotorDeExportacaoComRender } from '../../src/exportacao/infrastructure/render/motor-de-exportacao-com-render';
 import { lerConfiguracao } from '../../src/plataforma/config/configuracao';
 import type { EscopoDaConta } from '../../src/plataforma/escopo/escopo-da-conta';
 import { ResolvedorDeEscopo } from '../../src/plataforma/escopo/resolvedor-de-escopo';
@@ -114,6 +117,10 @@ export async function subirApi(envExtra: Record<string, string> = {}, opcoes: { 
     .useValue(fontes)
     .overrideProvider(BarramentoDeEventos)
     .useValue(fila)
+    // o mesmo motor, no próprio laço: subir uma thread por exportação custa 1 s a cada teste. O motor em
+    // thread tem o teste dele (motor-em-thread.test.ts) e roda de verdade no worker do compose.
+    .overrideProvider(MotorDeExportacao)
+    .useValue(new MotorDeExportacaoComRender())
     .overrideProvider(Registro)
     .useValue(registro)
     .compile();

@@ -1,4 +1,4 @@
-// SUPOSIÇÃO A CONFIRMAR com o Felipe (ADR 035, itens 4 e 7; docs/mvp/README.md, decisão 2).
+// Sem login no MVP: aceito pelo Felipe em 2026-10-02 (ADR 035, itens 4 e 7; docs/mvp/README.md, decisão 2).
 // Sem login no MVP: toda requisição cai na mesma conta, a que a migração inicial semeia.
 // O banco já nasce com conta_id e RLS em tudo, então o login entra depois trocando SÓ este
 // adaptador por um que resolve a conta pela sessão. Nenhum caso de uso muda.

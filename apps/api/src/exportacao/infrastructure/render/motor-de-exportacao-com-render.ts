@@ -5,7 +5,7 @@
 import type { Documento } from '@otto/documento';
 import { criarFormatoPdf, criarFormatoPsd, criarFormatoSvg, exportarPng, exportarPsd, exportarVetorial, type RecursosDaExportacao } from '@otto/psd';
 import { carregarCanvasKit } from '@otto/render/node';
-import { type ArquivoGerado, type EntreEtapas, MotorDeExportacao } from '../../application/motor-de-exportacao';
+import { type ArquivoGerado, type EntreEtapas, MotorDeExportacao, type OpcoesDoPdf, type OpcoesDoSvg } from '../../application/motor-de-exportacao';
 
 type Motor = Awaited<ReturnType<typeof carregarCanvasKit>>;
 
@@ -49,18 +49,24 @@ export class MotorDeExportacaoComRender extends MotorDeExportacao {
     return arquivos;
   }
 
-  async svg(doc: Documento, recursos: RecursosDaExportacao, opcoes: { nome: string; pranchetas: readonly string[] }, entreEtapas: EntreEtapas): Promise<ArquivoGerado[]> {
-    const { arquivos } = await exportarVetorial(await this.carregar(), this.formatoSvg, doc, recursos, { nome: opcoes.nome, pranchetas: opcoes.pranchetas, entreEtapas });
+  async svg(doc: Documento, recursos: RecursosDaExportacao, opcoes: OpcoesDoSvg, entreEtapas: EntreEtapas): Promise<ArquivoGerado[]> {
+    const { arquivos } = await exportarVetorial(await this.carregar(), this.formatoSvg, doc, recursos, {
+      nome: opcoes.nome,
+      pranchetas: opcoes.pranchetas,
+      escalaDaImagem: opcoes.escalaDaImagem ?? 2,
+      entreEtapas,
+    });
     return arquivos;
   }
 
-  async pdf(
-    doc: Documento,
-    recursos: RecursosDaExportacao,
-    opcoes: { nome: string; pranchetas: readonly string[]; arquivos: 'por-prancheta' | 'juntas' },
-    entreEtapas: EntreEtapas,
-  ): Promise<ArquivoGerado[]> {
-    const { arquivos } = await exportarVetorial(await this.carregar(), this.formatoPdf, doc, recursos, { nome: opcoes.nome, pranchetas: opcoes.pranchetas, arquivos: opcoes.arquivos, entreEtapas });
+  async pdf(doc: Documento, recursos: RecursosDaExportacao, opcoes: OpcoesDoPdf, entreEtapas: EntreEtapas): Promise<ArquivoGerado[]> {
+    const { arquivos } = await exportarVetorial(await this.carregar(), this.formatoPdf, doc, recursos, {
+      nome: opcoes.nome,
+      pranchetas: opcoes.pranchetas,
+      arquivos: opcoes.arquivos,
+      escalaDaImagem: opcoes.escalaDaImagem ?? 2,
+      entreEtapas,
+    });
     return arquivos;
   }
 }

@@ -3,8 +3,8 @@
 // otto_app não cria esquema nem tabela (ADR 023).
 import pg from 'pg';
 import { PgBoss } from 'pg-boss';
-import type { NomeDaFila } from '../../barramento-de-eventos';
-import { CONFIGURACAO_DAS_FILAS, ESQUEMA_DA_FILA, POLITICA_DAS_FILAS } from './barramento-com-pg-boss';
+import { type NomeDaFila, REGRAS_DAS_FILAS, type RegrasDaFila } from '../../barramento-de-eventos';
+import { ESQUEMA_DA_FILA, POLITICA_DAS_FILAS } from './barramento-com-pg-boss';
 
 export async function prepararEsquemaDaFila(urlDoMigrador: string): Promise<{ filas: string[] }> {
   const boss = new PgBoss({ connectionString: urlDoMigrador, schema: ESQUEMA_DA_FILA, supervise: false, schedule: false, max: 2 });
@@ -12,8 +12,13 @@ export async function prepararEsquemaDaFila(urlDoMigrador: string): Promise<{ fi
   await boss.start();
   const filas: string[] = [];
   try {
-    for (const [nome, c] of Object.entries(CONFIGURACAO_DAS_FILAS) as [NomeDaFila, (typeof CONFIGURACAO_DAS_FILAS)[NomeDaFila]][]) {
-      const opcoes = { expireInSeconds: c.expiraEmSegundos, retryLimit: c.tentativas, retryDelay: c.reentregaEmSegundos };
+    for (const [nome, c] of Object.entries(REGRAS_DAS_FILAS) as [NomeDaFila, RegrasDaFila][]) {
+      const opcoes = {
+        expireInSeconds: c.expiraEmSegundos,
+        retryLimit: c.tentativas,
+        retryDelay: c.reentregaEmSegundos,
+        ...(c.sinalDeVidaEmSegundos ? { heartbeatSeconds: c.sinalDeVidaEmSegundos } : {}),
+      };
       const existente = await boss.getQueue(nome);
       if (existente && existente.policy !== POLITICA_DAS_FILAS) {
         // a política de uma fila não se altera: recria. Os trabalhos pendentes se perdem, e as exportações

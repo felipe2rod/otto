@@ -7,18 +7,17 @@ import { type BarramentoDeEventos, FILAS } from '../../plataforma/fila/barrament
 import type { CasosDeUsoDeExportacao } from '../application/casos-de-uso-de-exportacao';
 
 /**
- * Quantas exportações este processo roda ao mesmo tempo. Uma: cada exportação ocupa centenas de MB
- * e um núcleo inteiro. Mais vazão é mais processo de worker, não mais concorrência aqui.
+ * @param exportacoesAoMesmoTempo quantas exportações este processo roda ao mesmo tempo, de contas diferentes.
+ *   É o número de threads do motor: cada uma ocupa um núcleo e tem a própria memória de render.
  */
-export const EXPORTACOES_AO_MESMO_TEMPO = 1;
-
-export async function consumirExportacoes(fila: BarramentoDeEventos, exportacoes: CasosDeUsoDeExportacao): Promise<void> {
-  await fila.consumir(FILAS.exportacao, { concorrencia: EXPORTACOES_AO_MESMO_TEMPO }, async (trabalho) => {
-    // ContaOcupada (outra exportação da conta rodando) sobe daqui: a fila entrega de novo mais tarde
-    await exportacoes.executar(escopoDoTrabalho(trabalho), trabalho.id);
+export async function consumirExportacoes(fila: BarramentoDeEventos, exportacoes: CasosDeUsoDeExportacao, exportacoesAoMesmoTempo = 1): Promise<void> {
+  await fila.consumir(FILAS.exportacao, { concorrencia: exportacoesAoMesmoTempo }, async (trabalho) => {
+    // outra exportação da conta está rodando (em qualquer worker): a fila entrega de novo daqui a pouco, sem gastar tentativa
+    return (await exportacoes.executar(escopoDoTrabalho(trabalho), trabalho.id)) === 'ocupada' ? 'adiar' : undefined;
   });
   await fila.consumir(FILAS.limpezaDeExportacao, { concorrencia: 1 }, async (trabalho) => {
     // se ainda não venceu ou o armazenamento falhou, o erro sobe e a fila entrega de novo mais tarde
     await exportacoes.limpar(escopoDoTrabalho(trabalho), trabalho.id);
+    return undefined;
   });
 }

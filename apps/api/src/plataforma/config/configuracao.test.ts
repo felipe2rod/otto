@@ -123,4 +123,10 @@ describe('lerConfiguracao', () => {
     const e = erroDe({ ...valida, BANCO_URL_MIGRADOR: 'postgresql://otto_migrador:x@banco:5432/otto' });
     expect(e.variaveis).toEqual(['BANCO_URL_MIGRADOR']);
   });
+
+  it('exportações ao mesmo tempo por worker: 2 por padrão, de 1 a 8, e nada fora disso', () => {
+    expect(lerConfiguracao(valida).worker.exportacoesAoMesmoTempo).toBe(2);
+    expect(lerConfiguracao({ ...valida, EXPORTACOES_AO_MESMO_TEMPO: '4' }).worker.exportacoesAoMesmoTempo).toBe(4);
+    for (const ruim of ['0', '9', 'muitas', '1.5']) expect(erroDe({ ...valida, EXPORTACOES_AO_MESMO_TEMPO: ruim }).variaveis).toEqual(['EXPORTACOES_AO_MESMO_TEMPO']);
+  });
 });
