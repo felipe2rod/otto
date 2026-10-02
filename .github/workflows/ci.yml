@@ -86,8 +86,8 @@ jobs:
             sleep 1
           done
           if [ "$ESTADO" != "pronta" ]; then echo "a exportação não ficou pronta em 60 s (estado: $ESTADO)"; exit 1; fi
-          curl -fsSL -o pacote.zip "$API/exportacoes/$EXP/arquivos/0"
-          unzip -l pacote.zip
+          curl -fsSL -o "$RUNNER_TEMP/pacote.zip" "$API/exportacoes/$EXP/arquivos/0"
+          unzip -l "$RUNNER_TEMP/pacote.zip"
 
       - name: Log dos serviços (só se algo falhou)
         if: failure()
